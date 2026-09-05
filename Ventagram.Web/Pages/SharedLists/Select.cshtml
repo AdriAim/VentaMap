@@ -271,6 +271,7 @@
                             </div>
                             <div class="listing-card-copy">
                                 <h3>@publication.Title</h3>
+                                <span class="gallery-description-tooltip gallery-tooltip-trigger" data-tooltip-label="@(publication.Title + "\n" + publication.ShortDescription)" tabindex="0"><span>@(string.IsNullOrWhiteSpace(publication.ShortDescription) ? publication.Title : publication.ShortDescription)</span></span>
                                 <strong>@publication.Currency @publication.Price.ToString("0")</strong>
                                 <span>@publication.Locality</span>
                             </div>

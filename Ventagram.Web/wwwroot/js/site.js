@@ -965,6 +965,8 @@
         return;
       }
 
+      panel.style.height = "auto";
+      panel.style.minHeight = "0";
       const viewportHeight = getViewportMapHeight();
       const contentHeight = Math.max(
         420,
@@ -977,8 +979,6 @@
       mapCanvas.style.height = `${sharedHeight}px`;
       mapCanvas.style.minHeight = `${sharedHeight}px`;
       mapCanvas.style.maxHeight = `${sharedHeight}px`;
-      panel.style.height = `${sharedHeight}px`;
-      panel.style.minHeight = `${sharedHeight}px`;
       panel.style.maxHeight = `${sharedHeight}px`;
 
       const mapInstance =
@@ -4340,7 +4340,7 @@
           ${priceCluster}
           ${navButtons}
           <button type="button" class="gallery-action-button gallery-report-overlay gallery-tooltip-trigger gallery-tooltip-side report-trigger" data-publication-id="${publicationId}" data-publication-code="${code}" data-publication-title="${title}" data-tooltip-label="Denunciar" aria-label="Denunciar ${title}"><span class="gallery-report-letter" aria-hidden="true">D</span></button>
-          <span class="gallery-title-overlay">${galleryTitle}</span>
+          <span class="gallery-title-overlay gallery-description-tooltip gallery-tooltip-trigger" data-tooltip-label="${buildDescriptionTooltipLabel(marker)}" tabindex="0"><span>${galleryTitle}</span></span>
         </a>
       </article>
     `;
@@ -7176,9 +7176,17 @@
       || String(item?.title || "").split(" - oportunidad")[0];
   }
 
+  function buildDescriptionTooltipLabel(item) {
+    return escapeAttribute([
+      String(item?.title || "").trim(),
+      String(item?.shortDescription || "").trim()
+    ].filter(Boolean).join("\n"));
+  }
+
   function buildGalleryCard(item, isFirstCard, options = {}) {
     const title = escapeHtml(item?.title || "");
     const galleryTitle = escapeHtml(getGalleryDescription(item));
+    const descriptionTooltipLabel = buildDescriptionTooltipLabel(item);
     const publicationId = escapeAttribute(item?.id || "");
     const publicationCode = escapeAttribute(item?.publicationCode || "");
     const detailsUrl = escapeAttribute(item?.detailsUrl || "#");
@@ -7210,14 +7218,14 @@
         </span>
       `;
     const cardContent = `
-      <a href="${detailsUrl}" class="card-image-wrap publication-preview-trigger" data-publication-id="${publicationId}" data-details-url="${buildPublicationApiDetailsUrl(publicationId)}" data-images="${escapedImages.join("|||")}" data-video-url="${videoUrl}" data-media-index="0">
+      <a href="${detailsUrl}" class="card-image-wrap gallery-card-with-caption publication-preview-trigger" data-publication-id="${publicationId}" data-details-url="${buildPublicationApiDetailsUrl(publicationId)}" data-images="${escapedImages.join("|||")}" data-video-url="${videoUrl}" data-media-index="0">
         ${videoUrl
           ? `<video src="${videoUrl}" class="gallery-carousel-video" preload="metadata" muted playsinline></video><button type="button" class="gallery-play-toggle gallery-tooltip-trigger gallery-tooltip-top" data-gallery-play-toggle="true" aria-label="Reproducir video" data-tooltip-label="Reproducir video"></button><button type="button" class="gallery-audio-toggle gallery-tooltip-trigger gallery-tooltip-side" data-gallery-audio-toggle="true" aria-label="Activar audio" data-tooltip-label="Activar audio"><i class="fa-solid fa-volume-xmark" aria-hidden="true"></i></button>`
           : `<img src="${firstImage}" alt="${title}" class="gallery-carousel-image" loading="lazy" decoding="async" />`}
         ${priceCluster}
         ${showReportButton ? `<button type="button" class="gallery-action-button gallery-report-overlay gallery-tooltip-trigger gallery-tooltip-side report-trigger" data-publication-id="${publicationId}" data-publication-code="${publicationCode}" data-publication-title="${title}" data-tooltip-label="Denunciar" aria-label="Denunciar ${title}"><span class="gallery-report-letter" aria-hidden="true">D</span></button>` : ""}
         ${navButtons}
-        <span class="gallery-title-overlay">${galleryTitle}</span>
+        <span class="gallery-card-caption gallery-description-tooltip gallery-tooltip-trigger" data-tooltip-label="${descriptionTooltipLabel}" tabindex="0" aria-label="${descriptionTooltipLabel}"><span>${galleryTitle}</span></span>
         ${showFavoriteButton ? `<button type="button" class="favorite-toggle gallery-favorite-corner gallery-tooltip-trigger gallery-tooltip-side ${isFavorite ? "is-active" : ""}" data-favorite-toggle="true" data-publication-id="${publicationId}" data-publication-title="${title}" data-suggested-list-name="${suggestedListName}" data-tooltip-label="Añadir a favoritos" aria-label="Añadir a mi lista de favoritos">${renderFavoriteIcon(isFavorite)}</button>` : ""}
       </a>
       ${extraActionHtml}

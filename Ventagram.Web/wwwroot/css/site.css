@@ -2179,6 +2179,64 @@ textarea:focus {
   --gallery-overlay-pill-height: 2rem;
 }
 
+.gallery-card-with-caption {
+  --gallery-caption-height: calc(2 * 0.88rem * 1.2 + 1.3rem);
+  margin-bottom: var(--gallery-caption-height);
+  overflow: visible;
+  border-radius: 22px 22px 0 0;
+}
+
+.gallery-card-with-caption::after {
+  display: none;
+}
+
+.listing-card.is-last-clicked .gallery-card-with-caption {
+  box-shadow: none;
+}
+
+.listing-card.is-last-clicked .gallery-card-with-caption::after {
+  display: block;
+  inset: 0 0 calc(-1 * var(--gallery-caption-height));
+  height: auto;
+  border-radius: 22px;
+  background: none;
+  box-shadow: 0 0 0 3px #f0c419, 0 16px 32px rgba(240, 196, 25, 0.22);
+  pointer-events: none;
+}
+
+.gallery-card-with-caption img,
+.gallery-card-with-caption video {
+  display: block;
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 round 22px 22px 0 0);
+}
+
+.gallery-card-caption {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: var(--gallery-caption-height);
+  box-sizing: border-box;
+  padding: 0.65rem 0.8rem;
+  border-radius: 0 0 22px 22px;
+  background: rgba(255, 253, 252, 0.84);
+  color: #000;
+  font-size: 0.88rem;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.gallery-card-caption > span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
 .favorite-toggle,
 .gallery-audio-toggle,
 .gallery-report-overlay,
@@ -2292,6 +2350,59 @@ textarea:focus {
 .gallery-tooltip-trigger:hover::after,
 .gallery-tooltip-trigger:focus-visible::after {
   opacity: 1;
+}
+
+.gallery-description-tooltip.gallery-tooltip-trigger::after {
+  left: 0;
+  bottom: calc(100% + 0.55rem);
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 12px;
+  line-height: 1.4;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  text-align: left;
+  text-shadow: none;
+  letter-spacing: normal;
+}
+
+.gallery-title-overlay.gallery-description-tooltip,
+.my-publications-view-gallery .my-publication-gallery-title.gallery-description-tooltip {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
+.gallery-description-tooltip > span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.listing-card-copy > .gallery-description-tooltip {
+  display: block;
+  position: relative;
+}
+
+.card-image-wrap:has(.gallery-description-tooltip:hover),
+.card-image-wrap:has(.gallery-description-tooltip:focus-visible),
+.publication-admin-media:has(.gallery-description-tooltip:hover),
+.publication-admin-media:has(.gallery-description-tooltip:focus-visible) {
+  overflow: visible;
+  z-index: 6;
+}
+
+.listing-card:has(.gallery-description-tooltip:hover),
+.listing-card:has(.gallery-description-tooltip:focus-visible) {
+  position: relative;
+  z-index: 6;
+}
+
+.my-publications-view-gallery .publication-admin-media img,
+.my-publications-view-gallery .publication-admin-media::after {
+  border-radius: inherit;
 }
 
 .gallery-tooltip-side::after {
@@ -3212,13 +3323,14 @@ textarea:focus {
 
 .map-results {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-content: start;
   gap: 1rem;
   width: 100%;
   max-width: 100%;
-  height: var(--map-desktop-shared-height);
+  height: auto;
   max-height: var(--map-desktop-shared-height);
-  min-height: 420px;
+  min-height: 0;
   padding: 1rem;
   border: 1px solid var(--line);
   border-radius: 30px;
@@ -3253,7 +3365,8 @@ textarea:focus {
   justify-items: stretch;
   align-content: start;
   min-height: 0;
-  height: 100%;
+  height: auto;
+  align-self: start;
   max-height: 100%;
   overflow: auto;
   padding: 0.9rem;
@@ -3273,6 +3386,10 @@ textarea:focus {
 .map-selection-card > .card-image-wrap {
   width: min(100%, calc((var(--map-selection-card-max-height) - 1.8rem) * 0.75));
   margin: 0 auto;
+}
+
+.map-selection-card > .gallery-card-with-caption {
+  margin-bottom: var(--gallery-caption-height);
 }
 
 .map-selection-card .card-image-wrap {
@@ -4514,11 +4631,30 @@ textarea:focus {
   margin: 0;
 }
 
+[data-my-publications-results] {
+  position: relative;
+  row-gap: 2rem;
+}
+
+.my-publications-row-separators {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.my-publications-row-separators > span {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(128, 128, 128, 0.18);
+}
+
 .publication-admin-list.my-publications-view-gallery {
   grid-template-columns: repeat(auto-fit, minmax(220px, 220px));
   justify-content: start;
   align-items: start;
-  gap: 1rem;
+  gap: 2rem 1rem;
 }
 
 .my-publications-view-gallery .publication-admin-card {
@@ -4532,18 +4668,26 @@ textarea:focus {
 }
 
 .my-publications-view-gallery .publication-admin-media {
+  --gallery-caption-height: calc(2 * 0.88rem * 1.2 + 1.3rem);
   position: relative;
   aspect-ratio: 3 / 4;
-  border-radius: 22px;
-  box-shadow: 0 18px 38px rgba(21, 42, 66, 0.16);
+  margin-bottom: var(--gallery-caption-height);
+  overflow: visible;
+  border-radius: 22px 22px 0 0;
+  box-shadow: none;
+}
+
+.my-publications-view-gallery .publication-admin-media img,
+.my-publications-view-gallery .publication-admin-media .publication-admin-placeholder {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
 }
 
 .my-publications-view-gallery .publication-admin-media::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(8, 18, 31, 0.12) 0%, rgba(8, 18, 31, 0.02) 45%, rgba(8, 18, 31, 0.76) 100%);
-  pointer-events: none;
+  display: none;
 }
 
 .my-publications-view-gallery .my-publication-gallery-price {
@@ -4558,19 +4702,24 @@ textarea:focus {
 .my-publications-view-gallery .my-publication-gallery-title {
   overflow-wrap: anywhere;
   position: absolute;
-  right: 0.85rem;
-  bottom: 0.85rem;
-  left: 0.85rem;
+  top: 100%;
+  right: 0;
+  bottom: auto;
+  left: 0;
+  height: var(--gallery-caption-height);
+  box-sizing: border-box;
+  padding: 0.65rem 0.8rem;
+  border-radius: 0 0 22px 22px;
+  background: rgba(255, 253, 252, 0.84);
   z-index: 2;
-  display: -webkit-box;
-  overflow: hidden;
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 900;
-  line-height: 1.12;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.42);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  display: block;
+  overflow: visible;
+  color: #000;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  text-shadow: none;
 }
 
 .my-publications-view-gallery .publication-admin-body {
@@ -4586,6 +4735,14 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 0.45rem;
+}
+
+.my-publications-view-gallery .publication-admin-summary .gallery-kicker {
+  display: flex;
+  align-items: center;
+  min-height: 2.8em;
+  margin-bottom: 0;
+  line-height: 1.4;
 }
 
 .my-publications-view-gallery .publication-admin-summary h3,
