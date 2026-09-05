@@ -4,4 +4,14 @@
     ViewData["Title"] = "Detalle";
 }
 
-<div id="api-page" data-page-kind="details" data-api-endpoint="/api/content/details/@Model.Id"></div>
+@{
+    var detailsEndpoint = $"/api/content/details/{Model.Id}";
+    if (string.Equals(Request.Query["debug"], "1", StringComparison.Ordinal))
+    {
+        detailsEndpoint += "?debug=1";
+    }
+}
+
+<div id="api-page" data-page-kind="details" data-api-endpoint="@detailsEndpoint"></div>
+
+<partial name="_GlobalModals" model="Model" />

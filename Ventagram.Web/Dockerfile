@@ -6,6 +6,11 @@ USER $APP_UID
 WORKDIR /app
 EXPOSE 8080
 EXPOSE 8081
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+USER $APP_UID
 
 
 # Esta fase se usa para compilar el proyecto de servicio

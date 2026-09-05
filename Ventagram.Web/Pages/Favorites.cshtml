@@ -2,11 +2,18 @@
 @model FavoritesModel
 @{
     ViewData["Title"] = "Favoritos";
+    var favoritesShell = new ResultsShellViewModel
+    {
+        Kicker = "Vista galeria",
+        Title = "Seleccioná una lista",
+        TitleDataAttribute = "data-favorites-page-title",
+        CurrentMode = "Galeria",
+        ShowViewSwitch = false
+    };
 }
 
 <section class="favorites-strip favorites-page-strip" data-favorites-summary>
     <div class="favorites-strip-copy">
-        <span class="eyebrow">Mis listas</span>
         <h2>Favoritos guardados</h2>
     </div>
     <div class="favorites-strip-actions" data-favorites-summary-actions>
@@ -26,20 +33,86 @@
     </div>
 </section>
 
-<section class="gallery-shell" data-favorites-page-results @(Model.FavoriteLists.Any() ? null : "hidden")>
-    <div class="gallery-header">
-        <div>
-            <span class="gallery-kicker">Vista galería</span>
-            <h2 data-favorites-page-title>Seleccioná una lista</h2>
+@if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+{
+    <div class="status-banner success-banner">@Model.SuccessMessage</div>
+}
+@if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+{
+    <div class="status-banner danger-banner">@Model.ErrorMessage</div>
+}
+
+<section data-favorites-page-results @(Model.FavoriteLists.Any() ? null : "hidden")>
+    <partial name="~/Views/Content/Results/_ResultsShellHeader.cshtml" model="favoritesShell" />
+
+    <section class="favorites-page-management" data-favorites-page-management hidden>
+        <div class="favorites-page-management-title">
+            <span class="eyebrow">Favoritos</span>
+            <strong data-favorites-management-name></strong>
         </div>
-    </div>
+        <div class="favorites-page-management-actions">
+            <button type="button" class="ghost-pill" data-favorites-management-rename-open>Renombrar</button>
+            <form method="post"
+                  asp-page-handler="Rename"
+                  class="favorites-page-rename-form"
+                  data-favorites-management-rename-form
+                  hidden>
+                <input type="hidden" name="listId" data-favorites-management-list-id />
+                <input type="text" name="name" maxlength="120" required data-favorites-management-name-input />
+                <button type="submit" class="primary-pill">Guardar</button>
+                <button type="button" class="ghost-pill" data-favorites-management-rename-cancel>Cancelar</button>
+            </form>
+            <form method="post"
+                  asp-page-handler="Delete"
+                  data-favorites-management-delete-form
+                  onsubmit="return confirm('Esta acción eliminará la lista de favoritos.');">
+                <input type="hidden" name="listId" data-favorites-management-delete-list-id />
+                <button type="submit" class="danger-pill">Eliminar</button>
+            </form>
+        </div>
+    </section>
 
     <div class="preview-modal-loading" data-favorites-page-loading hidden>Cargando favoritos...</div>
     <section class="empty-state" data-favorites-page-empty @(Model.FavoriteLists.Any() ? null : "hidden")>
         <h2>Elegí una lista para ver tus guardados.</h2>
         <p>Los anuncios se muestran acá mismo, en formato galería.</p>
     </section>
-    <div class="gallery-rail" data-favorites-page-gallery></div>
+    <section class="gallery-shell">
+        <div class="gallery-rail" data-favorites-page-gallery></div>
+    </section>
 </section>
 
 <partial name="_GlobalModals" model="Model" />
+
+@section Scripts {
+    <script>
+        (() => {
+            document.addEventListener("click", event => {
+                const openButton = event.target.closest("[data-favorites-management-rename-open]");
+                if (openButton) {
+                    const panel = openButton.closest("[data-favorites-page-management]");
+                    const form = panel?.querySelector("[data-favorites-management-rename-form]");
+                    const input = panel?.querySelector("[data-favorites-management-name-input]");
+                    if (!form || !input) return;
+
+                    openButton.hidden = true;
+                    form.hidden = false;
+                    input.focus();
+                    input.select();
+                    return;
+                }
+
+                const cancelButton = event.target.closest("[data-favorites-management-rename-cancel]");
+                if (cancelButton) {
+                    const panel = cancelButton.closest("[data-favorites-page-management]");
+                    const form = panel?.querySelector("[data-favorites-management-rename-form]");
+                    const openButton = panel?.querySelector("[data-favorites-management-rename-open]");
+                    if (!form || !openButton) return;
+
+                    form.hidden = true;
+                    openButton.hidden = false;
+                }
+            });
+        })();
+    </script>
+}

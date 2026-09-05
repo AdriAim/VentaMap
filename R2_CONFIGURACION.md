@@ -22,7 +22,7 @@ Completar `Cloudflare:R2` en `appsettings.json` o en variables de entorno:
     "AccessKeyId": "tu-access-key",
     "SecretAccessKey": "tu-secret-key",
     "Bucket": "ventagram-publicaciones",
-    "PublicBaseUrl": "https://media.ventagram.com",
+    "PublicBaseUrl": "https://img.ventagram.com.ar",
     "Prefix": "publications",
     "Region": "auto",
     "MaxImageSide": 1600,
@@ -31,6 +31,12 @@ Completar `Cloudflare:R2` en `appsettings.json` o en variables de entorno:
     "WatermarkOpacity": 0.45
   }
 }
+```
+
+`ServiceUrl` es opcional si completas `AccountId`. En ese caso la app usa automaticamente:
+
+```text
+https://TU_ACCOUNT_ID.r2.cloudflarestorage.com
 ```
 
 ## Qué hace la subida
@@ -43,6 +49,7 @@ Completar `Cloudflare:R2` en `appsettings.json` o en variables de entorno:
 ## Variables de entorno
 
 - `Cloudflare__R2__AccountId`
+- `Cloudflare__R2__ServiceUrl`
 - `Cloudflare__R2__AccessKeyId`
 - `Cloudflare__R2__SecretAccessKey`
 - `Cloudflare__R2__Bucket`

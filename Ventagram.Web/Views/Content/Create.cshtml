@@ -25,7 +25,7 @@
             <h2>No puedes publicar por el momento</h2>
             <p>@Model.PublishingBlockedMessage</p>
             <p>Si la revisión administrativa determina que no hubo infracción, tu cuenta volverá a quedar habilitada.</p>
-            <a class="ghost-pill" href="/MisPublicaciones">Ver mis anuncios</a>
+            <a class="ghost-pill" href="/MisAnuncios">Ver mis anuncios</a>
         </section>
     }
     else
@@ -40,13 +40,13 @@
             <span><a href="/Reglas">Ver reglas de funcionamiento</a></span>
         </div>
 
-        <div class="detail-panel">
-            <h2>Cómo funciona el sistema de denuncias</h2>
-            <p>Si tu anuncio recibe 5 denuncias de 5 usuarios diferentes, te avisaremos por mail para que revises los datos publicados.</p>
-            <p>Si llega a 10 denuncias de 10 usuarios diferentes, el anuncio pasará a papelera para revisión y tu cuenta no podrá publicar nuevos anuncios hasta nuevo aviso.</p>
-            <p>Un administrador revisará el caso y podrá restituir el anuncio y rehabilitar tu cuenta si corresponde.</p>
-            <p><a href="/Reglas">Ver reglas completas de funcionamiento</a></p>
-        </div>
+        @if (Model.IsPaidSiteEnabled)
+        {
+            <div class="status-banner">
+                <strong>Consulta los precios vigentes antes de cargar el aviso.</strong>
+                <span><a href="/Precios">Ver precios para personas y empresas</a></span>
+            </div>
+        }
 
         <div id="create-feedback"></div>
 
@@ -54,6 +54,7 @@
               class="stack-form create-form"
               autocomplete="off"
               novalidate
+              data-skip-system-loading="true"
               data-submit-endpoint="@Model.SubmitEndpoint">
             <input type="hidden" name="title" value="@Model.Input.Title" />
             <input type="hidden" name="latitude" value="@(Model.Input.Latitude.HasValue ? Model.Input.Latitude.Value.ToString(CultureInfo.InvariantCulture) : string.Empty)" />
@@ -62,10 +63,16 @@
             <input type="hidden" name="address" value="@Model.Input.Address" />
             <input type="hidden" name="imagesCsv" value="@Model.Input.ImagesCsv" />
             <input type="hidden" name="videoUrl" value="@Model.Input.VideoUrl" />
+            <input name="noLocation"
+                   type="checkbox"
+                   value="true"
+                   data-create-no-location
+                   hidden
+                   @(Model.ShowLocationSection ? null : "checked") />
 
-            <section class="detail-panel create-uploads-panel">
+            <section class="detail-panel create-uploads-panel" data-create-basics-panel>
                 <div class="section-heading">
-                    <span class="eyebrow">Paso 1 - Datos minimos</span>
+                    <span class="eyebrow create-step-label">Paso 1 - Datos minimos</span>
                     <p>Luego podrás completar opcional ubicación en mapa y ficha técnica para que tu anuncio se posiciones en busquedas de los compradores.</p>
                 </div>
 
@@ -110,45 +117,87 @@
                         <span class="field-error" data-field-error="category"></span>
                     </label>
 
+                    <label data-field-container="operation" data-create-operation-field @(Model.OperationOptions.Any() ? null : "hidden")>
+                        <span>Tipo de operación</span>
+                        <select name="operation"
+                                data-create-operation-select
+                                data-selected-operation="@(Model.Input.Operation ?? string.Empty)">
+                            <option value="">Seleccioná una opción</option>
+                            @foreach (var option in Model.OperationOptions)
+                            {
+                                if (string.Equals(Model.Input.Operation, option, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <option value="@option" selected>@option</option>
+                                }
+                                else
+                                {
+                                    <option value="@option">@option</option>
+                                }
+                            }
+                        </select>
+                        <span class="field-error" data-field-error="operation"></span>
+                    </label>
+
                     <label class="wide" data-field-container="shortDescription">
-                        <span>Descripcion corta</span>
-                        <input name="shortDescription" value="@Model.Input.ShortDescription" placeholder="Resumen breve para el listado" />
+                        <span>Descripción corta</span>
+                        <input name="shortDescription" value="@Model.Input.ShortDescription" maxlength="60" aria-describedby="short-description-hint short-description-count" placeholder="Resumen breve para el listado" />
+                        <span class="field-hint" id="short-description-hint">Se muestra sobre la foto del anuncio, en hasta dos líneas. Máximo 60 caracteres, incluidos los espacios. Si no entra completa, se verá con puntos suspensivos.</span>
+                        <span class="field-hint" id="short-description-count" data-short-description-count></span>
+                        <span class="field-hint create-description-example" data-description-example="short"></span>
                         <span class="field-error" data-field-error="shortDescription"></span>
                     </label>
 
                     <label data-field-container="currency">
                         <span>Moneda</span>
                         <select name="currency">
-                            @if (Model.Input.Currency == "ARS")
+                            @if (Model.Input.Currency == "ARS" || Model.Input.Currency == "AR$")
                             {
-                                <option value="ARS" selected>ARS</option>
+                                <option value="AR$" selected>AR$</option>
                             }
                             else
                             {
-                                <option value="ARS">ARS</option>
+                                <option value="AR$">AR$</option>
                             }
 
-                            @if (Model.Input.Currency == "USD")
+                            @if (Model.Input.Currency == "USD" || Model.Input.Currency == "U$D")
                             {
-                                <option value="USD" selected>USD</option>
+                                <option value="U$D" selected>U$D</option>
                             }
                             else
                             {
-                                <option value="USD">USD</option>
+                                <option value="U$D">U$D</option>
                             }
                         </select>
                         <span class="field-error" data-field-error="currency"></span>
                     </label>
 
                     <label data-field-container="price">
-                        <span>Precio</span>
+                        <span class="create-price-head">
+                            <span data-create-price-label>Precio</span>
+                        </span>
                         <input name="price" type="number" step="0.01" min="0" value="@Model.Input.Price" />
+                        <span class="field-hint" data-create-price-period-hint>Para alquileres indicá el valor mensual; para temporarios, el valor diario.</span>
                         <span class="field-error" data-field-error="price"></span>
                     </label>
+
+                    <div class="create-suggestion-field">
+                        <span aria-hidden="true">&nbsp;</span>
+                        <button type="button"
+                                class="ghost-pill compact suggestion-pill suggestion-pill-publish"
+                                data-suggestion-open="true"
+                                data-suggestion-title="No encuentro la clasificación que necesito"
+                                data-suggestion-intro="Describe lo que estas queriendo publicar y que dato te falta para hacerlo con precisión."
+                                data-suggestion-label="Cuéntanos qué te falta"
+                                data-suggestion-placeholder="Ej. Quiero publicar una camioneta adaptada y no encuentro cómo clasificarla ni qué dato técnico debería completar."
+                                data-suggestion-prefix="PUB: ">
+                            No encuentro la clasificación que necesito
+                        </button>
+                    </div>
 
                     <label class="wide" data-field-container="longDescription">
                         <span>Descripcion completa</span>
                         <textarea name="longDescription" placeholder="Conta lo importante del anuncio">@Model.Input.LongDescription</textarea>
+                        <span class="field-hint create-description-example" data-description-example="long"></span>
                         <span class="field-error" data-field-error="longDescription"></span>
                     </label>
                 </div>
@@ -166,9 +215,15 @@
 
             <section class="detail-panel create-uploads-panel">
                 <div class="section-heading">
-                    <span class="eyebrow">Paso 2-Imagenes</span>
+                    <span class="eyebrow create-step-label">Paso 2 - Imágenes</span>
                     <h2>Subi una principal (obligaria) y hasta 10 mas (opcionales)</h2>
                     <p>Arrastra y suelta archivos o usa el selector. La primera se toma como principal y podes reorganizarla despues.</p>
+                </div>
+
+                <div class="status-banner warning">
+                    <strong>Solo se permiten fotos reales del bien/producto ofrecido.</strong>
+                    No se permiten imágenes generadas o modificadas con inteligencia artificial (IA), ni imágenes que no correspondan al bien/producto que intentás vender, alquilar u ofrecer. El incumplimiento puede dar lugar al baneo de tu cuenta sin aviso previo.
+                    <a href="/Reglas#imagenes">Ver reglas de uso de imágenes</a>.
                 </div>
 
                 <div class="upload-dropzone" data-image-dropzone data-field-container="imagesCsv">
@@ -196,13 +251,23 @@
 
             <section class="detail-panel create-uploads-panel">
                 <div class="section-heading">
-                    <span class="eyebrow">Paso 3-Video opcional</span>
+                    <span class="eyebrow create-step-label">Paso 3 - Video (opcional)</span>
                     <h2>Subi un video de hasta 1 minuto</h2>
                     <p>Si cargas un video, pasa a ser el contenido principal del anuncio.</p>
                 </div>
 
                 <div class="upload-dropzone" data-video-dropzone data-field-container="videoUrl">
                     <input type="file" accept="video/mp4,video/webm,video/quicktime" data-create-video-input hidden />
+                    <div class="upload-photo-tip">
+                        <div class="upload-photo-tip-icon" aria-hidden="true">
+                            <i class="fa-solid fa-mobile-screen-button"></i>
+                            <i class="fa-solid fa-video upload-photo-tip-camera"></i>
+                        </div>
+                        <div class="upload-photo-tip-copy">
+                            <strong>Optimizada para videos de celular en vertical</strong>
+                            <span>Haz un video mostrando tu producto o animate a venderlo vos en persona, que te conozcan a vos y a tu producto.</span>
+                        </div>
+                    </div>
                     <div class="upload-dropzone-actions">
                         <button type="button" class="primary-pill" data-create-video-pick>Elegir video</button>
                         <button type="button" class="ghost-pill" data-create-video-clear>Quitar video</button>
@@ -216,9 +281,18 @@
 
             <section class="detail-panel create-map-panel">
                 <div class="section-heading" data-section-heading>
-                    <span class="eyebrow">Ubicación (OPCIONAL)</span>
+                    <span class="eyebrow create-step-label">Ubicación (Opcional)</span>
                     <h2>Marca el punto en el mapa</h2>
                     <p>Busca una direccion o hace clic sobre el mapa para fijar la ubicacion del anuncio.</p>
+                    <div class="upload-photo-tip">
+                        <div class="upload-photo-tip-icon" aria-hidden="true">
+                            <i class="fa-solid fa-map-location-dot"></i>
+                            <i class="fa-solid fa-location-dot upload-photo-tip-camera"></i>
+                        </div>
+                        <div class="upload-photo-tip-copy">
+                            <strong>Si no informas la ubicación exacta en el mapa, se publicará para tu localidad de usuario y quedará fuera de las búsquedas en mapa.</strong>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="create-section-toggle">
@@ -243,6 +317,8 @@
                          data-map-style-url="@Model.MapStyleUrl"
                          data-map-tiles-url="@Model.MapTilesUrlTemplate"
                          data-map-attribution="@Model.MapAttributionHtml"
+                         data-map-initial-lat="@(Model.SuggestedMapLatitude.HasValue ? Model.SuggestedMapLatitude.Value.ToString(CultureInfo.InvariantCulture) : string.Empty)"
+                         data-map-initial-lng="@(Model.SuggestedMapLongitude.HasValue ? Model.SuggestedMapLongitude.Value.ToString(CultureInfo.InvariantCulture) : string.Empty)"
                          data-map-geocoding-search-url="@Model.MapGeocodingSearchUrlTemplate"
                          data-map-reverse-geocoding-url="@Model.MapReverseGeocodingUrlTemplate"></div>
                     <p class="create-map-summary" data-create-location-summary>
@@ -250,14 +326,27 @@
                             ? "Elegi una ubicacion en el mapa o buscala por direccion."
                             : $"Ubicacion sugerida segun tu cuenta: {Model.SuggestedLocalityLabel}.")
                     </p>
+                    @if (!string.IsNullOrWhiteSpace(Model.SuggestedLocalityLabel))
+                    {
+                        <p class="field-hint">Si no marcas un punto, el anuncio se publicará para tu localidad de usuario: <strong>@Model.SuggestedLocalityLabel</strong>, y no aparecerá en búsquedas de mapa.</p>
+                    }
                 </div>
             </section>
 
             <section class="detail-panel create-technical-panel" data-technical-panel hidden>
                 <div class="section-heading" data-section-heading>
-                    <span class="eyebrow">Ficha tecnica (OPCIONAL)</span>
+                    <span class="eyebrow create-step-label">Ficha tecnica (Opcional)</span>
                     <h2>Completa detalles opcionales</h2>
                     <p>Posicionarán mucho mejor tu anuncio en las busquedas y brindarán información mas precisa a los compradores.</p>
+                    <div class="upload-photo-tip">
+                        <div class="upload-photo-tip-icon" aria-hidden="true">
+                            <i class="fa-solid fa-list-check"></i>
+                            <i class="fa-solid fa-magnifying-glass upload-photo-tip-camera"></i>
+                        </div>
+                        <div class="upload-photo-tip-copy">
+                            <strong>Si cargas la ficha además de mostrar la información tus anuncios participarán de busquedas avanzadas para el comprador.</strong>
+                        </div>
+                    </div>
           
                 </div>
 

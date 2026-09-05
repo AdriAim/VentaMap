@@ -8,8 +8,11 @@ public static class PublicationGroupExtensions
         {
             PublicationGroup.Inmuebles => "INM",
             PublicationGroup.Rodados => "ROD",
+            PublicationGroup.Electronica => "ELE",
             PublicationGroup.Generales => "GEN",
             PublicationGroup.Embarcaciones => "EMB",
+            PublicationGroup.Agro => "AGR",
+            PublicationGroup.Moda => "MOD",
             _ => "PUB"
         };
     }
@@ -29,8 +32,11 @@ public static class PublicationGroupExtensions
         return group switch
         {
             PublicationGroup.Rodados => "Rodados",
-            PublicationGroup.Generales => "Generales",
+            PublicationGroup.Electronica => "Electronica",
             PublicationGroup.Embarcaciones => "Embarcaciones",
+            PublicationGroup.Agro => "Agro",
+            PublicationGroup.Generales => "Generales",
+            PublicationGroup.Moda => "Moda",
             _ => "Inmuebles"
         };
     }
@@ -50,9 +56,13 @@ public static class PublicationGroupExtensions
         return value?.Trim() switch
         {
             "Rodados" => PublicationGroup.Rodados,
+            "Electronica" => PublicationGroup.Electronica,
+            "Electrónica" => PublicationGroup.Electronica,
             "Generales" => PublicationGroup.Generales,
+            "Moda" => PublicationGroup.Moda,
             "Embarcaciones" => PublicationGroup.Embarcaciones,
             "Lanchas" => PublicationGroup.Embarcaciones,
+            "Agro" => PublicationGroup.Agro,
             "Inmuebles" => PublicationGroup.Inmuebles,
             _ => fallback
         };

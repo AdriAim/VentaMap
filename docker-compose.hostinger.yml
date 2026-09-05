@@ -34,7 +34,13 @@ services:
       mysql:
         condition: service_healthy
     ports:
-      - "${VENTAGRAM_WEB_PORT:-8080}:8080"
+      - "${VENTAGRAM_WEB_PORT:-7048}:8080"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ventagram-web.rule=Host(`ventagram.com.ar`) || Host(`www.ventagram.com.ar`)"
+      - "traefik.http.routers.ventagram-web.entrypoints=websecure"
+      - "traefik.http.routers.ventagram-web.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ventagram-web.loadbalancer.server.port=8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
@@ -45,7 +51,7 @@ services:
       Authentication__SharedApplicationName: Ventagram
       Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID}
       Authentication__Google__ClientSecret: ${GOOGLE_CLIENT_SECRET}
-      Chat__BaseUrl: ${VENTAGRAM_CHAT_BASE_URL}
+      Chat__BaseUrl: ${VENTAGRAM_WEB_BASE_URL:-https://ventagram.com.ar}
       Email__SmtpHost: ${SMTP_HOST}
       Email__SmtpPort: ${SMTP_PORT:-587}
       Email__SmtpUser: ${SMTP_USER}
@@ -54,9 +60,10 @@ services:
       Email__ContactRecipient: ${SMTP_CONTACT_RECIPIENT:-${SMTP_FROM_EMAIL}}
       Email__FromName: ${SMTP_FROM_NAME:-Ventagram}
       Email__UseSsl: ${SMTP_USE_SSL:-true}
-      Map__StyleUrl: ${MAP_STYLE_URL}
-      Map__TilesUrlTemplate: ${MAP_TILES_URL_TEMPLATE}
-      Map__AttributionHtml: ${MAP_ATTRIBUTION_HTML}
+      Email__TimeoutSeconds: ${SMTP_TIMEOUT_SECONDS:-25}
+      Map__StyleUrl: ${MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/liberty}
+      Map__TilesUrlTemplate: ${MAP_TILES_URL_TEMPLATE:-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
+      Map__AttributionHtml: ${MAP_ATTRIBUTION_HTML:-&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors}
       Map__GeocodingSearchUrlTemplate: ${MAP_GEOCODING_SEARCH_URL_TEMPLATE}
       Map__ReverseGeocodingUrlTemplate: ${MAP_REVERSE_GEOCODING_URL_TEMPLATE}
       Cloudflare__R2__AccountId: ${R2_ACCOUNT_ID}
@@ -72,6 +79,8 @@ services:
       Cloudflare__R2__WatermarkScale: ${R2_WATERMARK_SCALE:-0.14}
       Cloudflare__R2__WatermarkOpacity: ${R2_WATERMARK_OPACITY:-0.45}
       Cloudflare__R2__MaxVideoBytes: ${R2_MAX_VIDEO_BYTES:-83886080}
+      Database__ApplyMigrationsOnStartup: ${DATABASE_APPLY_MIGRATIONS_ON_STARTUP:-false}
+      Database__RunSeedDataOnStartup: ${DATABASE_RUN_SEED_DATA_ON_STARTUP:-false}
     volumes:
       - dataprotection_keys:/keys/dataprotection
 
@@ -87,7 +96,14 @@ services:
       mysql:
         condition: service_healthy
     ports:
-      - "${VENTAGRAM_CHAT_PORT:-8081}:8080"
+      - "${VENTAGRAM_CHAT_PORT:-7065}:8080"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ventagram-chat.rule=(Host(`ventagram.com.ar`) || Host(`www.ventagram.com.ar`)) && (PathPrefix(`/api/chat`) || PathPrefix(`/hubs/chat`))"
+      - "traefik.http.routers.ventagram-chat.entrypoints=websecure"
+      - "traefik.http.routers.ventagram-chat.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ventagram-chat.priority=100"
+      - "traefik.http.services.ventagram-chat.loadbalancer.server.port=8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
@@ -101,10 +117,10 @@ services:
       Authentication__LogoutPath: /Account/Logout
       Authentication__AccessDeniedPath: /Account/Login
       Authentication__SharedApplicationName: Ventagram
-      Cors__AllowedOrigins__0: ${VENTAGRAM_WEB_BASE_URL}
-      Cors__AllowedOrigins__1: ${VENTAGRAM_WEB_BASE_URL_ALT}
-      Chat__PublicBaseUrl: ${VENTAGRAM_CHAT_BASE_URL}
-      Chat__PublicationBaseUrl: ${VENTAGRAM_WEB_BASE_URL}
+      Cors__AllowedOrigins__0: ${VENTAGRAM_WEB_BASE_URL:-https://ventagram.com.ar}
+      Cors__AllowedOrigins__1: ${VENTAGRAM_WEB_BASE_URL_ALT:-}
+      Chat__PublicBaseUrl: ${VENTAGRAM_WEB_BASE_URL:-https://ventagram.com.ar}
+      Chat__PublicationBaseUrl: ${VENTAGRAM_WEB_BASE_URL:-https://ventagram.com.ar}
       Email__SmtpHost: ${SMTP_HOST}
       Email__SmtpPort: ${SMTP_PORT:-587}
       Email__SmtpUser: ${SMTP_USER}
@@ -112,6 +128,7 @@ services:
       Email__FromEmail: ${SMTP_FROM_EMAIL}
       Email__FromName: ${SMTP_FROM_NAME:-Ventagram}
       Email__UseSsl: ${SMTP_USE_SSL:-true}
+      Email__TimeoutSeconds: ${SMTP_TIMEOUT_SECONDS:-25}
     volumes:
       - dataprotection_keys:/keys/dataprotection
 

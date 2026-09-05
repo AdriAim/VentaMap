@@ -1,0 +1,62 @@
+@model ResultsLayoutViewModel
+@{
+    var results = Model.Results;
+}
+
+<partial name="~/Views/Content/Results/_ResultsLayoutHeader.cshtml" model="Model" />
+
+@if (!results.Publications.Any())
+{
+    <section class="gallery-shell" data-browse-scroll-target>
+        <div class="gallery-loader browse-empty-message">No se encontraron resultados dentro del radio seleccionado.</div>
+        @if (results.HasExpandedRadiusFallback)
+        {
+            <partial name="~/Views/Content/Results/_ExpandedRadiusResults.cshtml" model="results" />
+        }
+    </section>
+}
+else if (!results.HasMapResults)
+{
+    <section class="gallery-shell" data-browse-scroll-target>
+        <div class="gallery-loader browse-empty-message">No hay anuncios con ubicación disponible para mostrar en el mapa.</div>
+    </section>
+}
+else
+{
+<section class="map-layout" data-browse-scroll-target data-map-layout>
+    <div class="map-view-row">
+        <div class="map-view-spacer" aria-hidden="true"></div>
+    </div>
+    <div class="map-canvas-shell">
+        <div class="map-canvas" id="map"
+             data-map-style-url="@results.MapStyleUrl"
+             data-map-tiles-url="@results.MapTilesUrlTemplate"
+             data-map-attribution="@results.MapAttributionHtml"
+             data-map-initial-lat="@results.UserLocalityLatitude"
+             data-map-initial-lng="@results.UserLocalityLongitude"
+             data-map-markers-endpoint="@results.MapMarkersApiEndpoint"
+             data-markers='@results.MarkersJson'>
+            @if (string.IsNullOrWhiteSpace(results.MapStyleUrl) && string.IsNullOrWhiteSpace(results.MapTilesUrlTemplate))
+            {
+                <div class="map-placeholder">
+                    <h2>Mapa listo para MapLibre</h2>
+                    <p>Carga <code>Map:StyleUrl</code> o <code>Map:TilesUrlTemplate</code> en <code>appsettings.json</code> para activar el mapa interactivo.</p>
+                </div>
+            }
+        </div>
+    </div>
+    <div class="map-sidebar">
+        <div class="map-results" data-map-selection-panel>
+            <div class="map-results-copy">
+                <span class="gallery-kicker">Pin seleccionado</span>
+                <h2>Elegi un anuncio en el mapa</h2>
+                @if (Model.ShowMapSelectionDescription && !string.IsNullOrWhiteSpace(Model.MapSelectionDescription))
+                {
+                    <p>@Model.MapSelectionDescription</p>
+                }
+            </div>
+            <div class="map-selection-card" data-map-selection-card></div>
+        </div>
+    </div>
+</section>
+}

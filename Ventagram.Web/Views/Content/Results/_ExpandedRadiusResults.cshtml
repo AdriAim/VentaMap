@@ -1,0 +1,72 @@
+@model HomeContentViewModel
+
+<section class="classified-toolbar">
+    <div class="classified-summary">
+        Resultados fuera de ese radio
+    </div>
+    @if (Model.ExpandedRadiusKm.HasValue)
+    {
+        <div class="classified-page-size">
+            Hasta @Model.ExpandedRadiusKm.Value km
+        </div>
+    }
+</section>
+
+<section class="classified-list">
+    @foreach (var item in Model.ExpandedRadiusPublications)
+    {
+        var publicationCode = item.ToAdCode();
+        var operationLabel = item.OperationType?.ToDisplayName();
+        var operationLetter = operationLabel?[0].ToString().ToUpperInvariant();
+        var pricePeriod = operationLabel switch
+        {
+            "Alquiler" => " / mes",
+            "Temporario" => " / día",
+            _ => string.Empty
+        };
+        var categoryLabel = item.Category?.Name ?? "Sin categoria";
+        var formattedPrice = $"{item.Currency} {item.Price.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-AR"))}{pricePeriod}";
+        var priceTooltipLabel = string.Join(" · ", new[] { operationLabel, categoryLabel, formattedPrice }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        <article class="classified-row">
+            <div>
+                <span class="card-meta">@item.Group · @categoryLabel · @item.Locality</span>
+                <h3><a href="/Publications/Details/@item.Id" class="publication-preview-trigger" data-publication-id="@item.Id" data-details-url="/api/content/details/@item.Id">@(string.IsNullOrWhiteSpace(item.ShortDescription) ? item.Title : item.ShortDescription)</a></h3>
+            </div>
+            <div class="classified-side">
+                <div class="classified-side-top">
+                    <span class="classified-price-cluster">
+                        @if (!string.IsNullOrWhiteSpace(operationLetter))
+                        {
+                            <span class="gallery-badge gallery-tooltip-trigger gallery-tooltip-bottom" data-tooltip-label="@priceTooltipLabel">
+                                <strong class="gallery-operation-letter">@operationLetter</strong>@formattedPrice
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="gallery-badge gallery-tooltip-trigger gallery-tooltip-bottom" data-tooltip-label="@priceTooltipLabel">@formattedPrice</span>
+                        }
+                    </span>
+                    <button type="button"
+                            class="report-trigger gallery-action-button gallery-report-overlay classified-report-button gallery-tooltip-trigger gallery-tooltip-side"
+                            data-publication-id="@item.Id"
+                            data-publication-code="@publicationCode"
+                            data-publication-title="@item.Title"
+                            data-tooltip-label="Denunciar"
+                            aria-label="Denunciar @item.Title">
+                        <span class="gallery-report-letter" aria-hidden="true">D</span>
+                    </button>
+                <button type="button"
+                        class="favorite-toggle favorite-toggle-inline @(Model.FavoritePublicationIds.Contains(item.Id) ? "is-active" : "")"
+                        data-favorite-toggle="true"
+                        data-publication-id="@item.Id"
+                        data-publication-title="@item.Title"
+                        data-suggested-list-name="@item.Group.ToDisplayName()"
+                        title="Anadir a mi lista de favoritos"
+                        aria-label="Anadir a mi lista de favoritos">
+                    <i class="fa-@(Model.FavoritePublicationIds.Contains(item.Id) ? "solid" : "regular") fa-star" aria-hidden="true"></i>
+                </button>
+                </div>
+            </div>
+        </article>
+    }
+</section>

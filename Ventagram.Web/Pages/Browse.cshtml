@@ -12,6 +12,16 @@
         $"pageSize={Model.PageSize}"
     };
 
+    if (!string.IsNullOrWhiteSpace(Model.Operation))
+    {
+        queryParts.Add($"operation={Uri.EscapeDataString(Model.Operation)}");
+    }
+
+    if (Model.CategoryId.HasValue)
+    {
+        queryParts.Add($"categoryId={Model.CategoryId.Value}");
+    }
+
     if (Model.PriceFrom.HasValue)
     {
         queryParts.Add($"priceFrom={Uri.EscapeDataString(Model.PriceFrom.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))}");
@@ -20,6 +30,11 @@
     if (Model.PriceTo.HasValue)
     {
         queryParts.Add($"priceTo={Uri.EscapeDataString(Model.PriceTo.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))}");
+    }
+
+    if (Model.RadiusKm.HasValue)
+    {
+        queryParts.Add($"radioKm={Model.RadiusKm.Value}");
     }
 
     var filterFieldIds = Request.Query["filterFieldId"];
@@ -36,6 +51,11 @@
         {
             queryParts.Add($"filterValue={Uri.EscapeDataString(filterValues[i] ?? string.Empty)}");
         }
+    }
+
+    if (string.Equals(Request.Query["debug"], "1", StringComparison.Ordinal))
+    {
+        queryParts.Add("debug=1");
     }
 
     var endpoint = $"/api/content/browse?{string.Join("&", queryParts)}";

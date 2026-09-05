@@ -1,52 +1,88 @@
 # Deploy en Hostinger VPS
 
-Este proyecto queda listo para desplegar en un VPS Linux de Hostinger usando Docker Compose.
+Regla operativa vigente al 19 de agosto de 2026:
 
-## Estructura usada
+- Hostinger se actualiza siempre desde el estado local actual.
+- No depender de `git pull` ni del remoto para publicar cambios.
+- El stack activo en el VPS vive en `/root/ventagram-local`.
 
-- `Ventagram.Web`: web principal
-- `Ventagram.ChatService`: servicio de chat
-- `docker-compose.hostinger.yml`: stack de produccion
-- `.env.hostinger.example`: variables de entorno para copiar a `.env`
+## Flujo real de deploy
 
-## Requisitos
+1. Empaquetar la copia local actual en `E:\Proyectos\ventagram`.
+2. Subir el `.tar.gz` al VPS.
+3. Respaldar `/root/ventagram-local/.env`.
+4. Descomprimir el paquete encima de `/root/ventagram-local`.
+5. Ejecutar `docker compose` o `./update-hostinger.sh` dentro del VPS.
 
-- VPS con Docker y Docker Compose
-- Puertos abiertos:
-  - `8080` para la web
-  - `8081` para chat
-- Git instalado en el VPS si vas a clonar el repo
+## Archivos relevantes
 
-## Despliegue por SSH
+- `Ventagram.Web`
+- `Ventagram.ChatService`
+- `docker-compose.hostinger.yml`
+- `.env.hostinger.example`
+- `update-hostinger.sh`
+- `package-hostinger-local.ps1`
 
-1. Conectate al VPS:
+## Empaquetar desde Windows
+
+Desde `E:\Proyectos\ventagram`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\package-hostinger-local.ps1
+```
+
+Eso genera un archivo tipo:
+
+```text
+ventagram-local-deploy-20260819-013500.tar.gz
+```
+
+## Subir al VPS
+
+Ejemplo:
+
+```powershell
+scp .\ventagram-local-deploy-20260819-013500.tar.gz root@TU_IP:/root/
+```
+
+## Desplegar en el VPS
+
+Conectate:
 
 ```bash
 ssh root@TU_IP
 ```
 
-2. Instala Git si hace falta:
+Respalda `.env` y descomprime:
 
 ```bash
-apt update
-apt install -y git
+cp /root/ventagram-local/.env /root/ventagram-local/.env.backup
+tar -xzf /root/ventagram-local-deploy-20260819-013500.tar.gz -C /root/ventagram-local
 ```
 
-3. Clona el repo:
+Deploy normal:
 
 ```bash
-git clone TU_REPO_GIT ventagram
-cd ventagram
+cd /root/ventagram-local
+chmod +x update-hostinger.sh
+./update-hostinger.sh
 ```
 
-4. Crea el archivo `.env`:
+Deploy con migraciones y seeds:
 
 ```bash
-cp .env.hostinger.example .env
-nano .env
+cd /root/ventagram-local
+./update-hostinger.sh --with-db
 ```
 
-5. Completa como minimo estas variables:
+## Qué hace `update-hostinger.sh`
+
+- usa el contenido local ya copiado en `/root/ventagram-local`
+- activa migraciones y `SeedData` solo si pasas `--with-db`
+- ejecuta `docker compose -f docker-compose.hostinger.yml up -d --build`
+- deja los flags otra vez en `false` al salir
+
+## Variables importantes de `.env`
 
 - `MYSQL_ROOT_PASSWORD`
 - `VENTAGRAM_WEB_BASE_URL`
@@ -57,63 +93,33 @@ nano .env
 - `SMTP_PASSWORD`
 - `SMTP_FROM_EMAIL`
 - `MAP_STYLE_URL` o `MAP_TILES_URL_TEMPLATE`
+- `R2_ACCOUNT_ID` o `R2_SERVICE_URL`
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
 - `R2_BUCKET`
 - `R2_PUBLIC_BASE_URL`
 
-Opcionales para búsqueda de direcciones:
+Opcionales:
 
+- `DATABASE_APPLY_MIGRATIONS_ON_STARTUP`
+- `DATABASE_RUN_SEED_DATA_ON_STARTUP`
 - `MAP_GEOCODING_SEARCH_URL_TEMPLATE`
 - `MAP_REVERSE_GEOCODING_URL_TEMPLATE`
-- `SMTP_CONTACT_RECIPIENT` si quieres que el formulario de contacto llegue a otra casilla distinta del remitente general
+- `SMTP_CONTACT_RECIPIENT`
 
-6. Levanta el stack:
-
-```bash
-docker compose -f docker-compose.hostinger.yml up -d --build
-```
-
-7. Verifica estado:
+## Verificación
 
 ```bash
+cd /root/ventagram-local
 docker compose -f docker-compose.hostinger.yml ps
-docker compose -f docker-compose.hostinger.yml logs -f ventagram-web
-docker compose -f docker-compose.hostinger.yml logs -f ventagram-chat
+docker compose -f docker-compose.hostinger.yml logs --tail 100 ventagram-web
+docker compose -f docker-compose.hostinger.yml logs --tail 100 ventagram-chat
+curl -I http://127.0.0.1:8080
+curl -I http://127.0.0.1:8081
 ```
-
-## Actualizar una nueva version
-
-```bash
-cd ~/ventagram
-git pull
-docker compose -f docker-compose.hostinger.yml up -d --build
-```
-
-## URLs iniciales
-
-Sin proxy inverso:
-
-- Web: `http://TU_IP:8080`
-- Chat: `http://TU_IP:8081`
-
-## Dominio
-
-Si despues quieres usar dominio:
-
-- `app.tudominio.com` -> puerto `8080`
-- `chat.tudominio.com` -> puerto `8081`
-
-En ese caso actualiza en `.env`:
-
-- `VENTAGRAM_WEB_BASE_URL=https://app.tudominio.com`
-- `VENTAGRAM_WEB_BASE_URL_ALT=https://www.app.tudominio.com` o repite la misma URL
-- `VENTAGRAM_CHAT_BASE_URL=https://chat.tudominio.com`
-- `VENTAGRAM_COOKIE_DOMAIN=.tudominio.com`
 
 ## Notas
 
-- MySQL queda solo dentro de la red Docker. No se publica al exterior.
-- `DataProtection` queda en un volumen compartido entre web y chat para que las cookies sigan siendo validas.
-- Si usas HTTPS por proxy externo, conviene apuntar las variables `*_BASE_URL` a las URLs finales con `https`.
-- El chat crea `ventagram_chat` automaticamente si no existe.
+- MySQL queda publicado solo en `127.0.0.1:3306`.
+- `DataProtection` queda compartido entre web y chat.
+- Si la web falla por historial EF desalineado, revisar primero logs y estado de `__EFMigrationsHistory` antes de insistir con rebuild.

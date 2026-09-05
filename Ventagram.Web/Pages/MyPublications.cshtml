@@ -1,18 +1,79 @@
-@page "/MisPublicaciones"
+@page "/MisAnuncios"
 @model Ventagram.Pages.MyPublicationsModel
+@using Ventagram.Models
 @{
     ViewData["Title"] = "Mis anuncios";
+    var myAdsHeaderStyle = !string.IsNullOrWhiteSpace(Model.CompanyHeroBackgroundUrl)
+        ? $"--company-profile-cover-image: url('{Model.CompanyHeroBackgroundUrl}');"
+        : string.Empty;
 }
 
 <section class="favorites-strip favorites-page-strip">
     <div class="favorites-strip-copy">
         <span class="eyebrow">Panel</span>
-        <h2>Mis anuncios</h2>
+        <h2>@(Model.IsCompany && !string.IsNullOrWhiteSpace(Model.CompanyName) ? $"Panel de {Model.CompanyName}" : "Mis anuncios")</h2>
+        @if (Model.IsCompany && !string.IsNullOrWhiteSpace(Model.CompanyPublicUrl))
+        {
+            <div class="my-publications-public-site">
+                <strong>Web pública de empresa activa.</strong>
+                <a href="@Model.CompanyPublicUrl">@Model.CompanyPublicUrl</a>
+            </div>
+        }
     </div>
     <div class="favorites-strip-actions">
         <a class="primary-pill" asp-page="/Publications/Create">Crear anuncio</a>
+        @if (Model.IsCompany && !string.IsNullOrWhiteSpace(Model.CompanyPublicUrl))
+        {
+            <button type="button"
+                    class="ghost-pill publication-share-link"
+                    data-copy-publication-link="true"
+                    data-copy-label="Copiar link para compartir"
+                    data-copy-url="@Model.CompanyPublicUrl">
+                <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
+                <span>Copiar link para compartir</span>
+            </button>
+        }
     </div>
 </section>
+
+@if (Model.Publications.Any())
+{
+    <section class="favorites-strip favorites-page-strip company-publications-strip"
+             data-my-publications-toolbar="true"
+             style="@myAdsHeaderStyle">
+        <div class="favorites-strip-copy">
+            <span class="eyebrow">Mis anuncios</span>
+            <h2>Anuncios publicados</h2>
+        </div>
+        <div class="company-catalog-toolbar-controls">
+            <label class="company-catalog-search">
+                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                <input type="search"
+                       placeholder="Buscar por título, categoría o localidad"
+                       autocomplete="off"
+                       data-my-publications-search />
+            </label>
+            <div class="company-catalog-view-switch" role="group" aria-label="Filtrar anuncios por estado">
+                <button type="button" class="is-active" data-my-publications-status="all" aria-pressed="true">Todos</button>
+                <button type="button" data-my-publications-status="active" aria-pressed="false">Activos</button>
+                <button type="button" data-my-publications-status="inactive" aria-pressed="false">De baja</button>
+            </div>
+            <div class="company-catalog-view-switch" role="group" aria-label="Modo de visualizacion">
+                <button type="button" class="is-active" data-my-publications-view="list" aria-pressed="true">
+                    <i class="fa-solid fa-list" aria-hidden="true"></i>
+                    <span>Lista</span>
+                </button>
+                <button type="button" data-my-publications-view="gallery" aria-pressed="false">
+                    <i class="fa-solid fa-images" aria-hidden="true"></i>
+                    <span>Galería</span>
+                </button>
+            </div>
+        </div>
+        <div class="my-publications-filter-meta">
+            <span class="field-hint" data-my-publications-count>@Model.Publications.Count anuncio(s) visibles</span>
+        </div>
+    </section>
+}
 
 @if (Model.PublishingBlocked)
 {
@@ -51,15 +112,36 @@
 }
 else
 {
-    <section class="publication-admin-list">
-        @foreach (var publication in Model.Publications)
+    <section class="publication-admin-list my-publications-view-list" data-my-publications-results="true">
+        @foreach (var item in Model.Publications)
         {
+            var publication = item.Publication;
             var detailUrl = $"/Publications/Details/{publication.Id}";
+            var ownerPreviewUrl = $"{detailUrl}?ownerView=1";
+            var ownerPreviewApiUrl = $"/api/content/details/{publication.Id}?ownerView=1";
             var imageUrl = publication.ImageList.FirstOrDefault();
             var statusLabel = publication.IsActive ? publication.Status : "Inactiva";
-
-            <article class="publication-admin-card">
-                <div class="publication-admin-media">
+            var operationLabel = publication.OperationType?.ToDisplayName();
+            var operationLetter = !string.IsNullOrWhiteSpace(operationLabel)
+                ? operationLabel[0].ToString().ToUpperInvariant()
+                : string.Empty;
+            var pricePeriod = operationLabel switch
+            {
+                "Alquiler" => " / mes",
+                "Temporario" => " / día",
+                _ => string.Empty
+            };
+            var categoryLabel = publication.Category?.Name ?? "Sin categoria";
+            var formattedPrice = $"{publication.Currency} {publication.Price.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-AR"))}{pricePeriod}";
+            var priceTooltipLabel = string.Join(" · ", new[] { operationLabel, categoryLabel, formattedPrice }.Where(x => !string.IsNullOrWhiteSpace(x)));
+            <article class="publication-admin-card"
+                     data-my-publication-item="true"
+                     data-my-publication-status="@(publication.IsActive ? "active" : "inactive")"
+                     data-my-publication-search="@($"{publication.Title} {publication.Category?.Name} {publication.Locality} {publication.ShortDescription}")">
+                <a class="publication-admin-media publication-preview-trigger"
+                   href="@ownerPreviewUrl"
+                   data-publication-id="@publication.Id"
+                   data-details-url="@ownerPreviewApiUrl">
                     @if (!string.IsNullOrWhiteSpace(imageUrl))
                     {
                         <img src="@imageUrl" alt="@publication.Title" />
@@ -68,16 +150,36 @@ else
                     {
                         <div class="publication-admin-placeholder">Sin imagen</div>
                     }
-                </div>
+                    <span class="my-publication-gallery-price gallery-badge gallery-tooltip-trigger gallery-tooltip-bottom" data-tooltip-label="@priceTooltipLabel">
+                        @if (!string.IsNullOrWhiteSpace(operationLetter))
+                        {
+                            <strong class="gallery-operation-letter">@operationLetter</strong>
+                        }
+                        @formattedPrice
+                    </span>
+                    <span class="my-publication-gallery-title">@(string.IsNullOrWhiteSpace(publication.ShortDescription) ? publication.Title.Split(" - oportunidad", StringSplitOptions.TrimEntries)[0] : publication.ShortDescription)</span>
+                </a>
                 <div class="publication-admin-body">
-                    <div class="publication-admin-head">
-                        <div>
-                            <span class="gallery-kicker">@(publication.Category?.Name ?? "Sin categoria")</span>
-                            <h3>@publication.Title</h3>
+                    <div class="publication-admin-head publication-admin-head-with-stats">
+                        <div class="publication-admin-summary">
+                            <div>
+                                <span class="gallery-kicker">@categoryLabel</span>
+                                <h3>@publication.Title</h3>
+                            </div>
+                            <span class="publication-admin-status @(publication.IsActive ? "is-active" : "is-inactive")" data-my-publication-status-label>@statusLabel</span>
                         </div>
-                        <span class="publication-admin-status @(publication.IsActive ? "is-active" : "is-inactive")">@statusLabel</span>
+                        <aside class="publication-admin-stats" aria-label="Estadisticas del anuncio">
+                            <div class="publication-admin-stat">
+                                <span class="publication-admin-stat-label">Vistas</span>
+                                <strong class="publication-admin-stat-value">@item.UniqueViewCount</strong>
+                            </div>
+                            <div class="publication-admin-stat">
+                                <span class="publication-admin-stat-label">En favoritos</span>
+                                <strong class="publication-admin-stat-value">@item.UniqueFavoriteCount</strong>
+                            </div>
+                        </aside>
                     </div>
-                    <p class="publication-admin-price">@publication.Currency @publication.Price.ToString("0")</p>
+                    <p class="publication-admin-price">@formattedPrice</p>
                     <p>@publication.ShortDescription</p>
                     <div class="publication-admin-meta">
                         <span>@(string.IsNullOrWhiteSpace(publication.Locality) ? "Sin ubicacion publica" : publication.Locality)</span>
@@ -89,15 +191,26 @@ else
                     </div>
                     <div class="publication-admin-actions">
                         <a class="ghost-pill" asp-page="/Publications/Edit" asp-route-id="@publication.Id">Editar datos</a>
-                        <a class="ghost-pill publication-preview-trigger" href="@detailUrl" data-details-url="/api/content/details/@publication.Id">Ver anuncio</a>
+                        <a class="ghost-pill publication-preview-trigger" href="@ownerPreviewUrl" data-details-url="@ownerPreviewApiUrl">Ver anuncio</a>
+                        <button type="button"
+                                class="ghost-pill publication-admin-copy-link publication-share-link"
+                                data-copy-publication-link="true"
+                                data-copy-label="Copiar link para compartir"
+                                data-copy-url="@detailUrl">
+                            <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
+                            <span>Copiar link para compartir</span>
+                        </button>
                         @if (publication.IsActive)
                         {
                             <details class="publication-deactivate-panel">
-                                <summary class="danger-pill">Dar de baja</summary>
+                                <summary class="danger-pill">
+                                    <span class="publication-deactivate-label-closed">Dar de baja</span>
+                                    <span class="publication-deactivate-label-open">Cerrar</span>
+                                </summary>
                                 <form method="post" asp-page-handler="Deactivate" asp-route-id="@publication.Id" class="publication-deactivate-form">
                                     <label>
                                         <span>Motivo de baja</span>
-                                        <select name="reason" required>
+                                        <select name="reason" required data-deactivation-reason-select>
                                             <option value="">Selecciona un motivo</option>
                                             @foreach (var reason in Ventagram.Pages.MyPublicationsModel.DeactivationReasons)
                                             {
@@ -106,20 +219,57 @@ else
                                         </select>
                                     </label>
                                     <label>
-                                        <span>Comentario para el sitio (opcional)</span>
-                                        <textarea name="comment" rows="3" maxlength="1000" placeholder="Si quieres, puedes dejar un comentario para el administrador."></textarea>
+                                        <span>Detalle del motivo <small>(obligatorio si eliges "Otro motivo")</small></span>
+                                        <textarea name="comment"
+                                                  rows="3"
+                                                  maxlength="1000"
+                                                  placeholder="Si eliges 'Otro motivo', explica brevemente por que das de baja el anuncio."
+                                                  data-deactivation-comment></textarea>
                                     </label>
+                                    @if (Model.ReviewsEnabled)
+                                    {
+                                        <fieldset class="sale-buyer-fields" data-sale-buyer-fields hidden>
+                                            <legend>Datos de la otra persona</legend>
+                                            <p class="field-hint">Le enviaremos un email para que confirme la operacion y, si lo desea, deje una reseña sobre la experiencia.</p>
+                                            <label>
+                                                <span>Tipo de usuario</span>
+                                                <select name="counterpartyKind" data-buyer-kind>
+                                                    <option value="Registered">Usuario registrado</option>
+                                                    <option value="External">Persona no registrada</option>
+                                                </select>
+                                            </label>
+                                            <label>
+                                                <span>Email de la otra persona</span>
+                                                <input type="email"
+                                                       name="counterpartyEmail"
+                                                       maxlength="160"
+                                                       autocomplete="off"
+                                                       placeholder="usuario@email.com"
+                                                       data-buyer-email />
+                                            </label>
+                                            <div class="status-banner civic-banner sale-history-warning">
+                                                <strong>El historial protege a ambas partes.</strong>
+                                                <span>Confirmar la operacion no significa estar conforme: la otra persona podra informar un problema y dejar una reseña.</span>
+                                            </div>
+                                        </fieldset>
+                                    }
                                     <button type="submit" class="danger-pill">Confirmar baja</button>
                                 </form>
                             </details>
                         }
                         else
                         {
-                            <form method="post" asp-page-handler="Republish" asp-route-id="@publication.Id">
+                            @if (!string.IsNullOrWhiteSpace(publication.DeactivationReason))
+                            {
+                                <p class="publication-admin-deactivation-reason">
+                                    Motivo de baja: <strong>@publication.DeactivationReason</strong>
+                                </p>
+                            }
+                            <form method="post" asp-page-handler="Republish" asp-route-id="@publication.Id" data-republish-form>
                                 <button type="submit" class="primary-pill">Republicar 30 dias</button>
                             </form>
-                            <form method="post" asp-page-handler="DeletePermanent" asp-route-id="@publication.Id" onsubmit="return confirm('Esta accion eliminara definitivamente el anuncio y sus archivos.');">
-                                <button type="submit" class="danger-pill">Eliminar definitivamente</button>
+                            <form method="post" asp-page-handler="DeletePermanent" asp-route-id="@publication.Id" onsubmit="return confirm('Esta accion eliminara el anuncio de Mis anuncios y borrara sus archivos multimedia de Cloudflare R2.');">
+                                <button type="submit" class="danger-pill">Eliminar anuncio</button>
                             </form>
                         }
                     </div>
@@ -127,6 +277,232 @@ else
             </article>
         }
     </section>
+    <section class="empty-state" data-my-publications-empty="true" hidden>
+        <h2>No hay anuncios que coincidan.</h2>
+        <p>Prueba otra búsqueda o cambia el filtro de estado.</p>
+    </section>
 }
 
 <partial name="_GlobalModals" model="Model" />
+
+@section Scripts {
+    <script>
+        (() => {
+            const toolbar = document.querySelector("[data-my-publications-toolbar='true']");
+            const results = document.querySelector("[data-my-publications-results='true']");
+            if (!toolbar || !results) return;
+
+            const searchInput = toolbar.querySelector("[data-my-publications-search]");
+            const statusButtons = Array.from(toolbar.querySelectorAll("[data-my-publications-status]"));
+            const viewButtons = Array.from(toolbar.querySelectorAll("[data-my-publications-view]"));
+            const countNode = toolbar.querySelector("[data-my-publications-count]");
+            const emptyState = document.querySelector("[data-my-publications-empty='true']");
+            const items = Array.from(results.querySelectorAll("[data-my-publication-item='true']"));
+            const viewStorageKey = "ventagram:my-publications-view";
+            const allowedViews = new Set(["list", "gallery"]);
+            let selectedStatus = "all";
+            let selectedView = "list";
+
+            const normalize = value => String(value || "")
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .toLowerCase()
+                .trim();
+
+            const applyFilters = () => {
+                const query = normalize(searchInput?.value);
+                let visibleCount = 0;
+
+                items.forEach(item => {
+                    const matchesSearch = !query || normalize(item.dataset.myPublicationSearch).includes(query);
+                    const matchesStatus = selectedStatus === "all" || item.dataset.myPublicationStatus === selectedStatus;
+                    const isVisible = matchesSearch && matchesStatus;
+                    item.hidden = !isVisible;
+                    if (isVisible) visibleCount += 1;
+                });
+
+                if (countNode) {
+                    countNode.textContent = `${visibleCount} anuncio(s) visibles`;
+                }
+                if (emptyState) {
+                    emptyState.hidden = visibleCount > 0;
+                }
+            };
+
+            const applyView = () => {
+                const viewClass = `my-publications-view-${selectedView}`;
+                results.classList.remove("my-publications-view-list", "my-publications-view-gallery");
+                results.classList.add(viewClass);
+
+                viewButtons.forEach(button => {
+                    const isActive = button.dataset.myPublicationsView === selectedView;
+                    button.classList.toggle("is-active", isActive);
+                    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+                });
+            };
+
+            try {
+                const storedView = window.localStorage?.getItem(viewStorageKey);
+                if (allowedViews.has(storedView)) {
+                    selectedView = storedView;
+                }
+            } catch {
+                selectedView = "list";
+            }
+
+            viewButtons.forEach(button => {
+                button.addEventListener("click", () => {
+                    const nextView = button.dataset.myPublicationsView || "list";
+                    selectedView = allowedViews.has(nextView) ? nextView : "list";
+                    try {
+                        window.localStorage?.setItem(viewStorageKey, selectedView);
+                    } catch {
+                        // Ignore storage errors; the selected view still applies for this page load.
+                    }
+                    applyView();
+                });
+            });
+
+            searchInput?.addEventListener("input", applyFilters);
+            statusButtons.forEach(button => {
+                button.addEventListener("click", () => {
+                    selectedStatus = button.dataset.myPublicationsStatus || "all";
+                    statusButtons.forEach(candidate => {
+                        const isActive = candidate === button;
+                        candidate.classList.toggle("is-active", isActive);
+                        candidate.setAttribute("aria-pressed", isActive ? "true" : "false");
+                    });
+                    applyFilters();
+                });
+            });
+
+            applyView();
+            applyFilters();
+
+            results.addEventListener("submit", async event => {
+                const form = event.target.closest("[data-republish-form]");
+                if (!form) return;
+
+                event.preventDefault();
+                const button = form.querySelector("button[type='submit']");
+                if (!button || button.disabled) return;
+
+                const originalText = button.textContent;
+                button.disabled = true;
+                button.textContent = "Republicando...";
+
+                try {
+                    const response = await fetch(form.action, {
+                        method: "POST",
+                        headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" },
+                        body: new FormData(form),
+                        credentials: "same-origin"
+                    });
+                    const payload = await response.json().catch(() => ({}));
+                    if (!response.ok) throw new Error(payload.message || "No se pudo republicar el anuncio indicado.");
+
+                    const item = form.closest("[data-my-publication-item='true']");
+                    const status = item?.querySelector("[data-my-publication-status-label]");
+                    if (item) item.dataset.myPublicationStatus = "active";
+                    if (status) {
+                        status.textContent = "Activa";
+                        status.classList.remove("is-inactive");
+                        status.classList.add("is-active");
+                    }
+
+                    const link = document.createElement("a");
+                    link.className = "primary-pill republish-success-pill";
+                    link.href = payload.detailsUrl || "#";
+                    link.textContent = "Republicado OK / Ver";
+                    form.replaceWith(link);
+                    if (selectedStatus !== "inactive") {
+                        applyFilters();
+                    }
+                } catch (error) {
+                    button.disabled = false;
+                    button.textContent = error instanceof Error ? error.message : originalText;
+                    window.setTimeout(() => { button.textContent = originalText; }, 2500);
+                }
+            });
+        })();
+
+        (() => {
+            if (window.__ventagramCopyPublicationLinkBound === true) {
+                return;
+            }
+
+            window.__ventagramCopyPublicationLinkBound = true;
+
+            document.addEventListener("click", async event => {
+                const button = event.target.closest("[data-copy-publication-link='true']");
+                if (!button) {
+                    return;
+                }
+
+                event.preventDefault();
+
+                const rawUrl = button.getAttribute("data-copy-url") || "";
+                if (!rawUrl) {
+                    return;
+                }
+
+                const absoluteUrl = new URL(rawUrl, window.location.origin).toString();
+                const originalLabel = button.getAttribute("data-copy-label") || "Copiar link para compartir";
+
+                const setLabel = (text) => {
+                    button.innerHTML = `<i class="fa-solid fa-share-nodes" aria-hidden="true"></i><span>${text}</span>`;
+                };
+
+                try {
+                    if (navigator.clipboard?.writeText) {
+                        await navigator.clipboard.writeText(absoluteUrl);
+                    } else {
+                        const helper = document.createElement("textarea");
+                        helper.value = absoluteUrl;
+                        helper.setAttribute("readonly", "readonly");
+                        helper.style.position = "fixed";
+                        helper.style.opacity = "0";
+                        document.body.appendChild(helper);
+                        helper.focus();
+                        helper.select();
+                        document.execCommand("copy");
+                        helper.remove();
+                    }
+
+                    setLabel("Link copiado");
+                    window.setTimeout(() => {
+                        setLabel(originalLabel);
+                    }, 1800);
+                } catch {
+                    setLabel("No se pudo copiar");
+                    window.setTimeout(() => {
+                        setLabel(originalLabel);
+                    }, 1800);
+                }
+            });
+        })();
+
+        (() => {
+            document.querySelectorAll(".publication-deactivate-form").forEach(form => {
+                const reasonSelect = form.querySelector("[data-deactivation-reason-select]");
+                const commentField = form.querySelector("[data-deactivation-comment]");
+                const buyerFields = form.querySelector("[data-sale-buyer-fields]");
+                const buyerEmail = form.querySelector("[data-buyer-email]");
+                if (!reasonSelect || !commentField) {
+                    return;
+                }
+
+                const syncRequirement = () => {
+                    const isOtherReason = reasonSelect.value === "Otro motivo";
+                    const isSale = reasonSelect.value === "Operacion concretada";
+                    commentField.required = isOtherReason;
+                    if (buyerFields) buyerFields.hidden = !isSale;
+                    if (buyerEmail) buyerEmail.required = isSale;
+                };
+
+                reasonSelect.addEventListener("change", syncRequirement);
+                syncRequirement();
+            });
+        })();
+    </script>
+}

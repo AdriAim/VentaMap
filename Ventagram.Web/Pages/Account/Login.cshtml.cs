@@ -35,7 +35,7 @@ public class LoginModel(AuthService authService, IConfiguration configuration) :
         }
 
         await authService.SignInAsync(user);
-        return LocalRedirect(ReturnUrl ?? "/");
+        return LocalRedirect(Url.IsLocalUrl(ReturnUrl) ? ReturnUrl! : "/Account/Login");
     }
 
     public IActionResult OnPostGoogle()
@@ -46,8 +46,7 @@ public class LoginModel(AuthService authService, IConfiguration configuration) :
             return Page();
         }
 
-        var redirect = Url.Page("/Account/Login", values: new { returnUrl = ReturnUrl }) ?? "/";
-        var properties = new AuthenticationProperties { RedirectUri = ReturnUrl ?? "/" };
+        var properties = new AuthenticationProperties { RedirectUri = Url.IsLocalUrl(ReturnUrl) ? ReturnUrl : "/Account/Login" };
         return Challenge(properties, "Google");
     }
 

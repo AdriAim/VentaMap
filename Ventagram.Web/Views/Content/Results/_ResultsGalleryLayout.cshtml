@@ -1,0 +1,16 @@
+@model ResultsLayoutViewModel
+
+<partial name="~/Views/Content/Results/_ResultsLayoutHeader.cshtml" model="Model" />
+
+<section class="gallery-shell" data-browse-scroll-target>
+    <div class="gallery-feed"
+         data-gallery-feed="true"
+         data-gallery-endpoint="@Model.Results.GalleryApiEndpoint"
+         data-gallery-desktop-visible-rows="3"
+         data-gallery-desktop-preload-rows="5"
+         data-gallery-mobile-preload-items="20">
+        <div class="gallery-rail"></div>
+        <div class="gallery-loader" data-gallery-loader>Preparando anuncios...</div>
+        <div class="gallery-sentinel" data-gallery-sentinel aria-hidden="true"></div>
+    </div>
+</section>

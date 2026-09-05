@@ -9,4 +9,6 @@ public class ApplicationUser
     public bool RespondsEmails { get; set; }
     public bool AcceptsCalls { get; set; }
     public bool RespondsWhatsApp { get; set; }
+    public bool AllowsSiteChat { get; set; }
+    public bool IsDebugUser { get; set; }
 }

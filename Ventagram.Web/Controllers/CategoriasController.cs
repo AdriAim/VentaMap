@@ -11,21 +11,34 @@ public class CategoriasController(PublicationCategoryFieldService publicationCat
     public async Task<IActionResult> GetCampos(int id)
     {
         var fields = await publicationCategoryFieldService.GetActiveByCategoryIdAsync(id);
-
-        return Ok(fields.Select(x => new
-        {
-            id = x.Id,
-            nombreInterno = x.InternalName,
-            etiqueta = x.Label,
-            tipoDato = x.DataType.ToString().ToLowerInvariant(),
-            obligatorio = x.Required,
-            orden = x.SortOrder,
-            mostrarEnDatosMinimos = x.ShowInBasicData,
-            unidad = x.Unit,
-            ejemplo = x.InputExample,
-            opciones = string.IsNullOrWhiteSpace(x.OptionsCsv)
+        var operationOptions = fields
+            .Where(x => string.Equals(x.InternalName, "operacion", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(x => string.IsNullOrWhiteSpace(x.OptionsCsv)
                 ? Array.Empty<string>()
-                : x.OptionsCsv.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        }));
+                : x.OptionsCsv.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return Ok(new
+        {
+            operationOptions,
+            fields = fields
+                .Where(x => !string.Equals(x.InternalName, "operacion", StringComparison.OrdinalIgnoreCase))
+                .Select(x => new
+                {
+                    id = x.Id,
+                    nombreInterno = x.InternalName,
+                    etiqueta = x.Label,
+                    tipoDato = x.DataType.ToString().ToLowerInvariant(),
+                    obligatorio = x.Required,
+                    orden = x.SortOrder,
+                    mostrarEnDatosMinimos = x.ShowInBasicData,
+                    unidad = x.Unit,
+                    ejemplo = x.InputExample,
+                    opciones = string.IsNullOrWhiteSpace(x.OptionsCsv)
+                        ? Array.Empty<string>()
+                        : x.OptionsCsv.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                })
+        });
     }
 }

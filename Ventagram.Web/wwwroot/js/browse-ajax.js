@@ -3,6 +3,7 @@
   let browseRequest = null;
   let mapHeightObserver = null;
   let mapHeightResizeHandler = null;
+  let lastMapSharedHeight = null;
 
   document.addEventListener("DOMContentLoaded", () => {
     bindBrowseAjax();
@@ -22,7 +23,7 @@
 
       const params = new URLSearchParams(new FormData(form));
       params.set("page", "1");
-      loadBrowseResults(params, true, "results");
+      loadBrowseResults(params, true, "search-panel");
     });
 
     document.addEventListener("click", event => {
@@ -109,10 +110,12 @@
     const tryScroll = () => {
       let target;
 
-      if (normalizedMode === "mapa") {
-        target = host.querySelector("[data-map-layout], #map");
+      if (normalizedMode === "galeria") {
+        target = document.getElementById("search-panel");
+      } else if (normalizedMode === "mapa") {
+        target = host.querySelector(".map-canvas-shell, [data-map-layout] #map, [data-map-layout]");
       } else if (normalizedMode === "texto") {
-        target = host.querySelector(".classified-row, .classified-list");
+        target = host.querySelector(".gallery-shell, .classified-toolbar, .classified-list");
       } else {
         target = host.querySelector("#gallery-first, .gallery-feed, .gallery-shell");
       }
@@ -165,6 +168,7 @@
     }
 
     const layout = document.querySelector("[data-map-layout]");
+    const mapCanvasShell = layout?.querySelector(".map-canvas-shell");
     const mapCanvas = layout?.querySelector("#map");
     const panel = layout?.querySelector("[data-map-selection-panel]");
     const card = layout?.querySelector("[data-map-selection-card]");
@@ -174,12 +178,18 @@
     const sync = () => {
       if (window.matchMedia("(max-width: 780px)").matches) {
         layout.style.removeProperty("--map-desktop-shared-height");
+        if (mapCanvasShell) {
+          mapCanvasShell.style.height = "";
+          mapCanvasShell.style.minHeight = "";
+          mapCanvasShell.style.maxHeight = "";
+        }
         mapCanvas.style.height = "";
         mapCanvas.style.minHeight = "";
         mapCanvas.style.maxHeight = "";
         panel.style.height = "";
         panel.style.maxHeight = "";
         panel.style.minHeight = "";
+        lastMapSharedHeight = null;
         resizeMap();
         return;
       }
@@ -191,17 +201,26 @@
       );
       const viewportMax = Math.max(
         420,
-        Math.floor(window.innerHeight - 96)
+        Math.floor(window.innerHeight)
       );
-      const sharedHeight = Math.min(contentHeight, viewportMax, 720);
+      const sharedHeight = Math.max(contentHeight, viewportMax);
+      if (lastMapSharedHeight === sharedHeight) {
+        return;
+      }
 
       layout.style.setProperty("--map-desktop-shared-height", `${sharedHeight}px`);
+      if (mapCanvasShell) {
+        mapCanvasShell.style.height = `${sharedHeight}px`;
+        mapCanvasShell.style.minHeight = `${sharedHeight}px`;
+        mapCanvasShell.style.maxHeight = `${sharedHeight}px`;
+      }
       mapCanvas.style.height = `${sharedHeight}px`;
       mapCanvas.style.minHeight = `${sharedHeight}px`;
       mapCanvas.style.maxHeight = `${sharedHeight}px`;
       panel.style.height = `${sharedHeight}px`;
       panel.style.minHeight = `${sharedHeight}px`;
       panel.style.maxHeight = `${sharedHeight}px`;
+      lastMapSharedHeight = sharedHeight;
       resizeMap();
     };
 
@@ -229,8 +248,6 @@
       window.contentMap;
 
     mapInstance?.resize?.();
-
-    window.dispatchEvent(new Event("resize"));
   }
 
   function showBrowseError(host) {

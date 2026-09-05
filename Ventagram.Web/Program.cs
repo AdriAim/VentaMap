@@ -1,13 +1,17 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using System.Data;
 using Ventagram.Data;
 using Ventagram.Models;
 using Ventagram.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+var applyMigrationsOnStartup = GetBooleanSetting(builder.Configuration, "Database:ApplyMigrationsOnStartup");
+var runSeedDataOnStartup = GetBooleanSetting(builder.Configuration, "Database:RunSeedDataOnStartup");
 var configuredUrls = builder.Configuration["urls"]
     ?? builder.Configuration["ASPNETCORE_URLS"]
     ?? Environment.GetEnvironmentVariable("ASPNETCORE_URLS")
@@ -16,9 +20,18 @@ var hasHttpsUrlConfigured = configuredUrls
     .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
     .Any(url => url.StartsWith("https://", StringComparison.OrdinalIgnoreCase));
 var sharedApplicationName = builder.Configuration["Authentication:SharedApplicationName"] ?? "Ventagram";
+var maxUploadRequestBytes = builder.Configuration.GetValue<long?>("Uploads:MaxRequestBodyBytes") ?? 100L * 1024 * 1024;
 
 builder.Services.AddRazorPages();
 builder.Services.AddControllersWithViews();
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = maxUploadRequestBytes;
+});
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = maxUploadRequestBytes;
+});
 builder.Services.AddDbContext<VentagramDbContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -96,6 +109,7 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                 }
 
                 context.Response.Cookies.Delete(NavigationLocalityService.CookieName);
+                context.Response.Cookies.Delete(PublicationGroupPreferenceService.CookieName);
             };
         });
 }
@@ -118,14 +132,20 @@ builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 builder.Services.AddSingleton<CloudflareR2ImageStorageService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PublicationService>();
+builder.Services.AddScoped<PublicationAnalyticsService>();
 builder.Services.AddScoped<PublicationGroupTypeService>();
 builder.Services.AddScoped<PublicationCategoryService>();
 builder.Services.AddScoped<PublicationCategoryFieldService>();
 builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<FavoriteService>();
+builder.Services.AddScoped<SharedPublicationListService>();
 builder.Services.AddScoped<SuggestionService>();
+builder.Services.AddScoped<VentagramParameterService>();
+builder.Services.AddScoped<ReviewService>();
 builder.Services.AddScoped<CurrentUserAccessor>();
 builder.Services.AddScoped<NavigationLocalityService>();
+builder.Services.AddScoped<PublicationGroupPreferenceService>();
+builder.Services.AddHttpClient<ArgentineLocalityLookupService>();
 builder.Services.AddHostedService<PublicationExpirationWorker>();
 
 var app = builder.Build();
@@ -134,26 +154,14 @@ app.UseForwardedHeaders();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<VentagramDbContext>();
-    db.Database.EnsureCreated();
-    await EnsureArgentineLocalitiesTableAsync(db);
-    await EnsurePublicationGroupTypesTableAsync(db);
-    await EnsureUserLocalityColumnAsync(db);
+    await EnsureDatabaseSchemaAsync(db, app.Environment, applyMigrationsOnStartup);
+    await EnsureUserCompatibilityColumnsAsync(db);
     await SeedArgentineLocalitiesAsync(db);
-    await EnsurePublicationGroupColumnAsync(db);
-    await EnsureUserContactColumnsAsync(db);
-    await EnsurePublicationCategoriesTableAsync(db);
-    await EnsurePublicationCategoryFieldsTableAsync(db);
-    await EnsurePublicationFieldValuesTableAsync(db);
-    await EnsurePublicationCategoryIdColumnAsync(db);
-    await EnsurePublicationReportReasonsTableAsync(db);
-    await EnsureFavoriteListsTableAsync(db);
-    await EnsureFavoriteListItemsTableAsync(db);
-    await EnsureSiteSuggestionsTableAsync(db);
-    await SeedData.InitializeAsync(db);
-    await EnsurePublicationMediaTableAsync(db);
-    await EnsurePublicationCategoryIdColumnAsync(db);
-    await EnsurePublicationReportCommentColumnAsync(db);
-    await EnsureModerationColumnsAsync(db);
+
+    if (runSeedDataOnStartup)
+    {
+        await SeedData.InitializeAsync(db);
+    }
 }
 
 if (!app.Environment.IsDevelopment())
@@ -175,218 +183,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapRazorPages();
+app.MapGet("/MisPublicaciones", () => Results.Redirect("/MisAnuncios", permanent: true));
 app.Run();
-
-static async Task EnsureUserContactColumnsAsync(VentagramDbContext db)
-{
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
-    if (shouldClose)
-    {
-        await connection.OpenAsync();
-    }
-
-    try
-    {
-        await EnsureColumnAsync(connection, "Users", "RespondsEmails", "bit(1) NOT NULL DEFAULT b'0'");
-        await EnsureColumnAsync(connection, "Users", "AcceptsCalls", "bit(1) NOT NULL DEFAULT b'0'");
-        await EnsureColumnAsync(connection, "Users", "RespondsWhatsApp", "bit(1) NOT NULL DEFAULT b'0'");
-        await EnsureColumnAsync(connection, "Users", "AllowsSiteChat", "bit(1) NOT NULL DEFAULT b'1'");
-
-        await using var backfill = connection.CreateCommand();
-        backfill.CommandText = """
-            UPDATE Users
-            SET
-                RespondsEmails = CASE WHEN COALESCE(ContactPreference, '') LIKE '%Email%' THEN 1 ELSE RespondsEmails END,
-                AcceptsCalls = CASE WHEN COALESCE(ContactPreference, '') LIKE '%Calls%' THEN 1 ELSE AcceptsCalls END,
-                RespondsWhatsApp = CASE WHEN COALESCE(ContactPreference, '') LIKE '%WhatsApp%' THEN 1 ELSE RespondsWhatsApp END
-            """;
-        await backfill.ExecuteNonQueryAsync();
-    }
-    finally
-    {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
-    }
-}
-
-static async Task EnsurePublicationGroupColumnAsync(VentagramDbContext db)
-{
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
-    if (shouldClose)
-    {
-        await connection.OpenAsync();
-    }
-
-    try
-    {
-        await using var check = connection.CreateCommand();
-        check.CommandText = """
-            SELECT DATA_TYPE
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME = 'Publications'
-              AND COLUMN_NAME = 'Group'
-            LIMIT 1
-            """;
-
-        var existingType = Convert.ToString(await check.ExecuteScalarAsync())?.ToLowerInvariant();
-        if (existingType is "tinyint" or "smallint" or "mediumint" or "int" or "bigint")
-        {
-            return;
-        }
-
-        await using var backfill = connection.CreateCommand();
-        backfill.CommandText = """
-            UPDATE Publications
-            SET `Group` = CASE `Group`
-                WHEN 'Inmuebles' THEN 1
-                WHEN 'Rodados' THEN 2
-                WHEN 'Generales' THEN 3
-                ELSE 1
-            END
-            """;
-        await backfill.ExecuteNonQueryAsync();
-
-        await using var alter = connection.CreateCommand();
-        alter.CommandText = """
-            ALTER TABLE Publications
-            MODIFY COLUMN `Group` TINYINT UNSIGNED NOT NULL
-            """;
-        await alter.ExecuteNonQueryAsync();
-    }
-    finally
-    {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
-    }
-}
-
-static async Task EnsureColumnAsync(System.Data.Common.DbConnection connection, string tableName, string columnName, string definition)
-{
-    await using var check = connection.CreateCommand();
-    check.CommandText = """
-        SELECT COUNT(*)
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = @tableName
-          AND COLUMN_NAME = @columnName
-        """;
-    var tableParameter = check.CreateParameter();
-    tableParameter.ParameterName = "@tableName";
-    tableParameter.Value = tableName;
-    check.Parameters.Add(tableParameter);
-    var parameter = check.CreateParameter();
-    parameter.ParameterName = "@columnName";
-    parameter.Value = columnName;
-    check.Parameters.Add(parameter);
-
-    var exists = Convert.ToInt32(await check.ExecuteScalarAsync()) > 0;
-    if (exists)
-    {
-        return;
-    }
-
-    await using var alter = connection.CreateCommand();
-    alter.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {definition}";
-    await alter.ExecuteNonQueryAsync();
-}
-
-static async Task EnsureUserLocalityColumnAsync(VentagramDbContext db)
-{
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
-    if (shouldClose)
-    {
-        await connection.OpenAsync();
-    }
-
-    try
-    {
-        await EnsureColumnAsync(connection, "Users", "ArgentineLocalityId", "int NULL");
-    }
-    finally
-    {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
-    }
-}
-
-static async Task EnsureArgentineLocalitiesTableAsync(VentagramDbContext db)
-{
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
-    if (shouldClose)
-    {
-        await connection.OpenAsync();
-    }
-
-    try
-    {
-        await using var create = connection.CreateCommand();
-        create.CommandText = """
-            CREATE TABLE IF NOT EXISTS ArgentineLocalities (
-                Id INT NOT NULL AUTO_INCREMENT,
-                Locality VARCHAR(120) NOT NULL,
-                Province VARCHAR(120) NOT NULL,
-                Latitude DOUBLE NOT NULL,
-                Longitude DOUBLE NOT NULL,
-                SortOrder INT NOT NULL DEFAULT 0,
-                IsActive BIT(1) NOT NULL DEFAULT b'1',
-                PRIMARY KEY (Id),
-                UNIQUE KEY UX_ArgentineLocalities_Province_Locality (Province, Locality)
-            )
-            """;
-        await create.ExecuteNonQueryAsync();
-    }
-    finally
-    {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
-    }
-}
-
-static async Task EnsurePublicationGroupTypesTableAsync(VentagramDbContext db)
-{
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
-    if (shouldClose)
-    {
-        await connection.OpenAsync();
-    }
-
-    try
-    {
-        await using var create = connection.CreateCommand();
-        create.CommandText = """
-            CREATE TABLE IF NOT EXISTS PublicationGroupTypes (
-                Id TINYINT UNSIGNED NOT NULL,
-                Name VARCHAR(120) NOT NULL,
-                SortOrder INT NOT NULL DEFAULT 0,
-                IsActive BIT(1) NOT NULL DEFAULT b'1',
-                PRIMARY KEY (Id),
-                UNIQUE KEY UX_PublicationGroupTypes_Name (Name)
-            )
-            """;
-        await create.ExecuteNonQueryAsync();
-    }
-    finally
-    {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
-    }
-}
 
 static async Task SeedArgentineLocalitiesAsync(VentagramDbContext db)
 {
@@ -418,7 +216,7 @@ static async Task SeedArgentineLocalitiesAsync(VentagramDbContext db)
     await db.SaveChangesAsync();
 }
 
-static async Task EnsurePublicationCategoriesTableAsync(VentagramDbContext db)
+static async Task EnsureUserCompatibilityColumnsAsync(VentagramDbContext db)
 {
     var connection = db.Database.GetDbConnection();
     var shouldClose = connection.State != System.Data.ConnectionState.Open;
@@ -429,19 +227,15 @@ static async Task EnsurePublicationCategoriesTableAsync(VentagramDbContext db)
 
     try
     {
-        await using var create = connection.CreateCommand();
-        create.CommandText = """
-            CREATE TABLE IF NOT EXISTS PublicationCategories (
-                Id INT NOT NULL AUTO_INCREMENT,
-                `Group` TINYINT UNSIGNED NOT NULL,
-                Name VARCHAR(120) NOT NULL,
-                SortOrder INT NOT NULL DEFAULT 0,
-                IsActive BIT(1) NOT NULL DEFAULT b'1',
-                PRIMARY KEY (Id),
-                UNIQUE KEY UX_PublicationCategories_Group_Name (`Group`, Name)
-            )
-            """;
-        await create.ExecuteNonQueryAsync();
+        await EnsureColumnAsync(connection, "Users", "RespondsEmails", "tinyint(1) NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(connection, "Users", "AcceptsCalls", "tinyint(1) NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(connection, "Users", "RespondsWhatsApp", "tinyint(1) NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(connection, "Users", "AllowsSiteChat", "tinyint(1) NOT NULL DEFAULT 1");
+        await EnsureColumnAsync(connection, "Users", "ContactPreference", "varchar(40) CHARACTER SET utf8mb4 NOT NULL DEFAULT 'CallsWhatsApp'");
+        await EnsureColumnAsync(connection, "Users", "IsAdmin", "tinyint(1) NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(connection, "Users", "IsDebugUser", "tinyint(1) NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(connection, "Users", "CanPublish", "tinyint(1) NOT NULL DEFAULT 1");
+        await EnsureColumnAsync(connection, "Users", "CanReport", "tinyint(1) NOT NULL DEFAULT 1");
     }
     finally
     {
@@ -452,10 +246,10 @@ static async Task EnsurePublicationCategoriesTableAsync(VentagramDbContext db)
     }
 }
 
-static async Task EnsurePublicationCategoryIdColumnAsync(VentagramDbContext db)
+static async Task EnsureDatabaseSchemaAsync(VentagramDbContext db, IWebHostEnvironment environment, bool applyMigrationsOnStartup)
 {
     var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
+    var shouldClose = connection.State != ConnectionState.Open;
     if (shouldClose)
     {
         await connection.OpenAsync();
@@ -463,357 +257,636 @@ static async Task EnsurePublicationCategoryIdColumnAsync(VentagramDbContext db)
 
     try
     {
-        await EnsureColumnAsync(connection, "Publications", "CategoryId", "INT NULL");
+        var hasUsersTable = await TableExistsAsync(connection, "Users");
+        var hasPublicationsTable = await TableExistsAsync(connection, "Publications");
+        var hasAppTables = hasUsersTable || hasPublicationsTable || await TableExistsAsync(connection, "ArgentineLocalities");
 
-        await using (var categoryCountCheck = connection.CreateCommand())
+        if (!hasAppTables)
         {
-            categoryCountCheck.CommandText = """
-                SELECT COUNT(*)
-                FROM PublicationCategories
-                """;
-
-            var categoryCount = Convert.ToInt32(await categoryCountCheck.ExecuteScalarAsync());
-            if (categoryCount == 0)
-            {
-                return;
-            }
+            await db.Database.MigrateAsync();
+        }
+        else if (environment.IsDevelopment() || applyMigrationsOnStartup)
+        {
+            await db.Database.MigrateAsync();
         }
 
-        var hasLegacyCategoryColumn = false;
-        await using (var checkLegacyCategory = connection.CreateCommand())
+        await EnsurePublicationCategoryFieldSchemaAsync(connection);
+        await EnsurePublicationMediaSchemaAsync(connection);
+        await EnsurePublicationExpirationSchemaAsync(connection);
+        await EnsurePublicationFavoritesSchemaAsync(connection);
+        await EnsurePublicationAnalyticsSchemaAsync(connection);
+        await EnsurePublicationCountersSchemaAsync(connection);
+        await EnsureCompanyAndSuggestionsSchemaAsync(connection);
+        await EnsureReviewSchemaAsync(connection);
+        await EnsureUserHeaderPublicationGroupsSchemaAsync(connection);
+        await EnsureSharedPublicationListsSchemaAsync(connection);
+    }
+    finally
+    {
+        if (shouldClose)
         {
-            checkLegacyCategory.CommandText = """
-                SELECT COUNT(*)
+            await connection.CloseAsync();
+        }
+    }
+}
+
+static async Task<bool> HistoryHasRowsAsync(System.Data.Common.DbConnection connection)
+{
+    await using var command = connection.CreateCommand();
+    command.CommandText = "SELECT COUNT(*) FROM `__EFMigrationsHistory`";
+    return Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
+}
+
+static async Task<bool> TableExistsAsync(System.Data.Common.DbConnection connection, string tableName)
+{
+    await using var command = connection.CreateCommand();
+    command.CommandText = """
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = @tableName
+        """;
+
+    var tableParameter = command.CreateParameter();
+    tableParameter.ParameterName = "@tableName";
+    tableParameter.Value = tableName;
+    command.Parameters.Add(tableParameter);
+
+    return Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
+}
+
+static async Task ExecuteNonQueryAsync(System.Data.Common.DbConnection connection, string sql)
+{
+    await using var command = connection.CreateCommand();
+    command.CommandText = sql;
+    await command.ExecuteNonQueryAsync();
+}
+
+static async Task EnsurePublicationCategoryFieldSchemaAsync(System.Data.Common.DbConnection connection)
+{
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `PublicationCategoryFields` (
+            `Id` int NOT NULL AUTO_INCREMENT,
+            `CategoryId` int NULL,
+            `InternalName` varchar(80) CHARACTER SET utf8mb4 NOT NULL,
+            `Label` varchar(120) CHARACTER SET utf8mb4 NOT NULL,
+            `DataType` tinyint unsigned NOT NULL,
+            `Required` tinyint(1) NOT NULL,
+            `SortOrder` int NOT NULL,
+            `IsActive` tinyint(1) NOT NULL,
+            `OptionsCsv` varchar(1000) CHARACTER SET utf8mb4 NULL,
+            `Unit` varchar(24) CHARACTER SET utf8mb4 NULL,
+            `GroupId` tinyint unsigned NULL,
+            `InputExample` varchar(180) CHARACTER SET utf8mb4 NULL,
+            `ShowInBasicData` tinyint(1) NOT NULL DEFAULT 0,
+            CONSTRAINT `PK_PublicationCategoryFields` PRIMARY KEY (`Id`)
+        ) CHARACTER SET=utf8mb4;
+        """);
+
+    await EnsureColumnAsync(connection, "PublicationCategoryFields", "OptionsCsv", "varchar(1000) CHARACTER SET utf8mb4 NULL");
+    await EnsureColumnAsync(connection, "PublicationCategoryFields", "Unit", "varchar(24) CHARACTER SET utf8mb4 NULL");
+    await EnsureColumnAsync(connection, "PublicationCategoryFields", "GroupId", "tinyint unsigned NULL");
+    await EnsureColumnAsync(connection, "PublicationCategoryFields", "InputExample", "varchar(180) CHARACTER SET utf8mb4 NULL");
+    await EnsureColumnAsync(connection, "PublicationCategoryFields", "ShowInBasicData", "tinyint(1) NOT NULL DEFAULT 0");
+
+    await ExecuteNonQueryAsync(connection,
+        """
+        UPDATE `PublicationCategoryFields`
+        SET `Unit` = CASE `InternalName`
+            WHEN 'superficie_total_m2' THEN 'm2'
+            WHEN 'superficie_cubierta_m2' THEN 'm2'
+            WHEN 'antiguedad_anios' THEN 'anios'
+            WHEN 'expensas' THEN 'ARS'
+            WHEN 'kilometros' THEN 'km'
+            WHEN 'stock' THEN 'unid'
+            ELSE `Unit`
+        END
+        WHERE `Unit` IS NULL OR `Unit` = '';
+        """);
+
+    await ExecuteNonQueryAsync(connection,
+        """
+        UPDATE `PublicationCategoryFields`
+        SET `ShowInBasicData` = `Required`
+        WHERE `ShowInBasicData` IS NULL OR `ShowInBasicData` = 0;
+        """);
+
+    if (await TableExistsAsync(connection, "PublicationCategories"))
+    {
+        await ExecuteNonQueryAsync(connection,
+            """
+            UPDATE `PublicationCategoryFields` cf
+            INNER JOIN `PublicationCategories` c ON c.`Id` = cf.`CategoryId`
+            SET cf.`GroupId` = c.`Group`,
+                cf.`CategoryId` = NULL
+            WHERE cf.`CategoryId` IS NOT NULL AND cf.`GroupId` IS NULL;
+            """);
+    }
+
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `PublicationFieldValues` (
+            `Id` int NOT NULL AUTO_INCREMENT,
+            `PublicationId` int NOT NULL,
+            `CategoryFieldId` int NOT NULL,
+            `ValueText` varchar(500) CHARACTER SET utf8mb4 NULL,
+            `ValueNumber` decimal(18,2) NULL,
+            `ValueBoolean` tinyint(1) NULL,
+            CONSTRAINT `PK_PublicationFieldValues` PRIMARY KEY (`Id`)
+        ) CHARACTER SET=utf8mb4;
+        """);
+}
+
+static async Task EnsurePublicationMediaSchemaAsync(System.Data.Common.DbConnection connection)
+{
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `PublicationMedia` (
+            `Id` int NOT NULL AUTO_INCREMENT,
+            `PublicationId` int NOT NULL,
+            `SortOrder` int NOT NULL,
+            `MediaType` tinyint unsigned NOT NULL,
+            `Url` varchar(1000) CHARACTER SET utf8mb4 NOT NULL,
+            `IsPrimary` tinyint(1) NOT NULL,
+            `CreatedAtUtc` datetime(6) NOT NULL,
+            CONSTRAINT `PK_PublicationMedia` PRIMARY KEY (`Id`)
+        ) CHARACTER SET=utf8mb4;
+        """);
+
+    var hasImagesCsv = await ColumnExistsAsync(connection, "Publications", "ImagesCsv");
+    var hasVideoUrl = await ColumnExistsAsync(connection, "Publications", "VideoUrl");
+    if (!hasImagesCsv && !hasVideoUrl)
+    {
+        return;
+    }
+
+    await ExecuteNonQueryAsync(connection,
+        """
+        INSERT INTO `PublicationMedia` (`PublicationId`, `SortOrder`, `MediaType`, `Url`, `IsPrimary`, `CreatedAtUtc`)
+        SELECT
+            p.`Id`,
+            1,
+            2,
+            TRIM(p.`VideoUrl`),
+            1,
+            p.`CreatedAtUtc`
+        FROM `Publications` p
+        WHERE EXISTS (
+                SELECT 1
                 FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_SCHEMA = DATABASE()
                   AND TABLE_NAME = 'Publications'
-                  AND COLUMN_NAME = 'Category'
-                """;
-
-            hasLegacyCategoryColumn = Convert.ToInt32(await checkLegacyCategory.ExecuteScalarAsync()) > 0;
-        }
-
-        if (hasLegacyCategoryColumn)
-        {
-            await using var backfillExact = connection.CreateCommand();
-            backfillExact.CommandText = """
-                UPDATE Publications p
-                LEFT JOIN PublicationCategories c
-                  ON c.`Group` = p.`Group`
-                 AND c.Name = COALESCE(p.Category, '')
-                SET p.CategoryId = c.Id
-                WHERE p.CategoryId IS NULL OR p.CategoryId = 0
-                """;
-            await backfillExact.ExecuteNonQueryAsync();
-        }
-
-        await using (var backfillFallback = connection.CreateCommand())
-        {
-            backfillFallback.CommandText = """
-                UPDATE Publications p
-                JOIN (
-                    SELECT `Group`, MIN(Id) AS CategoryId
-                    FROM PublicationCategories
-                    WHERE IsActive = b'1'
-                    GROUP BY `Group`
-                ) c ON c.`Group` = p.`Group`
-                SET p.CategoryId = c.CategoryId
-                WHERE p.CategoryId IS NULL OR p.CategoryId = 0
-                """;
-            await backfillFallback.ExecuteNonQueryAsync();
-        }
-
-        await using (var alter = connection.CreateCommand())
-        {
-            alter.CommandText = """
-                ALTER TABLE Publications
-                MODIFY COLUMN CategoryId INT NOT NULL
-                """;
-            await alter.ExecuteNonQueryAsync();
-        }
-
-        if (hasLegacyCategoryColumn)
-        {
-            await using var dropLegacyCategory = connection.CreateCommand();
-            dropLegacyCategory.CommandText = "ALTER TABLE Publications DROP COLUMN Category";
-            await dropLegacyCategory.ExecuteNonQueryAsync();
-        }
-    }
-    finally
-    {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
-    }
-}
-
-static async Task EnsurePublicationReportReasonsTableAsync(VentagramDbContext db)
-{
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
-    if (shouldClose)
-    {
-        await connection.OpenAsync();
-    }
-
-    try
-    {
-        await using var create = connection.CreateCommand();
-        create.CommandText = """
-            CREATE TABLE IF NOT EXISTS PublicationReportReasons (
-                Id INT NOT NULL AUTO_INCREMENT,
-                Name VARCHAR(120) NOT NULL,
-                SortOrder INT NOT NULL DEFAULT 0,
-                IsActive BIT(1) NOT NULL DEFAULT b'1',
-                PRIMARY KEY (Id),
-                UNIQUE KEY UX_PublicationReportReasons_Name (Name)
+                  AND COLUMN_NAME = 'VideoUrl'
             )
-            """;
-        await create.ExecuteNonQueryAsync();
-    }
-    finally
+          AND p.`VideoUrl` IS NOT NULL
+          AND TRIM(p.`VideoUrl`) <> ''
+          AND NOT EXISTS (
+              SELECT 1
+              FROM `PublicationMedia` pm
+              WHERE pm.`PublicationId` = p.`Id`
+                AND pm.`SortOrder` = 1
+          );
+        """);
+
+    if (!hasImagesCsv)
     {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
+        return;
     }
+
+    var imageInsertSql = hasVideoUrl
+        ? """
+          INSERT INTO `PublicationMedia` (`PublicationId`, `SortOrder`, `MediaType`, `Url`, `IsPrimary`, `CreatedAtUtc`)
+          SELECT
+              p.`Id`,
+              jt.`ImageOrdinal` + CASE WHEN p.`VideoUrl` IS NOT NULL AND TRIM(p.`VideoUrl`) <> '' THEN 1 ELSE 0 END,
+              1,
+              TRIM(jt.`ImageUrl`),
+              CASE WHEN (p.`VideoUrl` IS NULL OR TRIM(p.`VideoUrl`) = '') AND jt.`ImageOrdinal` = 1 THEN 1 ELSE 0 END,
+              p.`CreatedAtUtc`
+          FROM `Publications` p
+          JOIN JSON_TABLE(
+              CONCAT(
+                  '["',
+                  REPLACE(
+                      REPLACE(
+                          REPLACE(COALESCE(p.`ImagesCsv`, ''), '\\', '\\\\'),
+                          '"',
+                          '\\"'
+                      ),
+                      ',',
+                      '","'
+                  ),
+                  '"]'
+              ),
+              '$[*]' COLUMNS (
+                  `ImageOrdinal` FOR ORDINALITY,
+                  `ImageUrl` VARCHAR(1000) PATH '$'
+              )
+          ) AS jt
+          WHERE TRIM(COALESCE(jt.`ImageUrl`, '')) <> ''
+            AND NOT EXISTS (
+                SELECT 1
+                FROM `PublicationMedia` pm
+                WHERE pm.`PublicationId` = p.`Id`
+                  AND pm.`SortOrder` = jt.`ImageOrdinal` + CASE WHEN p.`VideoUrl` IS NOT NULL AND TRIM(p.`VideoUrl`) <> '' THEN 1 ELSE 0 END
+            );
+          """
+        : """
+          INSERT INTO `PublicationMedia` (`PublicationId`, `SortOrder`, `MediaType`, `Url`, `IsPrimary`, `CreatedAtUtc`)
+          SELECT
+              p.`Id`,
+              jt.`ImageOrdinal`,
+              1,
+              TRIM(jt.`ImageUrl`),
+              CASE WHEN jt.`ImageOrdinal` = 1 THEN 1 ELSE 0 END,
+              p.`CreatedAtUtc`
+          FROM `Publications` p
+          JOIN JSON_TABLE(
+              CONCAT(
+                  '["',
+                  REPLACE(
+                      REPLACE(
+                          REPLACE(COALESCE(p.`ImagesCsv`, ''), '\\', '\\\\'),
+                          '"',
+                          '\\"'
+                      ),
+                      ',',
+                      '","'
+                  ),
+                  '"]'
+              ),
+              '$[*]' COLUMNS (
+                  `ImageOrdinal` FOR ORDINALITY,
+                  `ImageUrl` VARCHAR(1000) PATH '$'
+              )
+          ) AS jt
+          WHERE TRIM(COALESCE(jt.`ImageUrl`, '')) <> ''
+            AND NOT EXISTS (
+                SELECT 1
+                FROM `PublicationMedia` pm
+                WHERE pm.`PublicationId` = p.`Id`
+                  AND pm.`SortOrder` = jt.`ImageOrdinal`
+            );
+          """;
+    await ExecuteNonQueryAsync(connection, imageInsertSql);
 }
 
-static async Task EnsurePublicationCategoryFieldsTableAsync(VentagramDbContext db)
+static async Task EnsurePublicationExpirationSchemaAsync(System.Data.Common.DbConnection connection)
 {
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
-    if (shouldClose)
-    {
-        await connection.OpenAsync();
-    }
+    await EnsureColumnAsync(connection, "Publications", "OperationType", "tinyint unsigned NULL");
+    await EnsureColumnAsync(connection, "Publications", "ExpirationNoticeSentAtUtc", "datetime(6) NULL");
+    await EnsureColumnAsync(connection, "Publications", "DeactivatedAtUtc", "datetime(6) NULL");
+    await EnsureColumnAsync(connection, "Publications", "DeactivationReason", "varchar(80) CHARACTER SET utf8mb4 NULL");
+    await EnsureColumnAsync(connection, "Publications", "DeactivationComment", "varchar(1000) CHARACTER SET utf8mb4 NULL");
 
-    try
-    {
-        await using var create = connection.CreateCommand();
-        create.CommandText = """
-            CREATE TABLE IF NOT EXISTS PublicationCategoryFields (
-                Id INT NOT NULL AUTO_INCREMENT,
-                CategoryId INT NOT NULL,
-                InternalName VARCHAR(80) NOT NULL,
-                Label VARCHAR(120) NOT NULL,
-                DataType TINYINT UNSIGNED NOT NULL,
-                Required BIT(1) NOT NULL DEFAULT b'0',
-                SortOrder INT NOT NULL DEFAULT 0,
-                IsActive BIT(1) NOT NULL DEFAULT b'1',
-                OptionsCsv VARCHAR(1000) NULL,
-                PRIMARY KEY (Id),
-                UNIQUE KEY UX_PublicationCategoryFields_Category_InternalName (CategoryId, InternalName),
-                KEY IX_PublicationCategoryFields_Category_Active_Order (CategoryId, IsActive, SortOrder)
-            )
-            """;
-        await create.ExecuteNonQueryAsync();
-    }
-    finally
-    {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
-    }
+    await ExecuteNonQueryAsync(connection,
+        """
+        UPDATE `Publications`
+        SET `ExpiresAtUtc` = DATE_ADD(`CreatedAtUtc`, INTERVAL 30 DAY)
+        WHERE `ExpiresAtUtc` IS NULL;
+        """);
 }
 
-static async Task EnsurePublicationFieldValuesTableAsync(VentagramDbContext db)
+static async Task EnsureCompanyAndSuggestionsSchemaAsync(System.Data.Common.DbConnection connection)
 {
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
-    if (shouldClose)
-    {
-        await connection.OpenAsync();
-    }
+    await EnsureColumnAsync(connection, "Users", "CompanyIndustry", "varchar(120) CHARACTER SET utf8mb4 NULL");
+    await EnsureColumnAsync(connection, "Users", "CompanyHeroBackgroundUrl", "varchar(260) CHARACTER SET utf8mb4 NULL");
+    await EnsureColumnAsync(connection, "Users", "CompanyLogoUrl", "varchar(260) CHARACTER SET utf8mb4 NULL");
+    await EnsureColumnAsync(connection, "Users", "CompanyName", "varchar(160) CHARACTER SET utf8mb4 NULL");
+    await EnsureColumnAsync(connection, "Users", "CompanySlug", "varchar(180) CHARACTER SET utf8mb4 NULL");
+    await EnsureColumnAsync(connection, "Users", "CompanyTagline", "varchar(180) CHARACTER SET utf8mb4 NULL");
+    await EnsureColumnAsync(connection, "Users", "IsCompany", "tinyint(1) NOT NULL DEFAULT 0");
 
-    try
-    {
-        await using var create = connection.CreateCommand();
-        create.CommandText = """
-            CREATE TABLE IF NOT EXISTS PublicationFieldValues (
-                Id INT NOT NULL AUTO_INCREMENT,
-                PublicationId INT NOT NULL,
-                CategoryFieldId INT NOT NULL,
-                ValueText VARCHAR(500) NULL,
-                ValueNumber DECIMAL(18,2) NULL,
-                ValueBoolean BIT(1) NULL,
-                PRIMARY KEY (Id),
-                UNIQUE KEY UX_PublicationFieldValues_Publication_Field (PublicationId, CategoryFieldId),
-                KEY IX_PublicationFieldValues_Field_Text (CategoryFieldId, ValueText),
-                KEY IX_PublicationFieldValues_Field_Number (CategoryFieldId, ValueNumber),
-                KEY IX_PublicationFieldValues_Field_Boolean (CategoryFieldId, ValueBoolean)
-            )
-            """;
-        await create.ExecuteNonQueryAsync();
-    }
-    finally
-    {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
-    }
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `SiteSuggestions` (
+            `Id` int NOT NULL AUTO_INCREMENT,
+            `UserId` int NULL,
+            `SenderName` varchar(120) CHARACTER SET utf8mb4 NULL,
+            `SenderEmail` varchar(160) CHARACTER SET utf8mb4 NULL,
+            `Message` varchar(2000) CHARACTER SET utf8mb4 NOT NULL,
+            `CreatedAtUtc` datetime(6) NOT NULL,
+            CONSTRAINT `PK_SiteSuggestions` PRIMARY KEY (`Id`)
+        ) CHARACTER SET=utf8mb4;
+        """);
 }
 
-static async Task EnsurePublicationMediaTableAsync(VentagramDbContext db)
+static async Task EnsureSharedPublicationListsSchemaAsync(System.Data.Common.DbConnection connection)
 {
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
-    if (shouldClose)
-    {
-        await connection.OpenAsync();
-    }
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `SharedPublicationLists` (
+            `Id` int NOT NULL AUTO_INCREMENT,
+            `UserId` int NOT NULL,
+            `Name` varchar(120) CHARACTER SET utf8mb4 NOT NULL,
+            `Slug` varchar(160) CHARACTER SET utf8mb4 NOT NULL,
+            `DefaultMode` varchar(20) CHARACTER SET utf8mb4 NOT NULL DEFAULT 'Galeria',
+            `CreatedAtUtc` datetime(6) NOT NULL,
+            `UpdatedAtUtc` datetime(6) NOT NULL,
+            CONSTRAINT `PK_SharedPublicationLists` PRIMARY KEY (`Id`),
+            CONSTRAINT `FK_SharedPublicationLists_Users_UserId`
+                FOREIGN KEY (`UserId`) REFERENCES `Users` (`Id`) ON DELETE CASCADE
+        ) CHARACTER SET=utf8mb4;
+        """);
 
-    try
-    {
-        await using var create = connection.CreateCommand();
-        create.CommandText = """
-            CREATE TABLE IF NOT EXISTS PublicationMedia (
-                Id INT NOT NULL AUTO_INCREMENT,
-                PublicationId INT NOT NULL,
-                SortOrder INT NOT NULL,
-                MediaType TINYINT UNSIGNED NOT NULL,
-                Url VARCHAR(1000) NOT NULL,
-                IsPrimary BIT(1) NOT NULL DEFAULT b'0',
-                CreatedAtUtc DATETIME(6) NOT NULL,
-                PRIMARY KEY (Id),
-                UNIQUE KEY UX_PublicationMedia_Publication_SortOrder (PublicationId, SortOrder),
-                KEY IX_PublicationMedia_Publication_Type_Primary (PublicationId, MediaType, IsPrimary)
-            )
-            """;
-        await create.ExecuteNonQueryAsync();
-    }
-    finally
-    {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
-    }
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `SharedPublicationListItems` (
+            `Id` int NOT NULL AUTO_INCREMENT,
+            `SharedPublicationListId` int NOT NULL,
+            `PublicationId` int NOT NULL,
+            `CreatedAtUtc` datetime(6) NOT NULL,
+            CONSTRAINT `PK_SharedPublicationListItems` PRIMARY KEY (`Id`),
+            CONSTRAINT `FK_SharedListItems_List`
+                FOREIGN KEY (`SharedPublicationListId`) REFERENCES `SharedPublicationLists` (`Id`) ON DELETE CASCADE,
+            CONSTRAINT `FK_SharedPublicationListItems_Publications_PublicationId`
+                FOREIGN KEY (`PublicationId`) REFERENCES `Publications` (`Id`) ON DELETE CASCADE
+        ) CHARACTER SET=utf8mb4;
+        """);
 
-    await BackfillPublicationMediaAsync(db);
-    await DropLegacyPublicationColumnsAsync(db);
+    await EnsureColumnAsync(
+        connection,
+        "SharedPublicationLists",
+        "DefaultMode",
+        "varchar(20) CHARACTER SET utf8mb4 NOT NULL DEFAULT 'Galeria'");
+
+    await EnsureIndexAsync(connection, "SharedPublicationLists", "IX_SharedPublicationLists_Slug", "CREATE UNIQUE INDEX `IX_SharedPublicationLists_Slug` ON `SharedPublicationLists` (`Slug`)");
+    await EnsureIndexAsync(connection, "SharedPublicationLists", "IX_SharedPublicationLists_UserId_Name", "CREATE INDEX `IX_SharedPublicationLists_UserId_Name` ON `SharedPublicationLists` (`UserId`, `Name`)");
+    await EnsureIndexAsync(connection, "SharedPublicationListItems", "IX_SharedListItems_List_Publication", "CREATE UNIQUE INDEX `IX_SharedListItems_List_Publication` ON `SharedPublicationListItems` (`SharedPublicationListId`, `PublicationId`)");
+    await EnsureIndexAsync(connection, "SharedPublicationListItems", "IX_SharedPublicationListItems_PublicationId", "CREATE INDEX `IX_SharedPublicationListItems_PublicationId` ON `SharedPublicationListItems` (`PublicationId`)");
 }
 
-static async Task BackfillPublicationMediaAsync(VentagramDbContext db)
+static async Task EnsureReviewSchemaAsync(System.Data.Common.DbConnection connection)
 {
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
-    if (shouldClose)
-    {
-        await connection.OpenAsync();
-    }
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `VentagramParameters` (
+            `Id` int NOT NULL AUTO_INCREMENT,
+            `Key` varchar(120) CHARACTER SET utf8mb4 NOT NULL,
+            `Value` varchar(1000) CHARACTER SET utf8mb4 NOT NULL,
+            `DataType` varchar(30) CHARACTER SET utf8mb4 NOT NULL,
+            `Description` varchar(300) CHARACTER SET utf8mb4 NULL,
+            `UpdatedAtUtc` datetime(6) NOT NULL,
+            `UpdatedByUserId` int NULL,
+            CONSTRAINT `PK_VentagramParameters` PRIMARY KEY (`Id`),
+            CONSTRAINT `FK_VentagramParameters_Users_UpdatedByUserId`
+                FOREIGN KEY (`UpdatedByUserId`) REFERENCES `Users` (`Id`) ON DELETE SET NULL
+        ) CHARACTER SET=utf8mb4;
+        """);
 
-    try
-    {
-        if (!await ColumnExistsAsync(connection, "Publications", "ImagesCsv")
-            && !await ColumnExistsAsync(connection, "Publications", "VideoUrl"))
-        {
-            return;
-        }
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `VerifiedOperations` (
+            `Id` int NOT NULL AUTO_INCREMENT,
+            `PublicationId` int NOT NULL,
+            `OperationType` tinyint unsigned NULL,
+            `AdvertiserUserId` int NOT NULL,
+            `CounterpartyUserId` int NULL,
+            `CounterpartyEmail` varchar(160) CHARACTER SET utf8mb4 NOT NULL,
+            `CounterpartyKind` varchar(20) CHARACTER SET utf8mb4 NOT NULL,
+            `Status` varchar(40) CHARACTER SET utf8mb4 NOT NULL,
+            `ResponseTokenHash` varchar(64) CHARACTER SET utf8mb4 NOT NULL,
+            `ResponseTokenExpiresAtUtc` datetime(6) NOT NULL,
+            `CounterpartyReportedProblem` tinyint(1) NOT NULL,
+            `CreatedAtUtc` datetime(6) NOT NULL,
+            `CounterpartyRespondedAtUtc` datetime(6) NULL,
+            `ConfirmedAtUtc` datetime(6) NULL,
+            CONSTRAINT `PK_VerifiedOperations` PRIMARY KEY (`Id`),
+            CONSTRAINT `FK_VerifiedOperations_Publications_PublicationId`
+                FOREIGN KEY (`PublicationId`) REFERENCES `Publications` (`Id`) ON DELETE RESTRICT,
+            CONSTRAINT `FK_VerifiedOperations_Users_AdvertiserUserId`
+                FOREIGN KEY (`AdvertiserUserId`) REFERENCES `Users` (`Id`) ON DELETE RESTRICT,
+            CONSTRAINT `FK_VerifiedOperations_Users_CounterpartyUserId`
+                FOREIGN KEY (`CounterpartyUserId`) REFERENCES `Users` (`Id`) ON DELETE SET NULL
+        ) CHARACTER SET=utf8mb4;
+        """);
 
-        var existingPublicationIds = new HashSet<int>(
-            await db.PublicationMedia
-                .AsNoTracking()
-                .Select(x => x.PublicationId)
-                .Distinct()
-                .ToListAsync());
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `OperationReviews` (
+            `Id` int NOT NULL AUTO_INCREMENT,
+            `VerifiedOperationId` int NOT NULL,
+            `ReviewerUserId` int NOT NULL,
+            `ReviewedUserId` int NOT NULL,
+            `ReviewedRole` varchar(20) CHARACTER SET utf8mb4 NOT NULL,
+            `Stars` tinyint unsigned NULL,
+            `Comment` varchar(1000) CHARACTER SET utf8mb4 NULL,
+            `DeclinedToRate` tinyint(1) NOT NULL,
+            `SubmittedAtUtc` datetime(6) NOT NULL,
+            `PublishAtUtc` datetime(6) NULL,
+            `ModerationStatus` varchar(30) CHARACTER SET utf8mb4 NOT NULL,
+            CONSTRAINT `PK_OperationReviews` PRIMARY KEY (`Id`),
+            CONSTRAINT `FK_OperationReviews_VerifiedOperations_VerifiedOperationId`
+                FOREIGN KEY (`VerifiedOperationId`) REFERENCES `VerifiedOperations` (`Id`) ON DELETE CASCADE,
+            CONSTRAINT `FK_OperationReviews_Users_ReviewedUserId`
+                FOREIGN KEY (`ReviewedUserId`) REFERENCES `Users` (`Id`) ON DELETE RESTRICT,
+            CONSTRAINT `FK_OperationReviews_Users_ReviewerUserId`
+                FOREIGN KEY (`ReviewerUserId`) REFERENCES `Users` (`Id`) ON DELETE RESTRICT
+        ) CHARACTER SET=utf8mb4;
+        """);
 
-        await using var select = connection.CreateCommand();
-        select.CommandText = """
-            SELECT Id, ImagesCsv, VideoUrl, CreatedAtUtc
-            FROM Publications
-            ORDER BY Id
-            """;
+    await EnsureIndexAsync(connection, "VentagramParameters", "IX_VentagramParameters_Key", "CREATE UNIQUE INDEX `IX_VentagramParameters_Key` ON `VentagramParameters` (`Key`)");
+    await EnsureIndexAsync(connection, "VentagramParameters", "IX_VentagramParameters_UpdatedByUserId", "CREATE INDEX `IX_VentagramParameters_UpdatedByUserId` ON `VentagramParameters` (`UpdatedByUserId`)");
+    await EnsureIndexAsync(connection, "VerifiedOperations", "IX_VerifiedOperations_ResponseTokenHash", "CREATE UNIQUE INDEX `IX_VerifiedOperations_ResponseTokenHash` ON `VerifiedOperations` (`ResponseTokenHash`)");
+    await EnsureIndexAsync(connection, "VerifiedOperations", "IX_VerifiedOperations_AdvertiserUserId", "CREATE INDEX `IX_VerifiedOperations_AdvertiserUserId` ON `VerifiedOperations` (`AdvertiserUserId`)");
+    await EnsureIndexAsync(connection, "VerifiedOperations", "IX_VerifiedOperations_CounterpartyEmail_Status", "CREATE INDEX `IX_VerifiedOperations_CounterpartyEmail_Status` ON `VerifiedOperations` (`CounterpartyEmail`, `Status`)");
+    await EnsureIndexAsync(connection, "VerifiedOperations", "IX_VerifiedOperations_CounterpartyUserId", "CREATE INDEX `IX_VerifiedOperations_CounterpartyUserId` ON `VerifiedOperations` (`CounterpartyUserId`)");
+    await EnsureIndexAsync(connection, "VerifiedOperations", "IX_VerifiedOperations_PublicationId_Status", "CREATE INDEX `IX_VerifiedOperations_PublicationId_Status` ON `VerifiedOperations` (`PublicationId`, `Status`)");
+    await EnsureIndexAsync(connection, "OperationReviews", "IX_OperationReviews_VerifiedOperationId_ReviewerUserId", "CREATE UNIQUE INDEX `IX_OperationReviews_VerifiedOperationId_ReviewerUserId` ON `OperationReviews` (`VerifiedOperationId`, `ReviewerUserId`)");
+    await EnsureIndexAsync(connection, "OperationReviews", "IX_OperationReviews_ReviewedUserId_ReviewedRole_SubmittedAtUtc", "CREATE INDEX `IX_OperationReviews_ReviewedUserId_ReviewedRole_SubmittedAtUtc` ON `OperationReviews` (`ReviewedUserId`, `ReviewedRole`, `SubmittedAtUtc`)");
+    await EnsureIndexAsync(connection, "OperationReviews", "IX_OperationReviews_ReviewerUserId", "CREATE INDEX `IX_OperationReviews_ReviewerUserId` ON `OperationReviews` (`ReviewerUserId`)");
 
-        var publications = new List<(int Id, string? ImagesCsv, string? VideoUrl, DateTime CreatedAtUtc)>();
-        await using (var reader = await select.ExecuteReaderAsync())
-        {
-            var idOrdinal = reader.GetOrdinal("Id");
-            var imagesOrdinal = reader.GetOrdinal("ImagesCsv");
-            var videoOrdinal = reader.GetOrdinal("VideoUrl");
-            var createdOrdinal = reader.GetOrdinal("CreatedAtUtc");
-
-            while (await reader.ReadAsync())
-            {
-                publications.Add((
-                    reader.GetInt32(idOrdinal),
-                    reader.IsDBNull(imagesOrdinal) ? null : reader.GetString(imagesOrdinal),
-                    reader.IsDBNull(videoOrdinal) ? null : reader.GetString(videoOrdinal),
-                    reader.GetDateTime(createdOrdinal)));
-            }
-        }
-
-        var pendingMedia = new List<PublicationMedia>();
-        foreach (var publication in publications)
-        {
-            if (existingPublicationIds.Contains(publication.Id))
-            {
-                continue;
-            }
-
-            pendingMedia.AddRange(PublicationMediaBuilder.Build(
-                publication.ImagesCsv,
-                publication.VideoUrl,
-                publication.CreatedAtUtc)
-                .Select((item, index) =>
-                {
-                    item.PublicationId = publication.Id;
-                    item.SortOrder = index + 1;
-                    return item;
-                }));
-        }
-
-        if (pendingMedia.Count > 0)
-        {
-            db.PublicationMedia.AddRange(pendingMedia);
-            await db.SaveChangesAsync();
-        }
-    }
-    finally
-    {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
-    }
+    await ExecuteNonQueryAsync(connection,
+        """
+        INSERT IGNORE INTO `VentagramParameters`
+            (`Key`, `Value`, `DataType`, `Description`, `UpdatedAtUtc`, `UpdatedByUserId`)
+        VALUES
+            ('Reviews.Enabled', 'true', 'Boolean', 'Activa el sistema de operaciones y reseñas.', UTC_TIMESTAMP(6), NULL),
+            ('Reviews.Advertiser.Enabled', 'true', 'Boolean', 'Permite reseñar y mostrar la reputacion de anunciantes.', UTC_TIMESTAMP(6), NULL),
+            ('Reviews.Counterparty.Enabled', 'true', 'Boolean', 'Permite reseñar y mostrar la reputacion de contrapartes.', UTC_TIMESTAMP(6), NULL),
+            ('Reviews.EmailNotifications.Enabled', 'true', 'Boolean', 'Envia emails de confirmacion de operaciones.', UTC_TIMESTAMP(6), NULL),
+            ('Reviews.DisplayExisting.Enabled', 'true', 'Boolean', 'Muestra reseñas publicadas existentes.', UTC_TIMESTAMP(6), NULL),
+            ('Reviews.PublicationDelayDays', '7', 'Integer', 'Dias de espera antes de publicar las respuestas.', UTC_TIMESTAMP(6), NULL),
+            ('Reviews.ResponseDeadlineDays', '14', 'Integer', 'Dias maximos para esperar la respuesta de la otra persona.', UTC_TIMESTAMP(6), NULL),
+            ('PaidSite.Enabled', 'false', 'Boolean', 'Activa las leyendas y secciones de cobro del sitio.', UTC_TIMESTAMP(6), NULL);
+        """);
 }
 
-static async Task DropLegacyPublicationColumnsAsync(VentagramDbContext db)
+static async Task EnsurePublicationCountersSchemaAsync(System.Data.Common.DbConnection connection)
 {
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
-    if (shouldClose)
+    await EnsureColumnAsync(connection, "Publications", "UniqueViewCount", "int NOT NULL DEFAULT 0");
+    await EnsureColumnAsync(connection, "Publications", "UniqueFavoriteCount", "int NOT NULL DEFAULT 0");
+
+    await ExecuteNonQueryAsync(connection,
+        """
+        UPDATE `Publications` p
+        SET `UniqueViewCount` = (
+            SELECT COUNT(*)
+            FROM `PublicationViews` pv
+            WHERE pv.`PublicationId` = p.`Id`
+        )
+        WHERE EXISTS (
+            SELECT 1
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'PublicationViews'
+        );
+        """);
+
+    await ExecuteNonQueryAsync(connection,
+        """
+        UPDATE `Publications` p
+        SET `UniqueFavoriteCount` = (
+            SELECT COUNT(*)
+            FROM `PublicationFavorites` pf
+            WHERE pf.`PublicationId` = p.`Id`
+        )
+        WHERE EXISTS (
+            SELECT 1
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'PublicationFavorites'
+        );
+        """);
+}
+
+static async Task EnsurePublicationFavoritesSchemaAsync(System.Data.Common.DbConnection connection)
+{
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `PublicationFavorites` (
+            `Id` int NOT NULL AUTO_INCREMENT,
+            `PublicationId` int NOT NULL,
+            `UserId` int NOT NULL,
+            `CreatedAtUtc` datetime(6) NOT NULL,
+            CONSTRAINT `PK_PublicationFavorites` PRIMARY KEY (`Id`),
+            CONSTRAINT `FK_PublicationFavorites_Publications_PublicationId`
+                FOREIGN KEY (`PublicationId`) REFERENCES `Publications` (`Id`) ON DELETE CASCADE,
+            CONSTRAINT `FK_PublicationFavorites_Users_UserId`
+                FOREIGN KEY (`UserId`) REFERENCES `Users` (`Id`) ON DELETE CASCADE
+        ) CHARACTER SET=utf8mb4;
+        """);
+
+    await ExecuteNonQueryAsync(connection,
+        """
+        INSERT INTO `PublicationFavorites` (`PublicationId`, `UserId`, `CreatedAtUtc`)
+        SELECT favorites.`PublicationId`, favorites.`UserId`, MIN(favorites.`CreatedAtUtc`) AS `CreatedAtUtc`
+        FROM (
+            SELECT fli.`PublicationId`, fl.`UserId`, fli.`CreatedAtUtc`
+            FROM `FavoriteListItems` fli
+            INNER JOIN `FavoriteLists` fl ON fl.`Id` = fli.`FavoriteListId`
+        ) favorites
+        LEFT JOIN `PublicationFavorites` pf
+            ON pf.`PublicationId` = favorites.`PublicationId`
+           AND pf.`UserId` = favorites.`UserId`
+        WHERE pf.`Id` IS NULL
+        GROUP BY favorites.`PublicationId`, favorites.`UserId`;
+        """);
+
+    await EnsureIndexAsync(connection, "PublicationFavorites", "IX_PublicationFavorites_PublicationId_UserId", "CREATE UNIQUE INDEX `IX_PublicationFavorites_PublicationId_UserId` ON `PublicationFavorites` (`PublicationId`, `UserId`)");
+    await EnsureIndexAsync(connection, "PublicationFavorites", "IX_PublicationFavorites_CreatedAtUtc", "CREATE INDEX `IX_PublicationFavorites_CreatedAtUtc` ON `PublicationFavorites` (`CreatedAtUtc`)");
+    await EnsureIndexAsync(connection, "PublicationFavorites", "IX_PublicationFavorites_UserId", "CREATE INDEX `IX_PublicationFavorites_UserId` ON `PublicationFavorites` (`UserId`)");
+}
+
+static async Task EnsurePublicationAnalyticsSchemaAsync(System.Data.Common.DbConnection connection)
+{
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `PublicationViews` (
+            `Id` int NOT NULL AUTO_INCREMENT,
+            `PublicationId` int NOT NULL,
+            `ViewerUserId` int NULL,
+            `AnonymousFingerprint` varchar(64) CHARACTER SET utf8mb4 NULL,
+            `CreatedAtUtc` datetime(6) NOT NULL,
+            CONSTRAINT `PK_PublicationViews` PRIMARY KEY (`Id`),
+            CONSTRAINT `FK_PublicationViews_Publications_PublicationId`
+                FOREIGN KEY (`PublicationId`) REFERENCES `Publications` (`Id`) ON DELETE CASCADE,
+            CONSTRAINT `FK_PublicationViews_Users_ViewerUserId`
+                FOREIGN KEY (`ViewerUserId`) REFERENCES `Users` (`Id`) ON DELETE SET NULL
+        ) CHARACTER SET=utf8mb4;
+        """);
+
+    await EnsureIndexAsync(connection, "PublicationViews", "IX_PublicationViews_CreatedAtUtc", "CREATE INDEX `IX_PublicationViews_CreatedAtUtc` ON `PublicationViews` (`CreatedAtUtc`)");
+    await EnsureIndexAsync(connection, "PublicationViews", "IX_PublicationViews_PublicationId_ViewerUserId", "CREATE UNIQUE INDEX `IX_PublicationViews_PublicationId_ViewerUserId` ON `PublicationViews` (`PublicationId`, `ViewerUserId`)");
+    await EnsureIndexAsync(connection, "PublicationViews", "IX_PublicationViews_PublicationId_AnonymousFingerprint", "CREATE UNIQUE INDEX `IX_PublicationViews_PublicationId_AnonymousFingerprint` ON `PublicationViews` (`PublicationId`, `AnonymousFingerprint`)");
+    await EnsureIndexAsync(connection, "PublicationViews", "IX_PublicationViews_ViewerUserId", "CREATE INDEX `IX_PublicationViews_ViewerUserId` ON `PublicationViews` (`ViewerUserId`)");
+}
+
+static async Task EnsureColumnAsync(System.Data.Common.DbConnection connection, string tableName, string columnName, string definition)
+{
+    await using var check = connection.CreateCommand();
+    check.CommandText = """
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = @tableName
+          AND COLUMN_NAME = @columnName
+        """;
+
+    var tableParameter = check.CreateParameter();
+    tableParameter.ParameterName = "@tableName";
+    tableParameter.Value = tableName;
+    check.Parameters.Add(tableParameter);
+
+    var columnParameter = check.CreateParameter();
+    columnParameter.ParameterName = "@columnName";
+    columnParameter.Value = columnName;
+    check.Parameters.Add(columnParameter);
+
+    var exists = Convert.ToInt32(await check.ExecuteScalarAsync()) > 0;
+    if (exists)
     {
-        await connection.OpenAsync();
+        return;
     }
 
-    try
-    {
-        if (await ColumnExistsAsync(connection, "Publications", "ImagesCsv"))
-        {
-            await using var dropImages = connection.CreateCommand();
-            dropImages.CommandText = "ALTER TABLE Publications DROP COLUMN ImagesCsv";
-            await dropImages.ExecuteNonQueryAsync();
-        }
+    await using var alter = connection.CreateCommand();
+    alter.CommandText = $"ALTER TABLE `{tableName}` ADD COLUMN `{columnName}` {definition}";
+    await alter.ExecuteNonQueryAsync();
+}
 
-        if (await ColumnExistsAsync(connection, "Publications", "VideoUrl"))
-        {
-            await using var dropVideo = connection.CreateCommand();
-            dropVideo.CommandText = "ALTER TABLE Publications DROP COLUMN VideoUrl";
-            await dropVideo.ExecuteNonQueryAsync();
-        }
-    }
-    finally
+static async Task EnsureUserHeaderPublicationGroupsSchemaAsync(System.Data.Common.DbConnection connection)
+{
+    if (!await TableExistsAsync(connection, "Users"))
     {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
+        return;
     }
+
+    await EnsureColumnAsync(
+        connection,
+        "Users",
+        "HeaderPublicationGroupsCsv",
+        "varchar(120) CHARACTER SET utf8mb4 NULL");
+}
+
+static async Task EnsureIndexAsync(System.Data.Common.DbConnection connection, string tableName, string indexName, string createSql)
+{
+    await using var check = connection.CreateCommand();
+    check.CommandText = """
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = @tableName
+          AND INDEX_NAME = @indexName
+        """;
+
+    var tableParameter = check.CreateParameter();
+    tableParameter.ParameterName = "@tableName";
+    tableParameter.Value = tableName;
+    check.Parameters.Add(tableParameter);
+
+    var indexParameter = check.CreateParameter();
+    indexParameter.ParameterName = "@indexName";
+    indexParameter.Value = indexName;
+    check.Parameters.Add(indexParameter);
+
+    var exists = Convert.ToInt32(await check.ExecuteScalarAsync()) > 0;
+    if (exists)
+    {
+        return;
+    }
+
+    await ExecuteNonQueryAsync(connection, createSql);
 }
 
 static async Task<bool> ColumnExistsAsync(System.Data.Common.DbConnection connection, string tableName, string columnName)
@@ -826,229 +899,18 @@ static async Task<bool> ColumnExistsAsync(System.Data.Common.DbConnection connec
           AND TABLE_NAME = @tableName
           AND COLUMN_NAME = @columnName
         """;
+
     var tableParameter = check.CreateParameter();
     tableParameter.ParameterName = "@tableName";
     tableParameter.Value = tableName;
     check.Parameters.Add(tableParameter);
-    var parameter = check.CreateParameter();
-    parameter.ParameterName = "@columnName";
-    parameter.Value = columnName;
-    check.Parameters.Add(parameter);
+
+    var columnParameter = check.CreateParameter();
+    columnParameter.ParameterName = "@columnName";
+    columnParameter.Value = columnName;
+    check.Parameters.Add(columnParameter);
 
     return Convert.ToInt32(await check.ExecuteScalarAsync()) > 0;
-}
-
-static async Task EnsureFavoriteListsTableAsync(VentagramDbContext db)
-{
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
-    if (shouldClose)
-    {
-        await connection.OpenAsync();
-    }
-
-    try
-    {
-        await using var create = connection.CreateCommand();
-        create.CommandText = """
-            CREATE TABLE IF NOT EXISTS FavoriteLists (
-                Id INT NOT NULL AUTO_INCREMENT,
-                UserId INT NOT NULL,
-                Name VARCHAR(120) NOT NULL,
-                CreatedAtUtc DATETIME(6) NOT NULL,
-                UpdatedAtUtc DATETIME(6) NOT NULL,
-                PRIMARY KEY (Id),
-                UNIQUE KEY UX_FavoriteLists_User_Name (UserId, Name),
-                KEY IX_FavoriteLists_User_Updated (UserId, UpdatedAtUtc)
-            )
-            """;
-        await create.ExecuteNonQueryAsync();
-    }
-    finally
-    {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
-    }
-}
-
-static async Task EnsureFavoriteListItemsTableAsync(VentagramDbContext db)
-{
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
-    if (shouldClose)
-    {
-        await connection.OpenAsync();
-    }
-
-    try
-    {
-        await using var create = connection.CreateCommand();
-        create.CommandText = """
-            CREATE TABLE IF NOT EXISTS FavoriteListItems (
-                Id INT NOT NULL AUTO_INCREMENT,
-                FavoriteListId INT NOT NULL,
-                PublicationId INT NOT NULL,
-                CreatedAtUtc DATETIME(6) NOT NULL,
-                PRIMARY KEY (Id),
-                UNIQUE KEY UX_FavoriteListItems_List_Publication (FavoriteListId, PublicationId),
-                KEY IX_FavoriteListItems_Publication (PublicationId),
-                KEY IX_FavoriteListItems_List_Created (FavoriteListId, CreatedAtUtc)
-            )
-            """;
-        await create.ExecuteNonQueryAsync();
-    }
-    finally
-    {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
-    }
-}
-
-static async Task EnsurePublicationReportCommentColumnAsync(VentagramDbContext db)
-{
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
-    if (shouldClose)
-    {
-        await connection.OpenAsync();
-    }
-
-    try
-    {
-        await EnsureColumnAsync(connection, "PublicationReports", "Comment", "VARCHAR(500) NULL");
-    }
-    finally
-    {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
-    }
-}
-
-static async Task EnsureSiteSuggestionsTableAsync(VentagramDbContext db)
-{
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
-    if (shouldClose)
-    {
-        await connection.OpenAsync();
-    }
-
-    try
-    {
-        await using var create = connection.CreateCommand();
-        create.CommandText = """
-            CREATE TABLE IF NOT EXISTS SiteSuggestions (
-                Id INT NOT NULL AUTO_INCREMENT,
-                UserId INT NULL,
-                SenderName VARCHAR(120) NULL,
-                SenderEmail VARCHAR(160) NULL,
-                Message VARCHAR(2000) NOT NULL,
-                CreatedAtUtc DATETIME(6) NOT NULL,
-                PRIMARY KEY (Id),
-                KEY IX_SiteSuggestions_CreatedAtUtc (CreatedAtUtc),
-                KEY IX_SiteSuggestions_UserId (UserId)
-            )
-            """;
-        await create.ExecuteNonQueryAsync();
-    }
-    finally
-    {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
-    }
-}
-
-static async Task EnsureModerationColumnsAsync(VentagramDbContext db)
-{
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State != System.Data.ConnectionState.Open;
-    if (shouldClose)
-    {
-        await connection.OpenAsync();
-    }
-
-    try
-    {
-        await EnsureColumnAsync(connection, "Users", "IsAdmin", "bit(1) NOT NULL DEFAULT b'0'");
-        await EnsureColumnAsync(connection, "Users", "CanPublish", "bit(1) NOT NULL DEFAULT b'1'");
-        await EnsureColumnAsync(connection, "Users", "CanReport", "bit(1) NOT NULL DEFAULT b'1'");
-
-        await EnsureColumnAsync(connection, "Publications", "ModerationStatus", "VARCHAR(40) NOT NULL DEFAULT 'None'");
-        await EnsureColumnAsync(connection, "Publications", "ReportWarningSentAtUtc", "DATETIME(6) NULL");
-        await EnsureColumnAsync(connection, "Publications", "ReportTrashSentAtUtc", "DATETIME(6) NULL");
-        await EnsureColumnAsync(connection, "Publications", "TrashedAtUtc", "DATETIME(6) NULL");
-
-        await EnsureColumnAsync(connection, "PublicationReports", "ReporterUserId", "INT NOT NULL DEFAULT 0");
-        await EnsureColumnAsync(connection, "PublicationReports", "CountsTowardThreshold", "bit(1) NOT NULL DEFAULT b'1'");
-        await EnsureColumnAsync(connection, "PublicationReports", "ReviewStatus", "VARCHAR(30) NOT NULL DEFAULT 'Pending'");
-        await EnsureColumnAsync(connection, "PublicationReports", "ReviewedAtUtc", "DATETIME(6) NULL");
-        await EnsureColumnAsync(connection, "PublicationReports", "ReviewedByUserId", "INT NULL");
-
-        await using (var deleteInvalidReports = connection.CreateCommand())
-        {
-            deleteInvalidReports.CommandText = """
-                DELETE FROM PublicationReports
-                WHERE ReporterUserId = 0
-                """;
-            await deleteInvalidReports.ExecuteNonQueryAsync();
-        }
-
-        await using (var adjustReporterColumn = connection.CreateCommand())
-        {
-            adjustReporterColumn.CommandText = """
-                ALTER TABLE PublicationReports
-                MODIFY COLUMN ReporterUserId INT NOT NULL
-                """;
-            await adjustReporterColumn.ExecuteNonQueryAsync();
-        }
-
-        await EnsureIndexAsync(connection, "PublicationReports", "UX_PublicationReports_Publication_Reporter", "UNIQUE KEY UX_PublicationReports_Publication_Reporter (PublicationId, ReporterUserId)");
-    }
-    finally
-    {
-        if (shouldClose)
-        {
-            await connection.CloseAsync();
-        }
-    }
-}
-
-static async Task EnsureIndexAsync(System.Data.Common.DbConnection connection, string tableName, string indexName, string definition)
-{
-    await using var check = connection.CreateCommand();
-    check.CommandText = """
-        SELECT COUNT(*)
-        FROM INFORMATION_SCHEMA.STATISTICS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = @tableName
-          AND INDEX_NAME = @indexName
-        """;
-    var tableParameter = check.CreateParameter();
-    tableParameter.ParameterName = "@tableName";
-    tableParameter.Value = tableName;
-    check.Parameters.Add(tableParameter);
-    var indexParameter = check.CreateParameter();
-    indexParameter.ParameterName = "@indexName";
-    indexParameter.Value = indexName;
-    check.Parameters.Add(indexParameter);
-
-    var exists = Convert.ToInt32(await check.ExecuteScalarAsync()) > 0;
-    if (exists)
-    {
-        return;
-    }
-
-    await using var alter = connection.CreateCommand();
-    alter.CommandText = $"ALTER TABLE {tableName} ADD {definition}";
-    await alter.ExecuteNonQueryAsync();
 }
 
 static string BuildContactPreference(bool respondsEmails, bool acceptsCalls, bool respondsWhatsApp)
@@ -1070,4 +932,10 @@ static string BuildContactPreference(bool respondsEmails, bool acceptsCalls, boo
     }
 
     return preferences.Count == 0 ? "None" : string.Join("|", preferences);
+}
+
+static bool GetBooleanSetting(ConfigurationManager configuration, string key)
+{
+    var value = configuration[key];
+    return bool.TryParse(value, out var parsed) && parsed;
 }

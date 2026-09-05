@@ -10,30 +10,45 @@ public class PublicationService(
     CloudflareR2ImageStorageService imageStorageService,
     ILogger<PublicationService> logger)
 {
-    public Task<List<Publication>> SearchActivePublicationsAsync(PublicationGroup? group, string? query)
-        => SearchActivePublicationsAsync(group, query, null);
+    public const string OwnerDeletedStatus = "Eliminado por usuario";
 
-    public Task<List<Publication>> SearchActivePublicationsAsync(PublicationGroup? group, string? query, PublicationSearchFilters? filters)
-        => BuildActiveSearchQuery(group, query, filters).ToListAsync();
+    public Task<List<Publication>> SearchActivePublicationsAsync(PublicationGroup? group, string? query, bool includeDebug = false)
+        => SearchActivePublicationsAsync(group, query, null, includeDebug);
 
-    public Task<List<Publication>> SearchActivePublicationsAsync(PublicationGroup? group, string? query, double? referenceLatitude, double? referenceLongitude)
-        => SearchActivePublicationsAsync(group, query, referenceLatitude, referenceLongitude, null);
+    public Task<List<Publication>> SearchActivePublicationsAsync(PublicationGroup? group, string? query, PublicationSearchFilters? filters, bool includeDebug = false)
+        => BuildActiveSearchQuery(group, query, filters, includeDebug).ToListAsync();
 
-    public Task<List<Publication>> SearchActivePublicationsAsync(PublicationGroup? group, string? query, double? referenceLatitude, double? referenceLongitude, PublicationSearchFilters? filters)
-        => BuildOrderedActiveSearchQuery(group, query, referenceLatitude, referenceLongitude, filters).ToListAsync();
+    public Task<List<Publication>> SearchActivePublicationsAsync(PublicationGroup? group, string? query, double? referenceLatitude, double? referenceLongitude, bool includeDebug = false)
+        => SearchActivePublicationsAsync(group, query, referenceLatitude, referenceLongitude, null, includeDebug);
 
-    public Task<int> CountActivePublicationsAsync(PublicationGroup? group, string? query)
-        => CountActivePublicationsAsync(group, query, null);
+    public Task<List<Publication>> SearchActivePublicationsAsync(PublicationGroup? group, string? query, double? referenceLatitude, double? referenceLongitude, PublicationSearchFilters? filters, bool includeDebug = false)
+        => BuildOrderedActiveSearchQuery(group, query, referenceLatitude, referenceLongitude, filters, includeDebug).ToListAsync();
 
-    public Task<int> CountActivePublicationsAsync(PublicationGroup? group, string? query, PublicationSearchFilters? filters)
-        => BuildActiveSearchQuery(group, query, filters).CountAsync();
+    public Task<int> CountActivePublicationsAsync(PublicationGroup? group, string? query, bool includeDebug = false)
+        => CountActivePublicationsAsync(group, query, null, includeDebug);
 
-    public async Task<decimal> GetActiveMaxPriceAsync(PublicationGroup? group)
+    public Task<int> CountActivePublicationsAsync(PublicationGroup? group, string? query, PublicationSearchFilters? filters, bool includeDebug = false)
+        => BuildActiveSearchQuery(group, query, filters, includeDebug).CountAsync();
+
+    public Task<int> CountActivePublicationsAsync(PublicationGroup? group, string? query, double? referenceLatitude, double? referenceLongitude, PublicationSearchFilters? filters, bool includeDebug = false)
+    {
+        var items = BuildActiveSearchQuery(group, query, filters, includeDebug);
+        if (referenceLatitude is double latitude && referenceLongitude is double longitude)
+        {
+            items = ApplyRadiusFilter(items, latitude, longitude, filters);
+        }
+
+        return items.CountAsync();
+    }
+
+    public async Task<decimal> GetActiveMaxPriceAsync(PublicationGroup? group, bool includeDebug = false)
     {
         var now = DateTime.UtcNow;
         var items = db.Publications
             .AsNoTracking()
             .Where(x => x.IsActive && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now));
+
+        items = ApplyDebugVisibility(items, includeDebug);
 
         if (group is not null)
         {
@@ -45,41 +60,41 @@ public class PublicationService(
             : 1000000m;
     }
 
-    public Task<List<Publication>> SearchActivePublicationsPageAsync(PublicationGroup? group, string? query, int skip, int take)
-        => SearchActivePublicationsPageAsync(group, query, skip, take, null);
+    public Task<List<Publication>> SearchActivePublicationsPageAsync(PublicationGroup? group, string? query, int skip, int take, bool includeDebug = false)
+        => SearchActivePublicationsPageAsync(group, query, skip, take, null, includeDebug);
 
-    public Task<List<Publication>> SearchActivePublicationsPageAsync(PublicationGroup? group, string? query, int skip, int take, PublicationSearchFilters? filters)
-        => BuildActiveSearchQuery(group, query, filters)
+    public Task<List<Publication>> SearchActivePublicationsPageAsync(PublicationGroup? group, string? query, int skip, int take, PublicationSearchFilters? filters, bool includeDebug = false)
+        => BuildActiveSearchQuery(group, query, filters, includeDebug)
             .Skip(Math.Max(0, skip))
             .Take(Math.Max(1, take))
             .ToListAsync();
 
-    public Task<List<Publication>> SearchActivePublicationsPageAsync(PublicationGroup? group, string? query, int skip, int take, double? referenceLatitude, double? referenceLongitude)
-        => SearchActivePublicationsPageAsync(group, query, skip, take, referenceLatitude, referenceLongitude, null);
+    public Task<List<Publication>> SearchActivePublicationsPageAsync(PublicationGroup? group, string? query, int skip, int take, double? referenceLatitude, double? referenceLongitude, bool includeDebug = false)
+        => SearchActivePublicationsPageAsync(group, query, skip, take, referenceLatitude, referenceLongitude, null, includeDebug);
 
-    public Task<List<Publication>> SearchActivePublicationsPageAsync(PublicationGroup? group, string? query, int skip, int take, double? referenceLatitude, double? referenceLongitude, PublicationSearchFilters? filters)
-        => BuildOrderedActiveSearchQuery(group, query, referenceLatitude, referenceLongitude, filters)
+    public Task<List<Publication>> SearchActivePublicationsPageAsync(PublicationGroup? group, string? query, int skip, int take, double? referenceLatitude, double? referenceLongitude, PublicationSearchFilters? filters, bool includeDebug = false)
+        => BuildOrderedActiveSearchQuery(group, query, referenceLatitude, referenceLongitude, filters, includeDebug)
             .Skip(Math.Max(0, skip))
             .Take(Math.Max(1, take))
             .ToListAsync();
 
-    public async Task<List<Publication>> GetActivePublicationsAsync()
+    public async Task<List<Publication>> GetActivePublicationsAsync(bool includeDebug = false)
     {
         var now = DateTime.UtcNow;
-        return await db.Publications
+        return await ApplyDebugVisibility(db.Publications
             .Include(x => x.Category)
             .Include(x => x.MediaItems)
             .Include(x => x.FieldValues)
                 .ThenInclude(x => x.CategoryField)
-            .Where(x => x.IsActive && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now))
+            .Where(x => x.IsActive && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now)), includeDebug)
             .OrderByDescending(x => x.Featured)
             .ThenByDescending(x => x.CreatedAtUtc)
             .ToListAsync();
     }
 
-    public async Task<Publication?> GetByIdAsync(int id)
+    public async Task<Publication?> GetByIdAsync(int id, bool includeDebug = false)
     {
-        return await db.Publications
+        return await ApplyDebugVisibility(db.Publications
             .Include(x => x.User)
             .Include(x => x.Category)
             .Include(x => x.MediaItems)
@@ -87,20 +102,35 @@ public class PublicationService(
                 .ThenInclude(x => x.CategoryField)
             .Include(x => x.Reports)
                 .ThenInclude(x => x.Reason)
-            .FirstOrDefaultAsync(x => x.Id == id);
+            .Where(x => x.Id == id), includeDebug)
+            .FirstOrDefaultAsync();
     }
 
-    public async Task<List<Publication>> GetOwnedPublicationsAsync(int userId)
+    public async Task<List<MyPublicationAdminItemViewModel>> GetOwnedPublicationsAsync(int userId)
     {
-        return await db.Publications
+        var publications = await db.Publications
             .AsNoTracking()
             .Include(x => x.User)
             .Include(x => x.Category)
             .Include(x => x.MediaItems)
-            .Where(x => x.UserId == userId)
+            .Where(x => x.UserId == userId && x.Status != OwnerDeletedStatus)
             .OrderByDescending(x => x.IsActive)
             .ThenByDescending(x => x.CreatedAtUtc)
             .ToListAsync();
+
+        if (publications.Count == 0)
+        {
+            return [];
+        }
+
+        return publications
+            .Select(publication => new MyPublicationAdminItemViewModel
+            {
+                Publication = publication,
+                UniqueViewCount = publication.UniqueViewCount,
+                UniqueFavoriteCount = publication.UniqueFavoriteCount
+            })
+            .ToList();
     }
 
     public async Task<Publication?> GetOwnedByIdAsync(int publicationId, int userId)
@@ -210,8 +240,9 @@ public class PublicationService(
             CategoryId = input.CategoryId,
             Title = input.Title,
             Price = input.Price,
+            OperationType = PublicationOperationTypeExtensions.ParseOrNull(input.Operation),
             Currency = input.Currency,
-            Locality = input.NoLocation ? string.Empty : input.Locality,
+            Locality = input.Locality,
             ShortDescription = input.ShortDescription,
             LongDescription = input.LongDescription,
             ContactName = input.ContactName ?? string.Empty,
@@ -222,6 +253,7 @@ public class PublicationService(
             InternalNotes = input.InternalNotes,
             Latitude = input.Latitude,
             Longitude = input.Longitude,
+            HideFromMap = input.NoLocation,
             UserId = userId,
             ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
         };
@@ -273,6 +305,11 @@ public class PublicationService(
 
         foreach (var field in definitions)
         {
+            if (string.Equals(field.InternalName, "operacion", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             normalizedInputs.TryGetValue(field.Id, out var value);
             if (field.Required && IsMissingDynamicValue(field.DataType, value))
             {
@@ -294,6 +331,29 @@ public class PublicationService(
         foreach (var unknownField in input.DynamicFields.Where(x => definitions.All(d => d.Id != x.FieldId)))
         {
             errors.Add(new { field = $"dynamicField:{unknownField.FieldId}", message = "El campo dinamico no pertenece a la categoria seleccionada." });
+        }
+
+        var operationField = definitions.FirstOrDefault(x => string.Equals(x.InternalName, "operacion", StringComparison.OrdinalIgnoreCase));
+        if (operationField is not null)
+        {
+            var selectedOperation = input.Operation?.Trim();
+            var allowedOperations = SplitOperationOptions(operationField.OptionsCsv);
+
+            if (operationField.Required && string.IsNullOrWhiteSpace(selectedOperation))
+            {
+                errors.Add(new { field = "operation", message = $"Completa {operationField.Label}." });
+            }
+            else if (!string.IsNullOrWhiteSpace(selectedOperation)
+                && PublicationOperationTypeExtensions.ParseOrNull(selectedOperation) is null)
+            {
+                errors.Add(new { field = "operation", message = "El tipo de operación no es válido." });
+            }
+            else if (!string.IsNullOrWhiteSpace(selectedOperation)
+                && allowedOperations.Count > 0
+                && !allowedOperations.Contains(selectedOperation, StringComparer.OrdinalIgnoreCase))
+            {
+                errors.Add(new { field = "operation", message = "El tipo de operación no corresponde a la categoría seleccionada." });
+            }
         }
 
         return errors;
@@ -359,7 +419,13 @@ public class PublicationService(
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        db.Publications.Remove(publication);
+        // Owner-side delete keeps the record for moderation/history, but removes
+        // all published media and hides the ad from "Mis anuncios".
+        db.RemoveRange(publication.MediaItems);
+        publication.MediaItems.Clear();
+        publication.IsActive = false;
+        publication.Status = OwnerDeletedStatus;
+        publication.ExpiresAtUtc = null;
         await db.SaveChangesAsync();
         await SafeDeleteMediaFromStorageAsync(mediaUrls);
         return true;
@@ -367,7 +433,14 @@ public class PublicationService(
 
     public async Task<bool> RepublishOwnedAsync(int publicationId, int userId)
     {
-        var publication = await db.Publications.FirstOrDefaultAsync(x => x.Id == publicationId && x.UserId == userId && !x.IsActive);
+        if (await db.VerifiedOperations.AnyAsync(x =>
+                x.PublicationId == publicationId
+                && x.Status != VerifiedOperationStatuses.Rejected))
+        {
+            return false;
+        }
+
+        var publication = await db.Publications.FirstOrDefaultAsync(x => x.Id == publicationId && x.UserId == userId && !x.IsActive && x.Status != OwnerDeletedStatus);
         if (publication is null)
         {
             return false;
@@ -472,7 +545,7 @@ public class PublicationService(
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var normalizedLocality = input.NoLocation ? string.Empty : input.Locality.Trim();
+        var normalizedLocality = input.Locality.Trim();
         var localityChanged = !string.Equals((publication.Locality ?? string.Empty).Trim(), normalizedLocality, StringComparison.Ordinal);
         var category = await db.PublicationCategories
             .AsNoTracking()
@@ -490,6 +563,7 @@ public class PublicationService(
         publication.CategoryId = input.CategoryId;
         publication.Title = input.Title.Trim();
         publication.Price = input.Price;
+        publication.OperationType = PublicationOperationTypeExtensions.ParseOrNull(input.Operation);
         publication.Currency = input.Currency;
         publication.Locality = normalizedLocality;
         publication.ShortDescription = input.ShortDescription.Trim();
@@ -497,12 +571,12 @@ public class PublicationService(
         publication.Featured = input.Featured;
         publication.InternalNotes = input.InternalNotes;
 
-        if (input.NoLocation)
+        if (!input.NoLocation && input.Latitude.HasValue && input.Longitude.HasValue)
         {
-            publication.Latitude = null;
-            publication.Longitude = null;
+            publication.Latitude = input.Latitude;
+            publication.Longitude = input.Longitude;
         }
-        else if (localityChanged)
+        else if (!input.NoLocation && localityChanged)
         {
             publication.Latitude = null;
             publication.Longitude = null;
@@ -512,6 +586,7 @@ public class PublicationService(
             publication.Latitude = input.Latitude;
             publication.Longitude = input.Longitude;
         }
+        publication.HideFromMap = input.NoLocation;
 
         var nextMediaItems = PublicationMediaBuilder.Build(
             input.ImagesCsv,
@@ -563,14 +638,14 @@ public class PublicationService(
         }
     }
 
-    private IQueryable<Publication> BuildActiveSearchQuery(PublicationGroup? group, string? query, PublicationSearchFilters? filters = null)
+    private IQueryable<Publication> BuildActiveSearchQuery(PublicationGroup? group, string? query, PublicationSearchFilters? filters = null, bool includeDebug = false)
     {
         var now = DateTime.UtcNow;
-        var items = db.Publications
+        var items = ApplyDebugVisibility(db.Publications
             .AsNoTracking()
             .Include(x => x.Category)
             .Include(x => x.MediaItems)
-            .Where(x => x.IsActive && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now));
+            .Where(x => x.IsActive && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now)), includeDebug);
 
         if (group is not null)
         {
@@ -600,9 +675,10 @@ public class PublicationService(
         string? query,
         double? referenceLatitude,
         double? referenceLongitude,
-        PublicationSearchFilters? filters = null)
+        PublicationSearchFilters? filters = null,
+        bool includeDebug = false)
     {
-        var items = BuildActiveSearchQuery(group, query, filters);
+        var items = BuildActiveSearchQuery(group, query, filters, includeDebug);
         if (referenceLatitude is null || referenceLongitude is null)
         {
             return items;
@@ -610,6 +686,7 @@ public class PublicationService(
 
         var latitude = referenceLatitude.Value;
         var longitude = referenceLongitude.Value;
+        items = ApplyRadiusFilter(items, latitude, longitude, filters);
 
         return items
             .OrderBy(x => x.Latitude.HasValue && x.Longitude.HasValue ? 0 : 1)
@@ -619,6 +696,41 @@ public class PublicationService(
                 : double.MaxValue)
             .ThenByDescending(x => x.Featured)
             .ThenByDescending(x => x.CreatedAtUtc);
+    }
+
+    private static IQueryable<Publication> ApplyRadiusFilter(
+        IQueryable<Publication> items,
+        double referenceLatitude,
+        double referenceLongitude,
+        PublicationSearchFilters? filters)
+    {
+        if (filters?.RadiusKm is not int radiusKm || radiusKm <= 0)
+        {
+            return items;
+        }
+
+        const double kmPerDegree = 111.32d;
+        var latitudeDelta = radiusKm / kmPerDegree;
+        var longitudeScale = Math.Max(Math.Abs(Math.Cos(referenceLatitude * Math.PI / 180d)), 0.01d);
+        var longitudeDelta = radiusKm / (kmPerDegree * longitudeScale);
+
+        return items.Where(x =>
+            x.Latitude.HasValue
+            && x.Longitude.HasValue
+            && Math.Abs((x.Latitude ?? 0d) - referenceLatitude) <= latitudeDelta
+            && Math.Abs((x.Longitude ?? 0d) - referenceLongitude) <= longitudeDelta
+            && ((((x.Latitude ?? 0d) - referenceLatitude) / latitudeDelta) * (((x.Latitude ?? 0d) - referenceLatitude) / latitudeDelta)
+                + (((x.Longitude ?? 0d) - referenceLongitude) / longitudeDelta) * (((x.Longitude ?? 0d) - referenceLongitude) / longitudeDelta)) <= 1d);
+    }
+
+    private static IQueryable<Publication> ApplyDebugVisibility(IQueryable<Publication> items, bool includeDebug)
+    {
+        if (includeDebug)
+        {
+            return items;
+        }
+
+        return items.Where(x => x.UserId == null || x.User == null || !x.User.IsDebugUser);
     }
 
     private IQueryable<Publication> ApplySearchFilters(IQueryable<Publication> items, PublicationSearchFilters? filters)
@@ -633,9 +745,41 @@ public class PublicationService(
             items = items.Where(x => x.Price >= priceFrom);
         }
 
+        if (!string.IsNullOrWhiteSpace(filters.Operation))
+        {
+            var operation = PublicationOperationTypeExtensions.ParseOrNull(filters.Operation.Trim());
+            items = operation is null
+                ? items.Where(_ => false)
+                : items.Where(x => x.OperationType == operation.Value);
+        }
+
+        if (filters.CategoryId is int categoryId && categoryId > 0)
+        {
+            items = items.Where(x => x.CategoryId == categoryId);
+        }
+
         if (filters.PriceTo is decimal priceTo)
         {
             items = items.Where(x => x.Price <= priceTo);
+        }
+
+        if (filters.North.HasValue && filters.South.HasValue && filters.East.HasValue && filters.West.HasValue)
+        {
+            var north = Math.Max(filters.North.Value, filters.South.Value);
+            var south = Math.Min(filters.North.Value, filters.South.Value);
+            var east = filters.East.Value;
+            var west = filters.West.Value;
+
+            items = items.Where(x =>
+                !x.HideFromMap
+                && x.Latitude.HasValue
+                && x.Longitude.HasValue
+                && x.Latitude.Value <= north
+                && x.Latitude.Value >= south);
+
+            items = west <= east
+                ? items.Where(x => x.Longitude!.Value >= west && x.Longitude.Value <= east)
+                : items.Where(x => x.Longitude!.Value >= west || x.Longitude.Value <= east);
         }
 
         foreach (var fieldFilter in filters.FieldFilters)
@@ -745,7 +889,6 @@ public class PublicationService(
 
         var candidates = new PublicationDynamicFieldInput?[]
         {
-            CreateText("operacion", input.Operation),
             CreateText("zona", input.Zone),
             CreateNumber("superficie_total_m2", input.TotalAreaM2),
             CreateNumber("superficie_cubierta_m2", input.CoveredAreaM2),
@@ -836,6 +979,13 @@ public class PublicationService(
     private static string? NormalizeValueText(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static List<string> SplitOperationOptions(string? optionsCsv)
+    {
+        return string.IsNullOrWhiteSpace(optionsCsv)
+            ? []
+            : optionsCsv.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
     }
 
 }

@@ -4,43 +4,35 @@
     ViewData["Title"] = "Mensajes";
 }
 
-@if (string.IsNullOrWhiteSpace(Model.ChatBaseUrl))
-{
-    <section class="empty-state">
-        <h1>Chat no disponible</h1>
-        <p>Configura la URL del servicio de chat para usar la bandeja de mensajes.</p>
-    </section>
-}
-else
-{
-    <section class="chat-shell"
-             data-chat-page
-             data-chat-base-url="@Model.ChatBaseUrl"
-             data-initial-conversation-id="@(Model.Id?.ToString() ?? string.Empty)">
-        <aside class="chat-sidebar">
-            <div class="chat-sidebar-header">
-                <div>
-                    <span class="eyebrow">Mensajes</span>
-                    <h1>Conversaciones</h1>
-                </div>
-                <span class="chat-sidebar-count">...</span>
+<section class="chat-shell"
+         data-chat-page
+         data-chat-base-url="@Model.ChatBaseUrl"
+         data-chat-api-base-url="@Model.ChatApiBaseUrl"
+         data-chat-hub-url="@Model.ChatHubUrl"
+         data-initial-conversation-id="@(Model.Id?.ToString() ?? string.Empty)">
+    <aside class="chat-sidebar">
+        <div class="chat-sidebar-header">
+            <div>
+                <span class="eyebrow">Mensajes</span>
+                <h1>Conversaciones</h1>
             </div>
-            <div class="empty-state compact-empty">
-                <h3>Cargando conversaciones...</h3>
-                <p>Estamos consultando el servicio de chat.</p>
-            </div>
-        </aside>
+            <span class="chat-sidebar-count">...</span>
+        </div>
+        <div class="empty-state compact-empty">
+            <h3>Cargando conversaciones...</h3>
+            <p>Estamos consultando el servicio de chat.</p>
+        </div>
+    </aside>
 
-        <section class="chat-thread">
-            <div class="empty-state chat-empty-thread">
-                <div>
-                    <h2>Cargando conversacion</h2>
-                    <p>Espera un momento mientras preparamos la bandeja.</p>
-                </div>
+    <section class="chat-thread">
+        <div class="empty-state chat-empty-thread">
+            <div>
+                <h2>Cargando conversacion</h2>
+                <p>Espera un momento mientras preparamos la bandeja.</p>
             </div>
-        </section>
+        </div>
     </section>
-}
+</section>
 
 @section Scripts {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>

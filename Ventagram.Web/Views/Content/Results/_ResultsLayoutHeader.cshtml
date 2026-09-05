@@ -1,0 +1,52 @@
+@model ResultsLayoutViewModel
+@{
+    var results = Model.Results;
+}
+
+<section class="gallery-shell" data-browse-scroll-target>
+    <div class="gallery-header">
+        <div>
+            <span class="gallery-kicker">@Model.ViewLabel</span>
+            @if (string.IsNullOrWhiteSpace(results.UserLocalityLabel))
+            {
+                <h2 class="results-locality-heading">
+                    <span>@Model.CurrentGroup destacados</span>
+                    @if (Model.ShowLocalityPicker)
+                    {
+                        <button type="button" class="ghost-pill compact locality-chip-button" data-open-locality-picker="true" data-locality-label="">Elegir localidad</button>
+                    }
+                </h2>
+            }
+            else
+            {
+                <h2 class="results-locality-heading">
+                    <span>@Model.CurrentGroup cerca de</span>
+                    @if (Model.ShowLocalityPicker)
+                    {
+                        <button type="button" class="ghost-pill compact locality-chip-button" data-open-locality-picker="true" data-locality-label="@results.UserLocalityLabel">@results.UserLocalityLabel</button>
+                    }
+                </h2>
+            }
+        </div>
+        @if (Model.ShowOpenModeSelector)
+        {
+            <div class="results-open-mode-slot">
+                <label class="results-open-mode" aria-label="Abrir anuncios">
+                    <span class="results-open-mode-label">Abrir anuncios</span>
+                    <select class="results-open-mode-select" data-publication-open-mode>
+                        <option value="popup">Popup</option>
+                        <option value="page">Pestaña naveg.</option>
+                    </select>
+                </label>
+            </div>
+        }
+        @if (Model.ShowViewSwitch)
+        {
+            <div class="gallery-view-switch @(Model.CurrentMode == "Mapa" ? "map-view-switch" : string.Empty)" aria-label="Cambiar vista">
+                <a class="view-pill @(Model.CurrentMode == "Texto" ? "active" : "")" href="@Model.TextViewUrl">Clasificados</a>
+                <a class="view-pill @(Model.CurrentMode == "Galeria" ? "active" : "")" href="@Model.GalleryViewUrl">Galeria</a>
+                <a class="view-pill @(Model.CurrentMode == "Mapa" ? "active" : "")" href="@Model.MapViewUrl">Mapa</a>
+            </div>
+        }
+    </div>
+</section>

@@ -1,20 +1,485 @@
 ﻿(() => {
   let ventagramFlashMessage = "";
   let mapLibreSdkPromise = null;
+  let mapWarmupPromise = null;
   let openPublicationPreview = null;
   let mapSelectionLayoutObserver = null;
   let mapSelectionLayoutResizeHandler = null;
+  let systemLoadingCounter = 0;
+  let systemLoadingDelayTimer = null;
+  const systemLoadingStorageKey = "ventagram:system-loading";
+  let suppressNextBeforeUnloadSystemLoading = false;
+  const lastClickedGalleryPublicationStorageKey = "ventagram:last-clicked-gallery-publication";
+  const pendingAuthActionStorageKey = "ventagram:pending-auth-action";
   const favoriteLastListStorageKey = "ventagram:last-favorite-list-id";
   const likedPublicationsStorageKey = "ventagram:liked-publications";
+  const publicationOpenModeStorageKey = "ventagram:publication-open-mode";
   const NAVIGATION_LOCALITY_COOKIE = "ventagram_nav_locality_id";
+  const HEADER_PUBLICATION_GROUPS_COOKIE = "ventagram_header_groups";
+  const MEDIA_PRELOAD_CONFIG = {
+    mobilePreloadAds: 10,
+    desktopPreloadRows: 5,
+    galleryInitialItems: 2,
+    maxConcurrentVideoPreloads: 3
+  };
   const chatConfig = window.__VENTAGRAM_CHAT_CONFIG || {};
   const supportedMapBounds = [[-73.6, -56.5], [-52.0, -19.0]];
   const supportedMapCenter = [-60.5, -31.5];
+  const MAP_ZOOM_OUT_FACTOR = 0.8;
+  const defaultGeocodingSearchUrlTemplate = "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&countrycodes=ar,uy,py&q={query}";
+  const defaultReverseGeocodingUrlTemplate = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&lat={lat}&lon={lng}";
+  const detailDebugEnabled = window.location.hostname === "localhost"
+    || window.location.hostname === "127.0.0.1"
+    || window.location.search.includes("debugDetail=1");
+
+  function detailDebugLog(label, data) {
+    if (!detailDebugEnabled) return;
+    if (typeof data === "undefined") {
+      console.log(`[ventagram-detail] ${label}`);
+      return;
+    }
+    console.log(`[ventagram-detail] ${label}`, data);
+  }
+
+  function syncPreviewOpenState() {
+    const hasOpenOverlay = Boolean(document.querySelector(".preview-overlay.is-open"));
+    document.body.classList.toggle("preview-open", hasOpenOverlay);
+  }
+
+  class MediaPreloadService {
+    constructor(config) {
+      this.config = config;
+      this.preloadedImageUrls = new Set();
+      this.preparedVideoUrls = new Set();
+      this.inflightImageUrls = new Set();
+      this.inflightVideoUrls = new Set();
+      this.videoQueue = [];
+      this.activeVideoPreloads = 0;
+      this.galleryDeferredWarmups = new WeakSet();
+      this.feedStates = new WeakMap();
+      this.refreshFeedPreloads = this.throttle(this.refreshFeedPreloads.bind(this), 140);
+    }
+
+    bindFeed(feed, rail) {
+      if (!feed || !rail) return;
+      if (this.feedStates.has(feed)) {
+        this.refreshFeedPreloads(feed);
+        return;
+      }
+
+      const refresh = () => this.refreshFeedPreloads(feed);
+      const state = {
+        rail,
+        observer: null,
+        resizeObserver: null,
+        mutationObserver: null
+      };
+
+      if ("IntersectionObserver" in window) {
+        state.observer = new IntersectionObserver(entries => {
+          if (entries.some(entry => entry.isIntersecting)) {
+            refresh();
+          }
+        }, {
+          root: null,
+          rootMargin: "600px 0px",
+          threshold: 0
+        });
+        state.observer.observe(feed);
+      }
+
+      if ("ResizeObserver" in window) {
+        state.resizeObserver = new ResizeObserver(refresh);
+        state.resizeObserver.observe(rail);
+      } else {
+        window.addEventListener("resize", refresh, { passive: true });
+      }
+
+      if ("MutationObserver" in window) {
+        state.mutationObserver = new MutationObserver(refresh);
+        state.mutationObserver.observe(rail, {
+          childList: true,
+          subtree: true
+        });
+      }
+
+      window.addEventListener("scroll", refresh, { passive: true });
+      this.feedStates.set(feed, state);
+      refresh();
+    }
+
+    refreshFeedPreloads(feed) {
+      const state = this.feedStates.get(feed);
+      const rail = state?.rail || feed?.querySelector(".gallery-rail");
+      if (!feed || !rail) return;
+
+      const cards = Array.from(rail.querySelectorAll(".listing-card .card-image-wrap"));
+      if (!cards.length) return;
+
+      const firstVisibleIndex = this.findFirstVisibleIndex(cards);
+      const upcomingCards = this.selectUpcomingCards(cards, firstVisibleIndex, rail);
+      upcomingCards.forEach(card => this.preloadCardPrimaryMedia(card));
+    }
+
+    preloadCardPrimaryMedia(card) {
+      if (!card) return;
+
+      const videoUrl = String(card.dataset.videoUrl || "").trim();
+      if (videoUrl) {
+        this.prepareVideo(videoUrl, { preload: "auto" });
+        return;
+      }
+
+      const images = this.parseCardImages(card);
+      if (images.length) {
+        this.preloadImage(images[0]);
+      }
+    }
+
+    primeCardNavigation(card) {
+      if (!card) return;
+
+      const images = this.parseCardImages(card);
+      if (images.length <= 1) return;
+
+      const currentSource = card.querySelector(".gallery-carousel-image")?.currentSrc
+        || card.querySelector(".gallery-carousel-image")?.src
+        || "";
+      const currentIndex = Math.max(0, images.findIndex(src => src === currentSource));
+      const nextIndexes = Array.from(new Set([
+        (currentIndex + 1) % images.length,
+        (currentIndex - 1 + images.length) % images.length
+      ]));
+
+      nextIndexes.forEach(index => {
+        const src = images[index];
+        if (src && src !== currentSource) {
+          this.preloadImage(src);
+        }
+      });
+    }
+
+    prepareDetailGallery(gallery) {
+      if (!gallery) return;
+      const items = this.getDetailGalleryItems(gallery);
+      items.slice(0, this.config.galleryInitialItems).forEach(item => this.preloadDetailItem(item));
+    }
+
+    warmRemainingDetailGallery(gallery) {
+      if (!gallery || this.galleryDeferredWarmups.has(gallery)) return;
+      this.galleryDeferredWarmups.add(gallery);
+      const items = this.getDetailGalleryItems(gallery);
+      items.slice(this.config.galleryInitialItems).forEach(item => this.preloadDetailItem(item));
+    }
+
+    preloadDetailItem(item) {
+      if (!item) return;
+
+      const type = String(item.getAttribute("data-detail-media-type") || "image").toLowerCase();
+      const src = String(item.getAttribute("data-detail-media-src") || item.getAttribute("src") || "").trim();
+      if (!src) return;
+
+      if (type === "video") {
+        this.prepareVideo(src, { preload: "auto" });
+      } else {
+        this.preloadImage(src);
+      }
+    }
+
+    prepareVideo(src, options = {}) {
+      const normalizedSrc = String(src || "").trim();
+      if (!normalizedSrc || this.preparedVideoUrls.has(normalizedSrc) || this.inflightVideoUrls.has(normalizedSrc)) {
+        return;
+      }
+
+      this.videoQueue.push({
+        src: normalizedSrc,
+        preload: options.preload || "auto",
+        poster: String(options.poster || "").trim()
+      });
+      this.flushVideoQueue();
+    }
+
+    flushVideoQueue() {
+      while (this.activeVideoPreloads < this.config.maxConcurrentVideoPreloads && this.videoQueue.length) {
+        const next = this.videoQueue.shift();
+        if (!next || this.preparedVideoUrls.has(next.src) || this.inflightVideoUrls.has(next.src)) {
+          continue;
+        }
+
+        this.inflightVideoUrls.add(next.src);
+        this.activeVideoPreloads += 1;
+
+        const video = document.createElement("video");
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = next.preload;
+        if (next.poster) {
+          video.poster = next.poster;
+        }
+
+        const finish = succeeded => {
+          video.removeAttribute("src");
+          video.load?.();
+          if (succeeded) {
+            this.preparedVideoUrls.add(next.src);
+          }
+          this.inflightVideoUrls.delete(next.src);
+          this.activeVideoPreloads = Math.max(0, this.activeVideoPreloads - 1);
+          this.flushVideoQueue();
+        };
+
+        video.addEventListener("loadedmetadata", () => finish(true), { once: true });
+        video.addEventListener("canplay", () => finish(true), { once: true });
+        video.addEventListener("error", () => finish(false), { once: true });
+        video.src = next.src;
+        video.load?.();
+      }
+    }
+
+    preloadImage(src) {
+      const normalizedSrc = String(src || "").trim();
+      if (!normalizedSrc || this.preloadedImageUrls.has(normalizedSrc) || this.inflightImageUrls.has(normalizedSrc)) {
+        return;
+      }
+
+      this.inflightImageUrls.add(normalizedSrc);
+      const image = new Image();
+      image.decoding = "async";
+      image.loading = "eager";
+
+      const clear = succeeded => {
+        if (succeeded) {
+          this.preloadedImageUrls.add(normalizedSrc);
+        }
+        this.inflightImageUrls.delete(normalizedSrc);
+      };
+
+      image.onload = () => clear(true);
+      image.onerror = () => clear(false);
+      image.src = normalizedSrc;
+    }
+
+    selectUpcomingCards(cards, firstVisibleIndex, rail) {
+      if (!cards.length) return [];
+
+      if (isMobileGalleryAutoplayContext()) {
+        return cards.slice(firstVisibleIndex + 1, firstVisibleIndex + 1 + this.config.mobilePreloadAds);
+      }
+
+      const columns = Math.max(1, getGalleryColumnCount(rail));
+      const totalCards = columns * this.config.desktopPreloadRows;
+      return cards.slice(firstVisibleIndex + columns, firstVisibleIndex + columns + totalCards);
+    }
+
+    findFirstVisibleIndex(cards) {
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+      const index = cards.findIndex(card => {
+        const rect = card.getBoundingClientRect();
+        return rect.bottom > 0
+          && rect.right > 0
+          && rect.top < viewportHeight
+          && rect.left < viewportWidth;
+      });
+
+      return index >= 0 ? index : 0;
+    }
+
+    parseCardImages(card) {
+      return String(card?.dataset.images || "")
+        .split("|||")
+        .map(src => src.trim())
+        .filter(Boolean);
+    }
+
+    getDetailGalleryItems(gallery) {
+      return Array.from(gallery.querySelectorAll("[data-detail-media-item='true']"));
+    }
+
+    throttle(callback, waitMs) {
+      let lastCallAt = 0;
+      let timerId = null;
+      return (...args) => {
+        const now = Date.now();
+        const remaining = waitMs - (now - lastCallAt);
+        if (remaining <= 0) {
+          lastCallAt = now;
+          callback(...args);
+          return;
+        }
+
+        window.clearTimeout(timerId);
+        timerId = window.setTimeout(() => {
+          lastCallAt = Date.now();
+          callback(...args);
+        }, remaining);
+      };
+    }
+  }
+
+  const mediaPreloadService = new MediaPreloadService(MEDIA_PRELOAD_CONFIG);
+
+  function zoomOutLevel(zoom) {
+    return Number((Number(zoom || 0) * MAP_ZOOM_OUT_FACTOR).toFixed(2));
+  }
+
+  function normalizePublicationOpenMode(value) {
+    return String(value || "").trim().toLowerCase() === "page" ? "page" : "popup";
+  }
+
+  function getPublicationOpenMode() {
+    try {
+      return normalizePublicationOpenMode(localStorage.getItem(publicationOpenModeStorageKey));
+    } catch {
+      return "popup";
+    }
+  }
+
+  function setPublicationOpenMode(mode) {
+    const normalized = normalizePublicationOpenMode(mode);
+
+    try {
+      localStorage.setItem(publicationOpenModeStorageKey, normalized);
+    } catch {
+    }
+
+    if (document.body) {
+      document.body.dataset.publicationOpenMode = normalized;
+    }
+
+    document.querySelectorAll("[data-publication-open-mode]").forEach(control => {
+      if (control.value !== normalized) {
+        control.value = normalized;
+      }
+    });
+
+    return normalized;
+  }
+
+  function wirePublicationOpenModePreference(root = document) {
+    if (!document.body) return;
+
+    setPublicationOpenMode(getPublicationOpenMode());
+
+    if (document.body.dataset.publicationOpenModeBound === "true") return;
+
+    document.body.dataset.publicationOpenModeBound = "true";
+
+    root.addEventListener("change", event => {
+      const control = event.target.closest?.("[data-publication-open-mode]");
+      if (!control) return;
+      setPublicationOpenMode(control.value);
+    });
+
+    const synchronizeAddedControls = new MutationObserver(records => {
+      const hasOpenModeControl = records.some(record =>
+        Array.from(record.addedNodes).some(node =>
+          node instanceof Element
+          && (node.matches("[data-publication-open-mode]")
+            || node.querySelector("[data-publication-open-mode]"))
+        )
+      );
+
+      if (hasOpenModeControl) {
+        setPublicationOpenMode(getPublicationOpenMode());
+      }
+    });
+
+    synchronizeAddedControls.observe(document.body, { childList: true, subtree: true });
+  }
+
+  function buildPublicationPageUrl(rawValue) {
+    const value = String(rawValue || "").trim();
+    if (!value) return "";
+
+    try {
+      const url = new URL(value, window.location.origin);
+      if (url.pathname.startsWith("/api/content/details/")) {
+        url.pathname = url.pathname.replace("/api/content/details/", "/Publications/Details/");
+      }
+
+      if (url.pathname.startsWith("/Publications/Details/") && !url.hash) {
+        url.hash = "publication-start";
+      }
+
+      return url.origin === window.location.origin
+        ? `${url.pathname}${url.search}${url.hash}`
+        : url.toString();
+    } catch {
+      if (value.startsWith("/api/content/details/")) {
+        return `${value.replace("/api/content/details/", "/Publications/Details/")}#publication-start`;
+      }
+
+      if (value.startsWith("/Publications/Details/") && !value.includes("#")) {
+        return `${value}#publication-start`;
+      }
+
+      return value;
+    }
+  }
+
+  function getPublicationPageUrl(trigger) {
+    if (!trigger) return "";
+
+    const href = trigger.getAttribute?.("href") || "";
+    if (href && !href.startsWith("/api/content/details/")) {
+      return buildPublicationPageUrl(href);
+    }
+
+    const publicUrl = trigger.getAttribute?.("data-public-url") || "";
+    if (publicUrl) {
+      return buildPublicationPageUrl(publicUrl);
+    }
+
+    const detailsUrl = trigger.getAttribute?.("data-details-url") || href;
+    return buildPublicationPageUrl(detailsUrl);
+  }
+
+  function getDebugQuerySuffix() {
+    return window.location.search.includes("debug=1") ? "?debug=1" : "";
+  }
+
+  function buildPublicationApiDetailsUrl(publicationId) {
+    const normalizedId = String(publicationId || "").trim();
+    if (!normalizedId) return "";
+    return `/api/content/details/${normalizedId}${getDebugQuerySuffix()}`;
+  }
+
+  function addCompactAttributionControl(instance, sdk) {
+    if (!instance || !sdk?.AttributionControl) return;
+    instance.addControl(new sdk.AttributionControl({ compact: true }), "bottom-right");
+  }
+
+  async function detailDebugMeasure(label, callback, extra = undefined) {
+    const start = performance.now();
+    detailDebugLog(`${label}:start`, extra);
+    try {
+      const result = await callback();
+      detailDebugLog(`${label}:done`, {
+        ms: Number((performance.now() - start).toFixed(1)),
+        ...extra
+      });
+      return result;
+    } catch (error) {
+      detailDebugLog(`${label}:error`, {
+        ms: Number((performance.now() - start).toFixed(1)),
+        error: error?.message || String(error),
+        ...extra
+      });
+      throw error;
+    }
+  }
 
   document.addEventListener("DOMContentLoaded", async () => {
+    wireSystemNavigationLoading();
+    wirePublicationOpenModePreference(document);
+    scheduleMapWarmup();
     wirePhoneMasks(document);
-    wireHeaderLocality(document);
-    wireRegisterLocalityDetection(document);
+    wireHeaderGroupPreferences(document);
+    wireGuestLocalityPrompt(document);
+    wireRegisterAccountType(document);
+    wireHybridLocalityPicker(document);
     wireReportModal();
     wireAuthRequiredModal();
     wireSuggestionModal();
@@ -24,46 +489,452 @@
     wireFavoriteModal();
     wireFavoriteListModal();
     wireFavoriteActions(document);
+    wireChatExperience(document);
+    wireDynamicGalleryCards();
+    initStaticGalleryFeeds(document);
     initFavoritesPage();
     await initRealtimeChat();
     await loadApiPage();
+    setupMapSelectionLayoutSync(document);
+    await initContentMaps();
+    await resumePendingAuthAction();
+    clearPersistedSystemLoading();
+    forceHideSystemLoading();
   });
+
+  function scheduleMapWarmup() {
+    window.setTimeout(() => {
+      warmupMapAssets().catch(error => {
+        detailDebugLog("warmupMapAssets:error", {
+          error: error?.message || String(error)
+        });
+      });
+    }, 0);
+  }
+
+  function getDefaultMapConfig() {
+    const body = document.body;
+    if (!body) return null;
+
+    const styleUrl = String(body.dataset.mapDefaultStyleUrl || "").trim();
+    const tilesUrlTemplate = String(body.dataset.mapDefaultTilesUrl || "").trim();
+    const attribution = String(body.dataset.mapDefaultAttribution || "").trim();
+    if (!styleUrl && !tilesUrlTemplate) return null;
+
+    return {
+      styleUrl,
+      tilesUrlTemplate,
+      attribution
+    };
+  }
+
+  async function warmupMapAssets() {
+    if (mapWarmupPromise) {
+      return mapWarmupPromise;
+    }
+
+    mapWarmupPromise = (async () => {
+      const config = getDefaultMapConfig();
+      if (!config) return;
+
+      const sdk = await loadMapLibreSdk();
+      if (!sdk?.Map) return;
+
+      const warmupHost = document.createElement("div");
+      warmupHost.setAttribute("aria-hidden", "true");
+      warmupHost.style.position = "fixed";
+      warmupHost.style.left = "-9999px";
+      warmupHost.style.top = "-9999px";
+      warmupHost.style.width = "256px";
+      warmupHost.style.height = "256px";
+      warmupHost.style.pointerEvents = "none";
+      warmupHost.style.opacity = "0";
+      document.body.appendChild(warmupHost);
+
+      let warmupMap = null;
+
+      try {
+        await detailDebugMeasure("mapWarmup:init", async () => {
+          warmupMap = new sdk.Map({
+            container: warmupHost,
+            style: buildMapStyle(config.styleUrl, config.tilesUrlTemplate, config.attribution),
+            center: supportedMapCenter,
+            zoom: 4.8,
+            maxBounds: supportedMapBounds,
+            interactive: false,
+            attributionControl: false,
+            fadeDuration: 0
+          });
+
+          await new Promise(resolve => {
+            let settled = false;
+            const finish = () => {
+              if (settled) return;
+              settled = true;
+              resolve();
+            };
+
+            warmupMap.once("idle", finish);
+            warmupMap.once("load", () => {
+              window.setTimeout(finish, 250);
+            });
+            window.setTimeout(finish, 2500);
+          });
+        });
+      } finally {
+        try {
+          warmupMap?.remove?.();
+        } catch {
+          // Ignore cleanup failures.
+        }
+        warmupHost.remove();
+      }
+    })();
+
+    return mapWarmupPromise;
+  }
+
+  function getCurrentReturnUrl() {
+    return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  }
+
+  function writePendingAuthAction(action) {
+    try {
+      if (!action || !action.type) {
+        sessionStorage.removeItem(pendingAuthActionStorageKey);
+        return;
+      }
+
+      sessionStorage.setItem(pendingAuthActionStorageKey, JSON.stringify({
+        ...action,
+        createdAt: Date.now(),
+        returnUrl: action.returnUrl || getCurrentReturnUrl()
+      }));
+    } catch {
+      // Ignore storage failures.
+    }
+  }
+
+  function readPendingAuthAction() {
+    try {
+      const raw = sessionStorage.getItem(pendingAuthActionStorageKey);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || !parsed.type) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  function clearPendingAuthAction() {
+    try {
+      sessionStorage.removeItem(pendingAuthActionStorageKey);
+    } catch {
+      // Ignore storage failures.
+    }
+  }
+
+  async function resumePendingAuthAction() {
+    if (document.body?.dataset.userAuthenticated !== "true") return;
+
+    const action = readPendingAuthAction();
+    if (!action) return;
+
+    if (action.returnUrl && action.returnUrl !== getCurrentReturnUrl()) {
+      return;
+    }
+
+    clearPendingAuthAction();
+
+    if (action.type === "report") {
+      openReportModalFromAction(action);
+      return;
+    }
+
+    if (action.type === "favorite-toggle") {
+      await openFavoriteModalByPayload(action);
+    }
+  }
 
   async function loadApiPage() {
     const host = document.getElementById("api-page");
     if (!host) return;
+    const loadingTicket = beginSystemLoading();
 
-    const response = await fetch(host.dataset.apiEndpoint, {
-      headers: { "X-Requested-With": "fetch" }
+    try {
+      const response = await fetch(host.dataset.apiEndpoint, {
+        headers: { "X-Requested-With": "fetch" }
+      });
+
+      host.innerHTML = await response.text();
+      applyInitialViewportMapHeight(host);
+      wirePhoneMasks(host);
+      wireHeaderGroupPreferences(host);
+
+      if (ventagramFlashMessage) {
+        const banner = document.createElement("div");
+        banner.className = "status-banner";
+        banner.textContent = ventagramFlashMessage;
+        host.prepend(banner);
+        ventagramFlashMessage = "";
+      }
+
+      setupMapSelectionLayoutSync(host);
+
+      try {
+        await initContentMaps();
+      } catch (error) {
+        console.error(error);
+      }
+      await wireInfiniteGalleryFeeds(host);
+      wireGalleryCards();
+      wireGalleryActionMenus();
+      wireDynamicGalleryCards();
+      wireFavoriteActions(host);
+      wireReportForm();
+      wireCreateForm();
+      wireBrowseSearchFilters(host);
+      wireChatExperience(host);
+      scrollToRequestedAnchor(host);
+    } finally {
+      endSystemLoading(loadingTicket);
+    }
+  }
+
+  function beginSystemLoading() {
+    systemLoadingCounter += 1;
+    if (systemLoadingCounter === 1) {
+      window.clearTimeout(systemLoadingDelayTimer);
+      systemLoadingDelayTimer = window.setTimeout(() => {
+        if (systemLoadingCounter > 0) {
+          const overlay = document.getElementById("systemLoadingOverlay");
+          overlay?.removeAttribute("hidden");
+          document.body.classList.add("system-loading-active");
+        }
+      }, 220);
+    }
+
+    return Symbol("system-loading");
+  }
+
+  function endSystemLoading(_ticket) {
+    systemLoadingCounter = Math.max(0, systemLoadingCounter - 1);
+    if (systemLoadingCounter > 0) return;
+
+    window.clearTimeout(systemLoadingDelayTimer);
+    systemLoadingDelayTimer = null;
+    const overlay = document.getElementById("systemLoadingOverlay");
+    overlay?.setAttribute("hidden", "hidden");
+    document.body.classList.remove("system-loading-active");
+  }
+
+  function showSystemLoadingImmediately() {
+    const overlay = document.getElementById("systemLoadingOverlay");
+    overlay?.removeAttribute("hidden");
+    document.body.classList.add("system-loading-active");
+  }
+
+  function forceHideSystemLoading() {
+    systemLoadingCounter = 0;
+    window.clearTimeout(systemLoadingDelayTimer);
+    systemLoadingDelayTimer = null;
+    const overlay = document.getElementById("systemLoadingOverlay");
+    overlay?.setAttribute("hidden", "hidden");
+    document.body.classList.remove("system-loading-active");
+  }
+
+  function persistSystemLoading() {
+    try {
+      sessionStorage.setItem(systemLoadingStorageKey, "1");
+    } catch {
+      // Ignore storage failures.
+    }
+  }
+
+  function clearPersistedSystemLoading() {
+    try {
+      sessionStorage.removeItem(systemLoadingStorageKey);
+    } catch {
+      // Ignore storage failures.
+    }
+  }
+
+  function rememberLastClickedGalleryPublication(publicationId) {
+    const normalizedPublicationId = String(publicationId || "").trim();
+    if (!normalizedPublicationId) return;
+
+    try {
+      sessionStorage.setItem(lastClickedGalleryPublicationStorageKey, normalizedPublicationId);
+    } catch {
+      // Ignore storage failures.
+    }
+  }
+
+  function readLastClickedGalleryPublication() {
+    try {
+      return String(sessionStorage.getItem(lastClickedGalleryPublicationStorageKey) || "").trim();
+    } catch {
+      return "";
+    }
+  }
+
+  function syncLastClickedGalleryCard(root = document) {
+    const lastPublicationId = readLastClickedGalleryPublication();
+    const cards = root.matches?.(".listing-card[data-publication-id]")
+      ? [root]
+      : Array.from(root.querySelectorAll?.(".listing-card[data-publication-id]") || []);
+
+    cards.forEach(card => {
+      const isMatch = lastPublicationId && String(card.dataset.publicationId || "").trim() === lastPublicationId;
+      card.classList.toggle("is-last-clicked", Boolean(isMatch));
     });
+  }
 
-    host.innerHTML = await response.text();
-    wirePhoneMasks(host);
+  function shouldTrackNavigationLink(link) {
+    if (!link) return false;
+    if (link.hasAttribute("download")) return false;
+    if ((link.getAttribute("target") || "").trim() === "_blank") return false;
+    if ((link.getAttribute("rel") || "").includes("external")) return false;
+    if ((link.getAttribute("href") || "").startsWith("#")) return false;
 
-    if (ventagramFlashMessage) {
-      const banner = document.createElement("div");
-      banner.className = "status-banner";
-      banner.textContent = ventagramFlashMessage;
-      host.prepend(banner);
-      ventagramFlashMessage = "";
+    const href = link.href;
+    if (!href) return false;
+
+    try {
+      const url = new URL(href, window.location.href);
+      return url.origin === window.location.origin;
+    } catch {
+      return false;
+    }
+  }
+
+  function shouldSuppressSystemLoadingForLink(link) {
+    if (!link) return false;
+
+    const rawHref = String(link.getAttribute("href") || "").trim();
+    if (!rawHref) return false;
+
+    if (/^(mailto:|tel:|sms:|whatsapp:)/i.test(rawHref)) {
+      return true;
     }
 
     try {
-      await initContentMaps();
-    } catch (error) {
-      console.error(error);
+      const url = new URL(rawHref, window.location.href);
+      if (url.origin !== window.location.origin) {
+        return true;
+      }
+
+      return /(^|\.)wa\.me$/i.test(url.hostname);
+    } catch {
+      return false;
     }
-    await wireInfiniteGalleryFeeds(host);
-    wireGalleryCards();
-    wireGalleryActionMenus();
-    wireDynamicGalleryCards();
-    wireFavoriteActions(host);
-    wireReportForm();
-    wireCreateForm();
-    wireBrowseSearchFilters(host);
-    wireChatExperience(host);
-    setupMapSelectionLayoutSync(host);
-    scrollToSearchPanelIfRequested();
+  }
+
+  function isInlineLinkControl(target, link) {
+    if (!(target instanceof Element) || !link) return false;
+    if (link.classList?.contains("publication-preview-trigger")) return true;
+    if (link.matches?.("[data-auth-required-favorites='true']")) return true;
+    if (link.matches?.("[data-auth-required-login-trigger='true']")) return true;
+
+    const control = target.closest([
+      ".gallery-nav",
+      ".report-trigger",
+      ".favorite-toggle",
+      "[data-gallery-play-toggle='true']",
+      "[data-gallery-audio-toggle='true']",
+      "[data-gallery-menu-toggle='true']",
+      "[data-gallery-menu]",
+      ".upload-action"
+    ].join(","));
+
+    return Boolean(control && link.contains(control));
+  }
+
+  function opensLinkInSeparateContext(event, link) {
+    if (!link) return false;
+    if (event.defaultPrevented) return true;
+    if (event.button !== 0) return true;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return true;
+
+    const target = (link.getAttribute("target") || "").trim().toLowerCase();
+    if (target && target !== "_self") return true;
+
+    return false;
+  }
+
+  function wireSystemNavigationLoading() {
+    if (document.body?.dataset.systemLoadingBound === "true") return;
+    document.body.dataset.systemLoadingBound = "true";
+
+    document.addEventListener("click", event => {
+      const link = event.target.closest("a[href]");
+      suppressNextBeforeUnloadSystemLoading = shouldSuppressSystemLoadingForLink(link);
+      if (!shouldTrackNavigationLink(link)) return;
+      if (link?.dataset.skipSystemLoading === "true") return;
+      if (isInlineLinkControl(event.target, link)) return;
+      if (opensLinkInSeparateContext(event, link)) return;
+      suppressNextBeforeUnloadSystemLoading = false;
+      persistSystemLoading();
+      showSystemLoadingImmediately();
+    }, true);
+
+    document.addEventListener("submit", event => {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      if (event.defaultPrevented) return;
+      if (form.dataset.skipSystemLoading === "true") return;
+      persistSystemLoading();
+      showSystemLoadingImmediately();
+    });
+
+    window.addEventListener("beforeunload", () => {
+      if (suppressNextBeforeUnloadSystemLoading) {
+        suppressNextBeforeUnloadSystemLoading = false;
+        forceHideSystemLoading();
+        clearPersistedSystemLoading();
+        return;
+      }
+
+      persistSystemLoading();
+      showSystemLoadingImmediately();
+    });
+
+    window.addEventListener("pageshow", () => {
+      suppressNextBeforeUnloadSystemLoading = false;
+      clearPersistedSystemLoading();
+      forceHideSystemLoading();
+    });
+  }
+
+  function getViewportMapHeight() {
+    return Math.max(
+      420,
+      Math.floor(window.visualViewport?.height || window.innerHeight || 0)
+    );
+  }
+
+  function applyInitialViewportMapHeight(root = document) {
+    if (window.matchMedia("(max-width: 780px)").matches) return;
+
+    const layout = root.querySelector?.("[data-map-layout]");
+    const mapCanvas = layout?.querySelector(".map-canvas");
+    const sidebar = layout?.querySelector(".map-sidebar");
+    const panel = layout?.querySelector("[data-map-selection-panel]");
+    if (!layout || !mapCanvas || !panel) return;
+
+    const viewportHeight = getViewportMapHeight();
+    layout.style.setProperty("--map-desktop-shared-height", `${viewportHeight}px`);
+    mapCanvas.style.height = `${viewportHeight}px`;
+    mapCanvas.style.minHeight = `${viewportHeight}px`;
+    mapCanvas.style.maxHeight = `${viewportHeight}px`;
+    panel.style.height = `${viewportHeight}px`;
+    panel.style.minHeight = `${viewportHeight}px`;
+    panel.style.maxHeight = `${viewportHeight}px`;
+
+    if (sidebar) {
+      sidebar.style.minHeight = `${viewportHeight}px`;
+    }
   }
 
   function setupMapSelectionLayoutSync(root = document) {
@@ -94,16 +965,13 @@
         return;
       }
 
+      const viewportHeight = getViewportMapHeight();
       const contentHeight = Math.max(
         420,
         Math.ceil(panel.scrollHeight),
         Math.ceil(card?.scrollHeight || 0)
       );
-      const viewportMax = Math.max(
-        420,
-        Math.floor(window.innerHeight - 96)
-      );
-      const sharedHeight = Math.min(contentHeight, viewportMax, 720);
+      const sharedHeight = Math.max(viewportHeight, contentHeight);
 
       layout.style.setProperty("--map-desktop-shared-height", `${sharedHeight}px`);
       mapCanvas.style.height = `${sharedHeight}px`;
@@ -137,10 +1005,39 @@
     window.setTimeout(sync, 400);
   }
 
-  function scrollToSearchPanelIfRequested() {
-    if (window.location.hash !== "#search-panel") return;
+  function scrollToRequestedAnchor(root = document) {
+    const hash = window.location.hash;
+    let target = null;
 
-    const target = document.getElementById("search-panel");
+    if (!hash && /^\/Publications\/Details\/\d+$/i.test(window.location.pathname)) {
+      target = document.getElementById("publication-start");
+    } else if (hash === "#publication-start") {
+      target = document.getElementById("publication-start");
+    } else if (hash === "#search-panel") {
+      target = document.getElementById("search-panel");
+    } else if (hash === "#browse-results") {
+      const currentMode = new URLSearchParams(window.location.search).get("mode");
+      const normalizedMode = String(currentMode || "").trim().toLowerCase();
+      target = normalizedMode === "galeria"
+        ? document.getElementById("search-panel")
+        : root.querySelector?.("[data-browse-scroll-target]");
+    }
+
+    if (!target) return;
+
+    window.requestAnimationFrame(() => {
+      target.scrollIntoView({
+        behavior: hash === "#search-panel" || hash === "#browse-results" ? "smooth" : "auto",
+        block: "start"
+      });
+    });
+  }
+
+  function scrollMapIntoViewAfterRender(mapElement) {
+    if (window.location.hash !== "#browse-results") return;
+    const target =
+      mapElement?.closest?.("[data-browse-scroll-target]") ||
+      mapElement?.closest?.("[data-map-layout]");
     if (!target) return;
 
     window.requestAnimationFrame(() => {
@@ -155,7 +1052,7 @@
     const closeReport = () => {
       reportModal.hidden = true;
       reportModal.classList.remove("is-open");
-      document.body.classList.remove("preview-open");
+      syncPreviewOpenState();
     };
 
     reportModal.addEventListener("click", event => {
@@ -178,6 +1075,9 @@
 
       event.preventDefault();
       event.stopPropagation();
+      const publicationId = trigger.getAttribute("data-publication-id");
+      const publicationCode = trigger.getAttribute("data-publication-code");
+      const title = stripOpportunitySuffix(trigger.getAttribute("data-publication-title"));
 
       const reportModalAllowed = document.body?.dataset.reportModalAllowed === "true";
       const reportBlockMessage = String(document.body?.dataset.reportBlockMessage || "").trim();
@@ -188,7 +1088,13 @@
           title: "Debes iniciar sesión para denunciar",
           message: "Para denunciar una publicación debes ingresar con tu usuario.",
           showRegister: true,
-          showLogin: true
+          showLogin: true,
+          pendingAction: {
+            type: "report",
+            publicationId,
+            publicationCode,
+            publicationTitle: title || ""
+          }
         });
         return;
       }
@@ -203,25 +1109,36 @@
         return;
       }
 
-      const publicationId = trigger.getAttribute("data-publication-id");
-      const publicationCode = trigger.getAttribute("data-publication-code");
-      const title = stripOpportunitySuffix(trigger.getAttribute("data-publication-title"));
-      const idInput = reportModal.querySelector('input[name="publicationId"]');
-      const titleNode = reportModal.querySelector("#reportModalTitle");
-      const defaultReason = reportModal.querySelector('input[name="reason"]:checked')
-        || reportModal.querySelector('input[name="reason"]');
-
-      if (idInput) idInput.value = publicationId || "0";
-      if (titleNode) {
-        const titlePrefix = publicationCode ? `${publicationCode} · ` : "";
-        titleNode.textContent = title ? `${titlePrefix}Denunciar: ${title}` : "Selecciona un motivo";
-      }
-      if (defaultReason) defaultReason.checked = true;
-
-      reportModal.hidden = false;
-      reportModal.classList.add("is-open");
-      document.body.classList.add("preview-open");
+      openReportModalFromAction({
+        publicationId,
+        publicationCode,
+        publicationTitle: title || ""
+      });
     });
+  }
+
+  function openReportModalFromAction(action = {}) {
+    const reportModal = document.getElementById("reportModal");
+    if (!reportModal) return;
+
+    const publicationId = action.publicationId || "0";
+    const publicationCode = action.publicationCode || "";
+    const title = stripOpportunitySuffix(action.publicationTitle || "");
+    const idInput = reportModal.querySelector('input[name="publicationId"]');
+    const titleNode = reportModal.querySelector("#reportModalTitle");
+    const defaultReason = reportModal.querySelector('input[name="reason"]:checked')
+      || reportModal.querySelector('input[name="reason"]');
+
+    if (idInput) idInput.value = publicationId || "0";
+    if (titleNode) {
+      const titlePrefix = publicationCode ? `${publicationCode} · ` : "";
+      titleNode.textContent = title ? `${titlePrefix}Denunciar: ${title}` : "Selecciona un motivo";
+    }
+    if (defaultReason) defaultReason.checked = true;
+
+    reportModal.hidden = false;
+    reportModal.classList.add("is-open");
+    document.body.classList.add("preview-open");
   }
 
   function wireAuthRequiredModal() {
@@ -233,7 +1150,7 @@
     const close = () => {
       modal.hidden = true;
       modal.classList.remove("is-open");
-      document.body.classList.remove("preview-open");
+      syncPreviewOpenState();
     };
 
     modal.addEventListener("click", event => {
@@ -249,17 +1166,33 @@
       }
     });
 
-    document.querySelectorAll("[data-auth-required-favorites='true']").forEach(link => {
-      if (link.dataset.authRequiredBound === "true") return;
-      link.dataset.authRequiredBound = "true";
-      link.addEventListener("click", event => {
-        event.preventDefault();
-        showAuthRequiredModal({
-          title: "Debes iniciar sesión",
-          message: "Puedes crear listas de anuncios favoritos para hacer seguimiento solo con una cuenta registrada.",
-          showRegister: true,
-          showLogin: true
-        });
+    document.addEventListener("click", event => {
+      const link = event.target.closest("[data-auth-required-favorites='true']");
+      if (!link) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      showAuthRequiredModal({
+        title: "Debes iniciar sesión",
+        message: "Puedes crear listas de anuncios favoritos para hacer seguimiento solo con una cuenta registrada.",
+        showRegister: true,
+        showLogin: true,
+        desiredReturnUrl: link.getAttribute("href") || "/Favorites"
+      });
+    });
+
+    document.addEventListener("click", event => {
+      const link = event.target.closest("[data-auth-required-login-trigger='true']");
+      if (!link) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      showAuthRequiredModal({
+        title: "Iniciar sesión",
+        message: "Ingresa con tu cuenta para continuar.",
+        showRegister: true,
+        showLogin: true,
+        desiredReturnUrl: getCurrentReturnUrl()
       });
     });
   }
@@ -267,12 +1200,18 @@
   function showAuthRequiredModal(options = {}) {
     const modal = document.getElementById("authRequiredModal");
     if (!modal) return;
+    clearPersistedSystemLoading();
+    forceHideSystemLoading();
     const title = modal.querySelector("[data-auth-required-title]");
     const message = modal.querySelector("[data-auth-required-message]");
     const loginLink = modal.querySelector("[data-auth-required-login]");
     const registerLink = modal.querySelector("[data-auth-required-register]");
+    const loginForm = modal.querySelector("[data-auth-required-login-form]");
+    const loginShell = modal.querySelector(".auth-required-input-shell");
+    const returnUrlInput = modal.querySelector("[data-auth-required-return-url]");
     const actions = modal.querySelector("[data-auth-required-actions]");
     const loginUrl = document.body?.dataset.reportLoginUrl || "/Account/Login";
+    const loginSubmitUrl = options.loginSubmitUrl || "/Account/Login";
     const showLogin = options.showLogin !== false;
     const showRegister = options.showRegister !== false;
 
@@ -289,6 +1228,32 @@
       loginLink.setAttribute("href", options.loginUrl || loginUrl);
     }
 
+    if (loginForm) {
+      loginForm.hidden = !showLogin;
+      loginForm.setAttribute("action", loginSubmitUrl);
+    }
+
+    if (loginShell) {
+      loginShell.hidden = !showLogin;
+    }
+
+    if (returnUrlInput) {
+      const desiredReturnUrl = options.desiredReturnUrl;
+      const loginTarget = options.loginUrl || loginUrl;
+      const fallbackReturnUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+      if (desiredReturnUrl) {
+        returnUrlInput.value = desiredReturnUrl;
+      } else {
+        try {
+          const parsed = new URL(loginTarget, window.location.origin);
+          returnUrlInput.value = parsed.searchParams.get("returnUrl") || fallbackReturnUrl;
+        } catch {
+          returnUrlInput.value = fallbackReturnUrl;
+        }
+      }
+    }
+
     if (registerLink) {
       registerLink.hidden = !showRegister;
     }
@@ -296,6 +1261,8 @@
     if (actions) {
       actions.hidden = !showLogin && !showRegister;
     }
+
+    writePendingAuthAction(options.pendingAction || null);
 
     modal.hidden = false;
     modal.classList.add("is-open");
@@ -306,22 +1273,55 @@
     const modal = document.getElementById("suggestionModal");
     const form = document.getElementById("suggestionForm");
     if (!modal || !form) return;
-    if (modal.dataset.bound === "true") return;
-    modal.dataset.bound = "true";
 
-    const textarea = form.querySelector('textarea[name="message"]');
+    const titleNode = modal.querySelector(".modal-title");
+    const introNode = form.querySelector("[data-suggestion-intro]");
+    const labelNode = form.querySelector("[data-suggestion-label]");
+    const textarea = form.querySelector("[data-suggestion-textarea]");
+    const prefixInput = form.querySelector("[data-suggestion-prefix]");
     const feedback = form.querySelector("[data-suggestion-feedback]");
+    const defaultTitle = titleNode?.textContent || "Sugerencias para Ventagram";
+    const defaultIntro = introNode?.textContent || "A Ventagram lo mejoramos entre todos.";
+    const defaultLabel = labelNode?.textContent || "Tu sugerencia";
+    const defaultPlaceholder = textarea?.getAttribute("placeholder") || "Escribe aquí tu sugerencia para el sitio.";
+
+    const configureSuggestionModal = button => {
+      const title = String(button?.getAttribute("data-suggestion-title") || "").trim();
+      const intro = String(button?.getAttribute("data-suggestion-intro") || "").trim();
+      const label = String(button?.getAttribute("data-suggestion-label") || "").trim();
+      const placeholder = String(button?.getAttribute("data-suggestion-placeholder") || "").trim();
+      const prefix = String(button?.getAttribute("data-suggestion-prefix") || "").trim();
+
+      if (titleNode) {
+        titleNode.textContent = title || defaultTitle;
+      }
+      if (introNode) {
+        introNode.textContent = intro || defaultIntro;
+      }
+      if (labelNode) {
+        labelNode.textContent = label || defaultLabel;
+      }
+      if (textarea) {
+        textarea.setAttribute("placeholder", placeholder || defaultPlaceholder);
+      }
+      if (prefixInput) {
+        prefixInput.value = prefix;
+      }
+    };
 
     const close = () => {
       modal.hidden = true;
       modal.classList.remove("is-open");
-      document.body.classList.remove("preview-open");
+      syncPreviewOpenState();
       if (feedback) {
         feedback.hidden = true;
         feedback.className = "status-banner";
         feedback.textContent = "";
       }
     };
+
+    if (modal.dataset.bound === "true") return;
+    modal.dataset.bound = "true";
 
     modal.addEventListener("click", event => {
       const closeTrigger = event.target.closest("[data-suggestion-close='true']");
@@ -336,30 +1336,33 @@
       }
     });
 
-    document.querySelectorAll("[data-suggestion-open='true']").forEach(button => {
-      if (button.dataset.suggestionBound === "true") return;
-      button.dataset.suggestionBound = "true";
-      button.addEventListener("click", event => {
-        event.preventDefault();
-        if (textarea) {
-          textarea.value = "";
-        }
-        if (feedback) {
-          feedback.hidden = true;
-          feedback.className = "status-banner";
-          feedback.textContent = "";
-        }
-        modal.hidden = false;
-        modal.classList.add("is-open");
-        document.body.classList.add("preview-open");
-        textarea?.focus();
-      });
+    document.addEventListener("click", event => {
+      const button = event.target.closest("[data-suggestion-open='true']");
+      if (!button) {
+        return;
+      }
+
+      event.preventDefault();
+      configureSuggestionModal(button);
+      if (textarea) {
+        textarea.value = "";
+      }
+      if (feedback) {
+        feedback.hidden = true;
+        feedback.className = "status-banner";
+        feedback.textContent = "";
+      }
+      modal.hidden = false;
+      modal.classList.add("is-open");
+      document.body.classList.add("preview-open");
+      textarea?.focus();
     });
 
     form.addEventListener("submit", async event => {
       event.preventDefault();
 
       const message = String(textarea?.value || "").trim();
+      const prefix = String(prefixInput?.value || "").trim();
       if (!message) {
         if (feedback) {
           feedback.hidden = false;
@@ -381,7 +1384,7 @@
             "Content-Type": "application/json",
             "X-Requested-With": "fetch"
           },
-          body: JSON.stringify({ message })
+          body: JSON.stringify({ message: `${prefix}${message}` })
         });
 
         const payload = await response.json().catch(() => ({}));
@@ -462,26 +1465,77 @@
     });
   }
 
-  function wireHeaderLocality(root = document) {
-    const form = root.querySelector("[data-header-locality-form]");
-    if (!form || form.dataset.bound === "true") return;
+  function wireHeaderGroupPreferences(root = document) {
+    root.querySelectorAll("[data-header-group-preferences]").forEach(container => {
+      if (container.dataset.headerGroupPreferencesBound === "true") return;
+      container.dataset.headerGroupPreferencesBound = "true";
 
-    const input = form.querySelector("[data-header-locality-input]");
-    const status = form.querySelector("[data-header-locality-status]");
-    const current = form.querySelector("[data-header-locality-current]");
-    const detectButton = form.querySelector("[data-header-locality-detect]");
-    const datalist = root.getElementById("header-locality-options");
-    if (!input || !status || !current || !detectButton || !datalist) return;
+      const maxGroups = Math.max(1, Number(container.dataset.maxGroups || 5));
+      const options = Array.from(container.querySelectorAll("[data-header-group-option]"));
+      const status = container.querySelector("[data-header-group-status]");
 
-    form.dataset.bound = "true";
-    const options = Array.from(datalist.options).map(option => ({
-      id: Number(option.dataset.localityId || 0),
-      label: option.value || "",
-      locality: option.dataset.locality || "",
-      province: option.dataset.province || "",
-      latitude: Number(option.dataset.latitude),
-      longitude: Number(option.dataset.longitude)
-    }));
+      const sync = changedOption => {
+        const checked = options.filter(option => option.checked);
+        if (checked.length > maxGroups && changedOption) {
+          changedOption.checked = false;
+          if (status) {
+            status.textContent = `Puedes elegir hasta ${maxGroups} tipos.`;
+          }
+          return;
+        }
+
+        if (status) {
+          status.textContent = checked.length > 0
+            ? `${checked.length} de ${maxGroups} seleccionados.`
+            : "";
+        }
+      };
+
+      options.forEach(option => {
+        option.addEventListener("change", () => sync(option));
+      });
+      sync();
+    });
+  }
+
+  function wireGuestLocalityPrompt(root = document) {
+    const modal = root.getElementById("guestLocalityModal");
+    if (!modal) return;
+    let shouldForceOpenBrowseLocalityPrompt = false;
+
+    const syncBrowseLocalityPrompt = () => {
+      const browseRequiresLocality = Boolean(document.querySelector("[data-browse-locality-required='true']"));
+      if (!browseRequiresLocality) return;
+
+      modal.dataset.guestLocalityRequired = "true";
+      shouldForceOpenBrowseLocalityPrompt = true;
+    };
+
+    if (modal.dataset.bound === "true") {
+      syncBrowseLocalityPrompt();
+      return;
+    }
+
+    const form = modal.querySelector("[data-guest-locality-form]");
+    const input = modal.querySelector("[data-guest-locality-input]");
+    const hiddenId = modal.querySelector("[data-locality-id]");
+    const hiddenExternalId = modal.querySelector("[data-locality-external-id]");
+    const suggestions = modal.querySelector("[data-locality-suggestions]");
+    const suggestionsList = modal.querySelector("[data-locality-suggestions-list]");
+    const status = modal.querySelector("[data-guest-locality-status]");
+    const detectButton = modal.querySelector("[data-guest-locality-detect]");
+    const confirmButton = modal.querySelector("[data-guest-locality-confirm]");
+    const closeButtons = Array.from(modal.querySelectorAll("[data-guest-locality-close='true']"));
+    if (!form || !input || !hiddenId || !hiddenExternalId || !suggestions || !suggestionsList || !status || !detectButton || !confirmButton) return;
+
+    modal.dataset.bound = "true";
+    let pendingNavigationUrl = "";
+    let shouldPersistHeaderGroups = modal.dataset.guestLocalityRequired === "true";
+    let searchTimer = 0;
+    let requestVersion = 0;
+    let lastResults = [];
+    let lastQuery = "";
+    const options = getLocalityCatalogOptions(root);
 
     const setStatus = (message, isError = false) => {
       status.textContent = message;
@@ -489,35 +1543,222 @@
       status.classList.toggle("is-visible", Boolean(message));
     };
 
+    const hideSuggestions = () => {
+      suggestionsList.hidden = true;
+      suggestionsList.innerHTML = "";
+    };
+
+    const close = () => {
+      if (modal.dataset.guestLocalityRequired === "true") return;
+      modal.hidden = true;
+      modal.classList.remove("is-open");
+      syncPreviewOpenState();
+    };
+
+    const open = (sourceLabel, navigationUrl = "", persistHeaderGroups = false) => {
+      pendingNavigationUrl = String(navigationUrl || "").trim();
+      shouldPersistHeaderGroups = persistHeaderGroups || modal.dataset.guestLocalityRequired === "true";
+      input.value = String(sourceLabel || modal.dataset.currentLocalityLabel || "").trim();
+      const existing = options.find(option =>
+        normalizeLocalityText(option.label) === normalizeLocalityText(input.value)
+        || normalizeLocalityText(option.locality) === normalizeLocalityText(input.value));
+      if (existing) {
+        applySelection(existing);
+      } else {
+        input.dataset.selectedLabel = input.value;
+        hiddenId.value = "";
+        hiddenExternalId.value = "";
+      }
+      setStatus("");
+      hideSuggestions();
+      modal.hidden = false;
+      modal.classList.add("is-open");
+      document.body.classList.add("preview-open");
+      window.setTimeout(() => {
+        input.focus();
+        input.select();
+      }, 60);
+    };
+
+    const clearSelection = () => {
+      hiddenId.value = "";
+      hiddenExternalId.value = "";
+    };
+
+    const renderSuggestions = (results, includeExternalResults = false) => {
+      lastResults = Array.isArray(results) ? results : [];
+      suggestions.innerHTML = "";
+      suggestionsList.innerHTML = "";
+
+      lastResults.forEach(result => {
+        const option = document.createElement("option");
+        option.value = result.label || "";
+        option.dataset.localId = result.localId ? String(result.localId) : "";
+        option.dataset.externalId = result.externalId || "";
+        option.dataset.locality = result.locality || "";
+        option.dataset.province = result.province || "";
+        suggestions.appendChild(option);
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "guest-locality-suggestion";
+        button.dataset.localitySuggestion = "true";
+        button.dataset.label = result.label || "";
+        button.innerHTML = `
+          <strong>${escapeHtml(result.locality || result.label || "")}</strong>
+          <span>${escapeHtml(result.province || "")}</span>
+        `;
+        button.addEventListener("click", () => {
+          applySelection(result);
+          hideSuggestions();
+          setStatus(`Localidad seleccionada: ${result.label}.`);
+        });
+        suggestionsList.appendChild(button);
+      });
+
+      if (!includeExternalResults && lastQuery.length >= 2) {
+        const actionButton = document.createElement("button");
+        actionButton.type = "button";
+        actionButton.className = "guest-locality-suggestion guest-locality-suggestion-secondary";
+        actionButton.dataset.localitySuggestion = "external-search";
+        actionButton.innerHTML = `
+          <strong>No esta en la lista</strong>
+          <span>Buscar "${escapeHtml(lastQuery)}" en toda Argentina</span>
+        `;
+        actionButton.addEventListener("click", () => {
+          fetchSuggestions(lastQuery, true);
+        });
+        suggestionsList.appendChild(actionButton);
+      }
+
+      suggestionsList.hidden = suggestionsList.children.length === 0;
+    };
+
+    const applySelection = result => {
+      hiddenId.value = result?.localId ? String(result.localId) : "";
+      hiddenExternalId.value = result?.externalId || "";
+      input.value = result?.label || "";
+      input.dataset.selectedLabel = result?.label || "";
+      lastQuery = result?.locality || result?.label || lastQuery;
+    };
+
+    const matchResult = rawValue => {
+      const normalized = normalizeLocalityText(rawValue);
+      if (!normalized) return null;
+
+      return lastResults.find(option =>
+        normalizeLocalityText(option.label) === normalized
+        || normalizeLocalityText(option.locality) === normalized) || null;
+    };
+
+    const ensureSelectionMatchesInput = () => {
+      const selected = matchResult(input.value);
+      if (selected) {
+        applySelection(selected);
+        return selected;
+      }
+
+      const localSelected = options.find(option =>
+        normalizeLocalityText(option.label) === normalizeLocalityText(input.value)
+        || normalizeLocalityText(option.locality) === normalizeLocalityText(input.value));
+      if (localSelected) {
+        applySelection(localSelected);
+        return localSelected;
+      }
+
+      const selectedLabel = normalizeLocalityText(input.dataset.selectedLabel || "");
+      const typedLabel = normalizeLocalityText(input.value);
+      if (typedLabel && typedLabel === selectedLabel && (hiddenId.value || hiddenExternalId.value)) {
+        return {
+          localId: hiddenId.value ? Number(hiddenId.value) : null,
+          externalId: hiddenExternalId.value || null,
+          label: input.value
+        };
+      }
+
+      clearSelection();
+      return null;
+    };
+
+    const fetchSuggestions = async (query, includeExternalResults = false) => {
+      const currentVersion = ++requestVersion;
+      lastQuery = String(query || "").trim();
+
+      try {
+        const endpoint = includeExternalResults ? "/api/localities/search-external" : "/api/localities/search";
+        const response = await fetch(`${endpoint}?q=${encodeURIComponent(query)}`, {
+          headers: { "X-Requested-With": "XMLHttpRequest" }
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const payload = await response.json();
+        if (currentVersion !== requestVersion) return;
+
+        if (!includeExternalResults && Array.isArray(payload) && payload.length === 0) {
+          fetchSuggestions(query, true);
+          return;
+        }
+
+        renderSuggestions(payload, includeExternalResults);
+        if (includeExternalResults) {
+          setStatus(payload.length > 0
+            ? "Mostrando coincidencias de toda Argentina."
+            : "No encontramos esa localidad ni en la base externa.", payload.length === 0);
+        }
+      } catch (error) {
+        if (currentVersion !== requestVersion) return;
+        renderSuggestions([], includeExternalResults);
+        setStatus("No pudimos buscar localidades en este momento.", true);
+      }
+    };
+
     const applyLocality = locality => {
-      writeCookie(NAVIGATION_LOCALITY_COOKIE, String(locality.id), 365);
-      current.textContent = `Anuncios cerca de ${locality.label}`;
-      input.value = "";
-      setStatus(`Buscando cerca de ${locality.label}. Recargando resultados...`);
+      writeCookie(NAVIGATION_LOCALITY_COOKIE, String(locality.localId), 365);
+      if (shouldPersistHeaderGroups) {
+        const selectedHeaderGroups = Array.from(modal.querySelectorAll("[data-guest-header-group-option]:checked"))
+          .map(option => String(option.value || "").trim())
+          .filter(Boolean)
+          .slice(0, 5);
+        if (selectedHeaderGroups.length > 0
+          && selectedHeaderGroups.length < 4) {
+          const availableHeaderGroups = Array.from(modal.querySelectorAll("[data-guest-header-group-option]"))
+            .map(option => String(option.value || "").trim())
+            .filter(Boolean);
+          ["Generales", "Inmuebles"].forEach(group => {
+            if (selectedHeaderGroups.length >= 5) return;
+            if (!availableHeaderGroups.some(option => option.toLowerCase() === group.toLowerCase())) return;
+            if (selectedHeaderGroups.some(selected => selected.toLowerCase() === group.toLowerCase())) return;
+            selectedHeaderGroups.push(group);
+          });
+        }
+        if (selectedHeaderGroups.length > 0) {
+          writeCookie(HEADER_PUBLICATION_GROUPS_COOKIE, selectedHeaderGroups.join(","), 365);
+        } else {
+          eraseCookie(HEADER_PUBLICATION_GROUPS_COOKIE);
+        }
+      }
+      setStatus(`Mostrando anuncios cerca de ${locality.label}...`);
+      if (pendingNavigationUrl) {
+        window.location.href = pendingNavigationUrl;
+        return;
+      }
+
       window.location.reload();
     };
 
-    const applyMatchedLocality = () => {
-      const selected = matchHeaderLocality(options, input.value);
-      if (!selected) return false;
-      applyLocality(selected);
-      return true;
-    };
-
-    const detectNearestLocality = ({ silent = false } = {}) => {
+    const detectNearestLocality = () => {
       if (!navigator.geolocation) {
-        if (!silent) {
-          setStatus("Tu navegador no permite detectar ubicacion automaticamente.", true);
-        }
+        setStatus("Tu navegador no permite detectar ubicacion automaticamente.", true);
         return;
       }
 
       const originalLabel = detectButton.textContent;
       detectButton.disabled = true;
       detectButton.textContent = "Detectando...";
-      if (!silent) {
-        setStatus("Esperando permiso para acceder a tu ubicacion.");
-      }
+      setStatus("Esperando permiso para acceder a tu ubicacion.");
 
       navigator.geolocation.getCurrentPosition(position => {
         const nearest = findNearestLocalityFromCollection(options, position.coords.latitude, position.coords.longitude);
@@ -525,19 +1766,16 @@
         detectButton.textContent = originalLabel;
 
         if (!nearest) {
-          if (!silent) {
-            setStatus("No encontramos una localidad cercana en la lista disponible.", true);
-          }
+          setStatus("No encontramos una localidad cercana en la base local.", true);
           return;
         }
 
+        applySelection(nearest);
         applyLocality(nearest);
       }, error => {
         detectButton.disabled = false;
         detectButton.textContent = originalLabel;
-        if (!silent) {
-          setStatus(mapRegisterGeolocationError(error), true);
-        }
+        setStatus(mapRegisterGeolocationError(error), true);
       }, {
         enableHighAccuracy: true,
         timeout: 10000,
@@ -545,16 +1783,131 @@
       });
     };
 
-    detectButton.addEventListener("click", () => {
-      detectNearestLocality();
+    const confirmLocality = async () => {
+      const selected = ensureSelectionMatchesInput();
+      if (!selected) {
+        setStatus("Escribe una localidad valida de la lista para mostrar resultados cercanos.", true);
+        return;
+      }
+
+      confirmButton.disabled = true;
+      setStatus("Guardando localidad seleccionada...");
+
+      try {
+        const response = await fetch("/api/localities/resolve", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest"
+          },
+          body: JSON.stringify({
+            localId: selected.localId ?? null,
+            externalId: selected.externalId || null
+          })
+        });
+
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.error || "No se pudo validar la localidad.");
+        }
+
+        applySelection(payload);
+        applyLocality(payload);
+      } catch (error) {
+        setStatus(error?.message || "No se pudo validar la localidad elegida.", true);
+      } finally {
+        confirmButton.disabled = false;
+      }
+    };
+
+    input.addEventListener("input", () => {
+      if (normalizeLocalityText(input.value) !== normalizeLocalityText(input.dataset.selectedLabel || "")) {
+        clearSelection();
+      }
+
+      window.clearTimeout(searchTimer);
+
+      const query = input.value.trim();
+      lastQuery = query;
+      if (query.length < 2) {
+        renderSuggestions([]);
+        if (!query) {
+          setStatus("");
+        }
+        return;
+      }
+
+      searchTimer = window.setTimeout(() => {
+        fetchSuggestions(query);
+      }, 250);
+    });
+
+    input.addEventListener("change", () => {
+      const selected = ensureSelectionMatchesInput();
+      if (!selected) {
+        setStatus("Elige una localidad de la lista para continuar.", true);
+      }
+    });
+
+    input.addEventListener("blur", () => {
+      window.setTimeout(() => {
+        hideSuggestions();
+      }, 180);
+    });
+
+    input.addEventListener("focus", () => {
+      if (lastResults.length > 0) {
+        suggestionsList.hidden = false;
+      }
+    });
+
+    detectButton.addEventListener("click", detectNearestLocality);
+    confirmButton.addEventListener("click", confirmLocality);
+    closeButtons.forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        close();
+      });
+    });
+
+    document.addEventListener("click", event => {
+      const trigger = event.target.closest("[data-open-locality-picker='true']");
+      if (!trigger) return;
+      event.preventDefault();
+      open(trigger.getAttribute("data-locality-label"), "", false);
+    });
+
+    document.addEventListener("click", event => {
+      if (modal.dataset.guestLocalityRequired !== "true") return;
+
+      const link = event.target.closest("a[href]");
+      if (!link) return;
+
+      const href = link.getAttribute("href") || "";
+      if (!href.startsWith("/Buscar")) return;
+
+      event.preventDefault();
+      open("", link.href, true);
+    });
+
+    document.addEventListener("submit", event => {
+      if (modal.dataset.guestLocalityRequired !== "true") return;
+
+      const formElement = event.target;
+      if (!(formElement instanceof HTMLFormElement)) return;
+      if (!formElement.matches("[data-browse-search-form]")) return;
+
+      event.preventDefault();
+      const targetUrl = new URL(formElement.getAttribute("action") || window.location.pathname, window.location.origin);
+      const params = new URLSearchParams(new FormData(formElement));
+      targetUrl.search = params.toString();
+      open("", targetUrl.toString(), true);
     });
 
     input.addEventListener("keydown", event => {
       if (event.key !== "Enter") return;
       event.preventDefault();
-      if (!applyMatchedLocality()) {
-        setStatus("Escribe una localidad valida de la lista para usarla en las busquedas.", true);
-      }
+      confirmLocality();
     });
 
     input.addEventListener("input", () => {
@@ -563,73 +1916,374 @@
       status.textContent = "";
     });
 
-    input.addEventListener("change", () => {
-      applyMatchedLocality();
-    });
+    if (modal.dataset.guestLocalityRequired !== "true") {
+      close();
+    }
 
-    input.addEventListener("blur", () => {
-      applyMatchedLocality();
-    });
-
-    if (!readCookie(NAVIGATION_LOCALITY_COOKIE) && !input.value.trim() && navigator.permissions?.query) {
-      navigator.permissions.query({ name: "geolocation" }).then(result => {
-        if (result.state === "granted") {
-          detectNearestLocality({ silent: true });
-        }
-      }).catch(() => {});
+    syncBrowseLocalityPrompt();
+    if (shouldForceOpenBrowseLocalityPrompt && !modal.classList.contains("is-open")) {
+      open("", window.location.href, true);
     }
   }
 
   function wireRegisterLocalityDetection(root = document) {
-    const form = root.querySelector(".register-form");
-    if (!form || form.dataset.localityDetectionBound === "true") return;
+    wireHybridLocalityPicker(root);
+  }
 
-    const button = form.querySelector("[data-detect-locality]");
-    const select = form.querySelector("[data-register-locality-select]");
-    const status = form.querySelector("[data-register-locality-status]");
-    if (!button || !select || !status) return;
+  function wireAccountLocalityPicker(root = document) {
+    wireHybridLocalityPicker(root);
+  }
 
-    form.dataset.localityDetectionBound = "true";
+  function wireHybridLocalityPicker(root = document) {
+    const localCatalog = getLocalityCatalogOptions(root);
 
-    const setStatus = (message, isError = false) => {
-      status.textContent = message;
-      status.classList.toggle("text-danger", isError);
-    };
+    root.querySelectorAll("[data-hybrid-locality-root]").forEach(container => {
+      if (container.dataset.bound === "true") return;
 
-    button.addEventListener("click", () => {
-      if (!navigator.geolocation) {
-        setStatus("Tu navegador no permite detectar ubicacion automaticamente.", true);
-        return;
-      }
+      const input = container.querySelector("[data-locality-input]");
+      const hiddenId = container.querySelector("[data-locality-id]");
+      const hiddenExternalId = container.querySelector("[data-locality-external-id]");
+      const datalist = container.querySelector("[data-locality-suggestions]");
+      const suggestionsList = container.querySelector("[data-locality-suggestions-list]");
+      const detectButton = container.querySelector("[data-detect-locality]");
+      const hostForm = container.closest("form");
+      const status = container.parentElement?.querySelector("[data-register-locality-status], [data-account-locality-status]");
+      if (!input || !hiddenId || !hiddenExternalId || !datalist || !detectButton || !hostForm || !status) return;
 
-      const originalLabel = button.textContent;
-      button.disabled = true;
-      button.textContent = "Detectando...";
-      setStatus("Esperando permiso para acceder a tu ubicacion.");
+      container.dataset.bound = "true";
 
-      navigator.geolocation.getCurrentPosition(position => {
-        const nearest = findNearestRegisterLocality(select, position.coords.latitude, position.coords.longitude);
-        button.disabled = false;
-        button.textContent = originalLabel;
+      let searchTimer = 0;
+      let requestVersion = 0;
+      let lastResults = [];
+      let lastQuery = "";
+      const externalSearchButton = document.createElement("button");
+      externalSearchButton.type = "button";
+      externalSearchButton.className = "ghost-pill compact locality-external-search";
+      externalSearchButton.textContent = "No esta en la lista";
+      externalSearchButton.hidden = true;
+      container.insertAdjacentElement("afterend", externalSearchButton);
 
-        if (!nearest) {
-          setStatus("No encontramos una localidad cercana en la lista disponible.", true);
+      const setStatus = (message, isError = false) => {
+        status.textContent = message;
+        status.classList.toggle("text-danger", isError);
+        status.classList.toggle("is-visible", Boolean(message));
+      };
+
+      const clearSelection = () => {
+        hiddenId.value = "";
+        hiddenExternalId.value = "";
+      };
+
+      const toggleExternalSearchButton = (visible, query = "") => {
+        externalSearchButton.hidden = !visible;
+        externalSearchButton.dataset.query = String(query || "").trim();
+        externalSearchButton.title = query ? `Buscar "${query}" en toda Argentina` : "";
+      };
+
+      const renderSuggestions = (results, includeExternalResults = false) => {
+        lastResults = Array.isArray(results) ? results : [];
+        datalist.innerHTML = "";
+
+        if (suggestionsList) {
+          suggestionsList.innerHTML = "";
+        }
+
+        lastResults.forEach(result => {
+          const option = document.createElement("option");
+          option.value = result.label || "";
+          option.dataset.localId = result.localId ? String(result.localId) : "";
+          option.dataset.externalId = result.externalId || "";
+          option.dataset.locality = result.locality || "";
+          option.dataset.province = result.province || "";
+          option.dataset.latitude = Number.isFinite(Number(result.latitude)) ? String(result.latitude) : "";
+          option.dataset.longitude = Number.isFinite(Number(result.longitude)) ? String(result.longitude) : "";
+          datalist.appendChild(option);
+
+          if (suggestionsList) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "guest-locality-suggestion";
+            button.dataset.localitySuggestion = "true";
+            button.innerHTML = `
+              <strong>${escapeHtml(result.locality || result.label || "")}</strong>
+              <span>${escapeHtml(result.province || "")}</span>
+            `;
+            button.addEventListener("click", () => applySelection(result));
+            suggestionsList.appendChild(button);
+          }
+        });
+
+        if (suggestionsList) {
+          suggestionsList.hidden = suggestionsList.children.length === 0;
+        }
+
+        toggleExternalSearchButton(!includeExternalResults && lastQuery.length >= 2, lastQuery);
+      };
+
+      const applySelection = (result, message = null) => {
+        hiddenId.value = result?.localId ? String(result.localId) : "";
+        hiddenExternalId.value = result?.externalId || "";
+        input.value = result?.label || "";
+        input.dataset.selectedLabel = result?.label || "";
+        if (suggestionsList) {
+          suggestionsList.hidden = true;
+        }
+        toggleExternalSearchButton(false);
+        setStatus(message ?? (result ? `Localidad seleccionada: ${result.label}.` : ""), false);
+      };
+
+      const matchResult = rawValue => {
+        const normalized = normalizeLocalityText(rawValue);
+        if (!normalized) return null;
+
+        return lastResults.find(option =>
+          normalizeLocalityText(option.label) === normalized
+          || normalizeLocalityText(option.locality) === normalized) || null;
+      };
+
+      const ensureSelectionMatchesInput = () => {
+        const selected = matchResult(input.value);
+        if (selected) {
+          applySelection(selected);
+          return selected;
+        }
+
+        const selectedLabel = normalizeLocalityText(input.dataset.selectedLabel || "");
+        const typedLabel = normalizeLocalityText(input.value);
+        if (typedLabel && typedLabel === selectedLabel && (hiddenId.value || hiddenExternalId.value)) {
+          return {
+            localId: hiddenId.value ? Number(hiddenId.value) : null,
+            externalId: hiddenExternalId.value || null,
+            label: input.value
+          };
+        }
+
+        clearSelection();
+        return null;
+      };
+
+      const fetchSuggestions = async (query, includeExternalResults = false) => {
+        const currentVersion = ++requestVersion;
+        lastQuery = String(query || "").trim();
+
+        try {
+          const endpoint = includeExternalResults ? "/api/localities/search-external" : "/api/localities/search";
+          const response = await fetch(`${endpoint}?q=${encodeURIComponent(query)}`, {
+            headers: { "X-Requested-With": "XMLHttpRequest" }
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const payload = await response.json();
+          if (currentVersion !== requestVersion) return;
+          if (!includeExternalResults && Array.isArray(payload) && payload.length === 0) {
+            fetchSuggestions(query, true);
+            return;
+          }
+
+          renderSuggestions(payload, includeExternalResults);
+          if (includeExternalResults) {
+            setStatus(payload.length > 0
+              ? "Mostrando coincidencias de toda Argentina. Elige una localidad de la lista."
+              : "No encontramos esa localidad ni en la base externa.", payload.length === 0);
+          } else {
+            setStatus("");
+          }
+        } catch (error) {
+          if (currentVersion !== requestVersion) return;
+          renderSuggestions([], includeExternalResults);
+          setStatus("No pudimos buscar localidades en este momento.", true);
+        }
+      };
+
+      input.addEventListener("input", () => {
+        if (normalizeLocalityText(input.value) !== normalizeLocalityText(input.dataset.selectedLabel || "")) {
+          clearSelection();
+        }
+
+        window.clearTimeout(searchTimer);
+
+        const query = input.value.trim();
+        lastQuery = query;
+        if (query.length < 2) {
+          renderSuggestions([]);
+          toggleExternalSearchButton(false);
+          if (!query) {
+            setStatus("");
+          }
           return;
         }
 
-        select.value = nearest.value;
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-        setStatus(`Ubicacion detectada. Seleccionamos ${nearest.locality}, ${nearest.province}.`);
-      }, error => {
-        button.disabled = false;
-        button.textContent = originalLabel;
-        setStatus(mapRegisterGeolocationError(error), true);
-      }, {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000
+        searchTimer = window.setTimeout(() => {
+          fetchSuggestions(query);
+        }, 250);
       });
+
+      externalSearchButton.addEventListener("click", () => {
+        const query = String(externalSearchButton.dataset.query || input.value || "").trim();
+        if (query.length < 2) {
+          setStatus("Escribe al menos dos letras para buscar.", true);
+          input.focus();
+          return;
+        }
+
+        fetchSuggestions(query, true);
+      });
+
+      input.addEventListener("change", () => {
+        const selected = ensureSelectionMatchesInput();
+        if (!selected) {
+          setStatus("Elige una localidad de la lista para continuar.", true);
+        }
+      });
+
+      input.addEventListener("blur", () => {
+        window.setTimeout(() => {
+          ensureSelectionMatchesInput();
+        }, 0);
+      });
+
+      detectButton.addEventListener("click", () => {
+        if (!navigator.geolocation) {
+          setStatus("Tu navegador no permite detectar ubicacion automaticamente.", true);
+          return;
+        }
+
+        const originalLabel = detectButton.textContent;
+        detectButton.disabled = true;
+        detectButton.textContent = "Detectando...";
+        setStatus("Esperando permiso para acceder a tu ubicacion.");
+
+        navigator.geolocation.getCurrentPosition(position => {
+          const nearest = findNearestLocalityFromCollection(localCatalog, position.coords.latitude, position.coords.longitude);
+          detectButton.disabled = false;
+          detectButton.textContent = originalLabel;
+
+          if (!nearest) {
+            setStatus("No encontramos una localidad cercana en la base local.", true);
+            return;
+          }
+
+          applySelection(nearest, `Ubicacion detectada. Seleccionamos ${nearest.label}.`);
+        }, error => {
+          detectButton.disabled = false;
+          detectButton.textContent = originalLabel;
+          setStatus(mapRegisterGeolocationError(error), true);
+        }, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000
+        });
+      });
+
+      hostForm.addEventListener("submit", event => {
+        const selected = ensureSelectionMatchesInput();
+        if (selected) {
+          setStatus("");
+          return;
+        }
+
+        event.preventDefault();
+        setStatus("Selecciona una localidad valida antes de continuar.", true);
+        input.focus();
+      });
+
+      if (input.value.trim()) {
+        input.dataset.selectedLabel = input.value.trim();
+      }
     });
+  }
+
+  function getLocalityCatalogOptions(root = document) {
+    const datalist = root.getElementById("header-locality-options");
+    if (!datalist) return [];
+
+    return Array.from(datalist.options).map(option => ({
+      localId: Number(option.dataset.localityId || 0),
+      label: option.value || "",
+      locality: option.dataset.locality || "",
+      province: option.dataset.province || "",
+      latitude: Number(option.dataset.latitude),
+      longitude: Number(option.dataset.longitude)
+    })).filter(option =>
+      option.localId > 0
+      && Number.isFinite(option.latitude)
+      && Number.isFinite(option.longitude));
+  }
+
+  function wireRegisterAccountType(root = document) {
+    const form = root.querySelector("[data-account-type-form='true']");
+    if (!form || form.dataset.accountTypeBound === "true") return;
+
+    const options = Array.from(form.querySelectorAll("[data-account-type-option]"));
+    const personSection = form.querySelector("[data-account-type-section='person']");
+    const companySection = form.querySelector("[data-account-type-section='company']");
+    const companyNameInput = form.querySelector('input[name="Input.CompanyName"]');
+    const companyTaglineInput = form.querySelector('input[name="Input.CompanyTagline"]');
+    const companyPublicUrlInput = form.querySelector("[data-company-public-url]");
+    const personNameInput = form.querySelector('input[name="Input.Name"]');
+    const emailCheckbox = form.querySelector('input[name="Input.RespondsEmails"]');
+    const whatsappCheckbox = form.querySelector('input[name="Input.RespondsWhatsApp"]');
+    const phoneCheckbox = form.querySelector('input[name="Input.AcceptsCalls"]');
+    form.dataset.accountTypeBound = "true";
+
+    const syncCompanyPublicUrl = () => {
+      if (!companyPublicUrlInput) return;
+
+      const slug = String(companyNameInput?.value || "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^\p{L}\p{N}]+/gu, "-")
+        .replace(/^-+|-+$/g, "");
+
+      companyPublicUrlInput.value = slug ? `/${slug}` : "/tuempresa";
+    };
+
+    const sync = () => {
+      const selected = options.find(option => option.checked)?.value || "Person";
+      const isCompany = selected === "Company";
+
+      if (personSection) {
+        personSection.hidden = isCompany;
+      }
+
+      if (companySection) {
+        companySection.hidden = !isCompany;
+      }
+
+      if (companyNameInput) {
+        companyNameInput.required = isCompany;
+      }
+
+      if (companyTaglineInput) {
+        companyTaglineInput.required = false;
+      }
+
+      if (personNameInput) {
+        personNameInput.required = !isCompany;
+      }
+
+      if (isCompany) {
+        if (emailCheckbox) {
+          emailCheckbox.checked = true;
+        }
+        if (whatsappCheckbox) {
+          whatsappCheckbox.checked = true;
+        }
+        if (phoneCheckbox) {
+          phoneCheckbox.checked = true;
+        }
+      }
+    };
+
+    options.forEach(option => option.addEventListener("change", sync));
+    companyNameInput?.addEventListener("input", syncCompanyPublicUrl);
+    sync();
+    syncCompanyPublicUrl();
   }
 
   function findNearestRegisterLocality(select, latitude, longitude) {
@@ -789,7 +2443,7 @@
         modal.hidden = true;
         modal.classList.remove("is-open");
       }
-      document.body.classList.remove("preview-open");
+      syncPreviewOpenState();
       const commentField = form.querySelector('textarea[name="comment"]');
       if (commentField) commentField.value = "";
       await loadApiPage();
@@ -888,7 +2542,7 @@
     const close = () => {
       modal.hidden = true;
       modal.classList.remove("is-open");
-      document.body.classList.remove("preview-open");
+      syncPreviewOpenState();
     };
     const syncNewListFieldVisibility = () => {
       const select = form.querySelector("[data-favorite-list-select]");
@@ -936,7 +2590,12 @@
             title: "Debes iniciar sesión",
             message: "Puedes crear listas de anuncios favoritos para hacer seguimiento solo con una cuenta registrada.",
             showRegister: true,
-            showLogin: true
+            showLogin: true,
+            pendingAction: {
+              type: "favorite-toggle",
+              publicationId: payload.publicationId,
+              suggestedListName: payload.suggestedListName || null
+            }
           });
           return;
         }
@@ -959,14 +2618,14 @@
     syncNewListFieldVisibility();
   }
 
-  async function openFavoriteModal(trigger) {
+  async function openFavoriteModalByPayload(payload = {}) {
     const modal = document.getElementById("favoriteModal");
     const form = document.getElementById("favoriteForm");
-    if (!modal || !form || !trigger) return;
+    if (!modal || !form) return;
 
-    const publicationId = trigger.getAttribute("data-publication-id") || "0";
-    const publicationTitle = stripOpportunitySuffix(trigger.getAttribute("data-publication-title") || "Publicacion");
-    const suggestedListName = trigger.getAttribute("data-suggested-list-name") || "Inmuebles";
+    const publicationId = payload.publicationId || "0";
+    const publicationTitle = stripOpportunitySuffix(payload.publicationTitle || "Publicacion");
+    const suggestedListName = payload.suggestedListName || "Inmuebles";
     const select = form.querySelector("[data-favorite-list-select]");
     const newListInput = form.querySelector('input[name="newListName"]');
     form.querySelector('input[name="publicationId"]').value = publicationId;
@@ -986,7 +2645,13 @@
           title: "Debes iniciar sesión",
           message: "Puedes crear listas de anuncios favoritos para hacer seguimiento solo con una cuenta registrada.",
           showRegister: true,
-          showLogin: true
+          showLogin: true,
+          pendingAction: {
+            type: "favorite-toggle",
+            publicationId,
+            publicationTitle,
+            suggestedListName
+          }
         });
         return;
       }
@@ -1018,6 +2683,15 @@
     document.body.classList.add("preview-open");
   }
 
+  async function openFavoriteModal(trigger) {
+    if (!trigger) return;
+    await openFavoriteModalByPayload({
+      publicationId: trigger.getAttribute("data-publication-id") || "0",
+      publicationTitle: trigger.getAttribute("data-publication-title") || "Publicacion",
+      suggestedListName: trigger.getAttribute("data-suggested-list-name") || "Inmuebles"
+    });
+  }
+
   function wireFavoriteListModal() {
     const modal = document.getElementById("favoriteListModal");
     if (!modal) return;
@@ -1027,7 +2701,7 @@
     const close = () => {
       modal.hidden = true;
       modal.classList.remove("is-open");
-      document.body.classList.remove("preview-open");
+      syncPreviewOpenState();
     };
 
     modal.addEventListener("click", event => {
@@ -1072,7 +2746,7 @@
     const items = Array.isArray(result?.items) ? result.items : [];
     title.textContent = `Favoritos: ${result?.list?.name || fallbackName}`;
     body.innerHTML = items.length
-      ? `<section class="favorites-modal-grid">${items.map(item => buildGalleryCard(item, false, { showReportButton: false })).join("")}</section>`
+      ? `<section class="favorites-modal-grid">${items.map(item => buildGalleryCard(item, false)).join("")}</section>`
       : `<section class="empty-state"><h2>La lista esta vacia</h2><p>Guarda publicaciones con la estrella para verlas aca.</p></section>`;
     wireGalleryCards();
     wireFavoriteActions(body);
@@ -1106,7 +2780,9 @@
     }
 
     const items = Array.isArray(result?.items) ? result.items : [];
-    title.textContent = `Favoritos: ${result?.list?.name || fallbackName}`;
+    const listName = result?.list?.name || fallbackName;
+    title.textContent = `Favoritos: ${listName}`;
+    updateFavoritesPageManagement(container, listId, listName);
 
     if (!items.length) {
       empty.innerHTML = `<h2>La lista esta vacia</h2><p>Guarda publicaciones con la estrella para verlas aca.</p>`;
@@ -1114,10 +2790,30 @@
       return;
     }
 
-    gallery.innerHTML = items.map(item => buildGalleryCard(item, false, { showReportButton: false })).join("");
+    gallery.innerHTML = items.map(item => buildGalleryCard(item, false)).join("");
     wireGalleryCards();
     wireFavoriteActions(gallery);
     container.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function updateFavoritesPageManagement(container, listId, listName) {
+    const panel = container.querySelector("[data-favorites-page-management]");
+    if (!panel) return;
+
+    const title = panel.querySelector("[data-favorites-management-name]");
+    const renameListId = panel.querySelector("[data-favorites-management-list-id]");
+    const renameInput = panel.querySelector("[data-favorites-management-name-input]");
+    const deleteListId = panel.querySelector("[data-favorites-management-delete-list-id]");
+    const renameForm = panel.querySelector("[data-favorites-management-rename-form]");
+    const renameOpen = panel.querySelector("[data-favorites-management-rename-open]");
+
+    panel.hidden = false;
+    if (title) title.textContent = listName;
+    if (renameListId) renameListId.value = listId;
+    if (renameInput) renameInput.value = listName;
+    if (deleteListId) deleteListId.value = listId;
+    if (renameForm) renameForm.hidden = true;
+    if (renameOpen) renameOpen.hidden = false;
   }
 
   function syncFavoriteListSelection(activeListId) {
@@ -1244,24 +2940,147 @@
   }
 
   async function initContentMaps() {
+    const start = performance.now();
     const homeMap = document.getElementById("map");
     const publicationMap = document.querySelector("[data-publication-map]");
     const createMap = document.querySelector("[data-create-map]");
     if (!homeMap && !publicationMap && !createMap) return;
+    detailDebugLog("initContentMaps:targets", {
+      homeMap: Boolean(homeMap),
+      publicationMap: Boolean(publicationMap),
+      createMap: Boolean(createMap)
+    });
 
-    const sdk = await loadMapLibreSdk();
+    const sdk = await detailDebugMeasure("loadMapLibreSdk", () => loadMapLibreSdk());
     if (homeMap) {
-      await initHomeMap(homeMap, sdk);
+      await detailDebugMeasure("initHomeMap:home", () => initHomeMap(homeMap, sdk, { showLoading: false }));
     }
 
     if (publicationMap) {
-      await initHomeMap(publicationMap, sdk);
+      await detailDebugMeasure("initHomeMap:publication", () => initHomeMap(publicationMap, sdk, { showLoading: false }));
       wireDetailMapFullscreen(publicationMap, sdk);
     }
 
     if (createMap) {
-      await initCreateMap(createMap, sdk);
+      await detailDebugMeasure("initCreateMap", () => initCreateMap(createMap, sdk));
     }
+    detailDebugLog("initContentMaps:done", {
+      ms: Number((performance.now() - start).toFixed(1))
+    });
+  }
+
+  function schedulePublicationMapInitialization(publicationMap, options = {}) {
+    if (!publicationMap || publicationMap.dataset.mapInitialized === "true") {
+      return () => {};
+    }
+
+    const scrollRoot = options.scrollRoot instanceof Element ? options.scrollRoot : null;
+    let observer = null;
+    let fallbackTimer = null;
+
+    const start = async () => {
+      if (publicationMap.dataset.mapInitialized === "true" || publicationMap.dataset.mapLoading === "true") {
+        detailDebugLog("publicationMap:init:skip", {
+          initialized: publicationMap.dataset.mapInitialized === "true",
+          loading: publicationMap.dataset.mapLoading === "true"
+        });
+        return;
+      }
+
+      observer?.disconnect?.();
+      observer = null;
+      publicationMap.dataset.mapLoading = "true";
+
+      try {
+        await detailDebugMeasure("publicationMap:init", async () => {
+          const sdk = await detailDebugMeasure("publicationMap:loadMapLibreSdk", () => loadMapLibreSdk());
+          await detailDebugMeasure("publicationMap:initHomeMap", () => initHomeMap(publicationMap, sdk, { showLoading: false }));
+          wireDetailMapFullscreen(publicationMap, sdk);
+        });
+      } finally {
+        delete publicationMap.dataset.mapLoading;
+      }
+    };
+
+    const isVisible = () => {
+      const rect = publicationMap.getBoundingClientRect();
+      if (scrollRoot) {
+        const rootRect = scrollRoot.getBoundingClientRect();
+        return rect.top < rootRect.bottom + 160 && rect.bottom > rootRect.top - 160;
+      }
+
+      return rect.top < window.innerHeight + 160 && rect.bottom > -160;
+    };
+
+    const queueImmediateStart = () => {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          detailDebugLog("publicationMap:queuedImmediateStart", {
+            root: scrollRoot ? "preview-modal-body" : "viewport"
+          });
+          start().catch(console.error);
+        });
+      });
+    };
+
+    if (scrollRoot) {
+      queueImmediateStart();
+      fallbackTimer = window.setTimeout(() => {
+        if (publicationMap.dataset.mapInitialized === "true" || publicationMap.dataset.mapLoading === "true") {
+          return;
+        }
+
+        detailDebugLog("publicationMap:fallbackObserverAfterImmediateStart");
+        observer = new IntersectionObserver(entries => {
+          if (entries.some(entry => entry.isIntersecting)) {
+            detailDebugLog("publicationMap:observerIntersected");
+            start().catch(console.error);
+          }
+        }, {
+          root: scrollRoot,
+          rootMargin: "160px 0px",
+          threshold: 0.01
+        });
+        observer.observe(publicationMap);
+      }, 350);
+
+      return () => {
+        if (fallbackTimer) {
+          window.clearTimeout(fallbackTimer);
+          fallbackTimer = null;
+        }
+        observer?.disconnect?.();
+      };
+    }
+
+    if (isVisible()) {
+      detailDebugLog("publicationMap:visibleImmediately");
+      start().catch(console.error);
+      return () => {};
+    }
+
+    observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) {
+        detailDebugLog("publicationMap:observerIntersected");
+        start().catch(console.error);
+      }
+    }, {
+      root: scrollRoot,
+      rootMargin: "160px 0px",
+      threshold: 0.01
+    });
+    detailDebugLog("publicationMap:observerBound", {
+      root: scrollRoot ? "preview-modal-body" : "viewport"
+    });
+    observer.observe(publicationMap);
+
+    return () => {
+      if (fallbackTimer) {
+        window.clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
+      observer?.disconnect?.();
+    };
   }
 
   function wireDetailGalleryLayout() {
@@ -1281,6 +3100,7 @@
       if (gallery.dataset.layoutBound === "true") return;
       gallery.dataset.layoutBound = "true";
       applyLayout(gallery);
+      mediaPreloadService.prepareDetailGallery(gallery);
 
       const observer = new ResizeObserver(() => applyLayout(gallery));
       observer.observe(gallery);
@@ -1289,6 +3109,7 @@
 
   function loadMapLibreSdk() {
     if (mapLibreSdkPromise) {
+      detailDebugLog("loadMapLibreSdk:reusePromise");
       return mapLibreSdkPromise;
     }
 
@@ -1302,12 +3123,14 @@
       }
 
       if (window.maplibregl) {
+        detailDebugLog("loadMapLibreSdk:windowReady");
         resolve(window.maplibregl);
         return;
       }
 
       const existingScript = document.querySelector('script[data-maplibre-sdk="true"]');
       if (existingScript) {
+        detailDebugLog("loadMapLibreSdk:waitingExistingScript");
         existingScript.addEventListener("load", () => resolve(window.maplibregl), { once: true });
         existingScript.addEventListener("error", () => reject(new Error("No se pudo cargar MapLibre.")), { once: true });
         return;
@@ -1316,7 +3139,10 @@
       const script = document.createElement("script");
       script.dataset.maplibreSdk = "true";
       script.src = "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js";
-      script.onload = () => resolve(window.maplibregl);
+      script.onload = () => {
+        detailDebugLog("loadMapLibreSdk:scriptLoaded");
+        resolve(window.maplibregl);
+      };
       script.onerror = () => reject(new Error("No se pudo cargar MapLibre."));
       document.head.appendChild(script);
     });
@@ -1324,31 +3150,62 @@
     return mapLibreSdkPromise;
   }
 
-  async function initHomeMap(mapElement, sdk) {
+  async function initHomeMap(mapElement, sdk, options = {}) {
     if (mapElement.dataset.mapInitialized === "true") return;
+    const mapStart = performance.now();
+    const loadingTicket = options.showLoading ? beginSystemLoading() : null;
+    const finishLoading = () => {
+      if (loadingTicket) {
+        endSystemLoading(loadingTicket);
+      }
+    };
     const styleUrl = String(mapElement.dataset.mapStyleUrl || "").trim();
     const tilesUrlTemplate = String(mapElement.dataset.mapTilesUrl || "").trim();
-    if (!styleUrl && !tilesUrlTemplate) return;
+    if (!styleUrl && !tilesUrlTemplate) {
+      finishLoading();
+      return;
+    }
     const attribution = String(mapElement.dataset.mapAttribution || "").trim();
     const mapMode = mapElement.dataset.mapMode || "home";
     const initialLat = Number.parseFloat(mapElement.dataset.mapInitialLat || "");
     const initialLng = Number.parseFloat(mapElement.dataset.mapInitialLng || "");
     const hasInitialCenter = Number.isFinite(initialLat) && Number.isFinite(initialLng);
+    detailDebugLog("initHomeMap:start", {
+      mapMode,
+      hasStyleUrl: Boolean(styleUrl),
+      hasTilesTemplate: Boolean(tilesUrlTemplate),
+      hasInitialCenter
+    });
 
-    const markers = JSON.parse(mapElement.dataset.markers || "[]");
-    if (!markers.length) return;
+    let markers = JSON.parse(mapElement.dataset.markers || "[]");
+    if (!markers.length) {
+      finishLoading();
+      return;
+    }
 
+    applyInitialViewportMapHeight(mapElement.closest("[data-map-layout]") || document);
     mapElement.innerHTML = "";
+    mapElement.getBoundingClientRect();
 
     const instance = new sdk.Map({
       container: mapElement,
-      style: buildMapStyle(styleUrl, tilesUrlTemplate, attribution),
+      style: buildMapStyle(styleUrl, tilesUrlTemplate, attribution, { preferRaster: mapMode === "detail" }),
+      attributionControl: false,
       maxBounds: supportedMapBounds,
       center: hasInitialCenter ? [initialLng, initialLat] : [markers[0].lng, markers[0].lat],
-      zoom: mapMode === "detail" ? 17.5 : (hasInitialCenter ? 11 : 5)
+      zoom: mapMode === "detail" ? zoomOutLevel(17.5) : (hasInitialCenter ? zoomOutLevel(11) : 5)
     });
-    const selectionPanel = mapElement.parentElement?.querySelector("[data-map-selection-card]");
-    const selectionViewToggle = mapElement.parentElement?.querySelector("[data-map-selection-view-toggle]");
+    addCompactAttributionControl(instance, sdk);
+    const ensureInitialMapSize = () => {
+      instance.resize?.();
+      window.requestAnimationFrame(() => instance.resize?.());
+      window.setTimeout(() => instance.resize?.(), 60);
+    };
+    const mapLayout = mapElement.closest("[data-map-layout]");
+    const selectionPanel = mapLayout?.querySelector("[data-map-selection-card]");
+    const markersEndpoint = String(mapElement.dataset.mapMarkersEndpoint || "").trim();
+    const mapSelectionAction = mapElement.dataset.mapSelectionAction || "";
+    const selectionViewToggle = mapLayout?.querySelector("[data-map-selection-view-toggle]");
     const hoverPopup = new sdk.Popup({
       closeButton: false,
       closeOnClick: false,
@@ -1363,6 +3220,7 @@
     });
     let selectedMarker = null;
     let selectedMarkerView = selectionViewToggle?.dataset.currentView === "text" ? "text" : "gallery";
+    let markerInstances = [];
 
     const syncSelectionViewButtons = () => {
       selectionViewToggle?.querySelectorAll("[data-map-selection-view]").forEach(button => {
@@ -1372,17 +3230,33 @@
       });
     };
 
-    const renderSelectedMarker = () => {
-      if (!selectionPanel || !selectedMarker) return;
+    const renderEmptySelection = (message = "No hay anuncios en esta zona del mapa.") => {
+      if (!selectionPanel) return;
+      selectionPanel.innerHTML = `<section class="empty-state compact-empty"><h3>Sin anuncios visibles</h3><p>${escapeHtml(message)}</p></section>`;
+    };
 
+    const renderSelectedMarker = () => {
+      if (!selectionPanel) return;
+      if (!selectedMarker) {
+        renderEmptySelection();
+        return;
+      }
+
+      const isSharedListSelection = mapSelectionAction === "shared-list";
+      const sharedListAction = isSharedListSelection
+        ? `<button type="submit" class="primary-pill compact shared-list-map-add" name="publicationIds" value="${escapeAttribute(selectedMarker.id)}" data-shared-list-map-add="true"><i class="fa-solid fa-check" aria-hidden="true"></i><span>Agregar a la lista</span></button>`
+        : "";
       selectionPanel.innerHTML = selectedMarkerView === "text"
         ? buildMapSelectionTextCard(selectedMarker)
         : buildGalleryCard({
             id: selectedMarker.id,
             title: selectedMarker.title,
-            galleryTitle: String(selectedMarker.title || "").split(" - oportunidad")[0],
+            shortDescription: selectedMarker.shortDescription,
             publicationCode: selectedMarker.code,
             price: selectedMarker.price,
+            priceTooltip: selectedMarker.priceTooltip,
+            operationLabel: selectedMarker.operationLabel,
+            categoryLabel: selectedMarker.categoryLabel,
             detailsUrl: selectedMarker.detailsUrl,
             videoUrl: selectedMarker.videoUrl,
             images: Array.isArray(selectedMarker.images) && selectedMarker.images.length
@@ -1390,7 +3264,12 @@
               : [selectedMarker.image || "/images/logo4.png"],
             isFavorite: Boolean(selectedMarker.isFavorite),
             groupName: selectedMarker.groupName || "Inmuebles"
-          }, false);
+          }, false, {
+            wrapCard: false,
+            showReportButton: !isSharedListSelection,
+            showFavoriteButton: !isSharedListSelection,
+            extraActionHtml: sharedListAction
+          });
 
       wireGalleryCards();
       wireFavoriteActions(selectionPanel);
@@ -1399,7 +3278,7 @@
     };
 
     const setSelectedMarker = marker => {
-      if (!selectionPanel || !marker) return;
+      if (!selectionPanel) return;
       selectedMarker = marker;
       renderSelectedMarker();
     };
@@ -1434,61 +3313,192 @@
       setSelectedMarker(marker);
     };
 
-    const bounds = new sdk.LngLatBounds();
-    markers.forEach(marker => {
-      const markerInstance = new sdk.Marker({ color: "#ff5a5f" })
-        .setLngLat([marker.lng, marker.lat])
-        .addTo(instance);
-      const markerElement = markerInstance.getElement();
-      let lastTouchSelectionAt = 0;
-      markerElement.addEventListener("click", event => {
-        if (Date.now() - lastTouchSelectionAt < 500) {
+    const renderMapMarkers = ({ preserveSelection = false } = {}) => {
+      hoverPopup.remove();
+      mobileTapPopup.remove();
+      markerInstances.forEach(markerInstance => markerInstance.remove());
+      markerInstances = [];
+
+      if (!markers.length) {
+        selectedMarker = null;
+        renderEmptySelection();
+        return null;
+      }
+
+      const bounds = new sdk.LngLatBounds();
+      markers.forEach(marker => {
+        const markerInstance = new sdk.Marker({ color: "#ff5a5f" })
+          .setLngLat([marker.lng, marker.lat])
+          .addTo(instance);
+        const markerElement = markerInstance.getElement();
+        let lastTouchSelectionAt = 0;
+        markerElement.addEventListener("click", event => {
+          if (Date.now() - lastTouchSelectionAt < 500) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
+
           event.preventDefault();
           event.stopPropagation();
-          return;
-        }
+          handleMarkerSelection(marker);
+        });
+        markerElement.addEventListener("touchend", event => {
+          lastTouchSelectionAt = Date.now();
+          event.preventDefault();
+          event.stopPropagation();
+          handleMarkerSelection(marker);
+        }, { passive: false });
+        markerElement.addEventListener("pointerup", event => {
+          if (event.pointerType !== "touch") return;
+          lastTouchSelectionAt = Date.now();
+          event.preventDefault();
+          event.stopPropagation();
+          handleMarkerSelection(marker);
+        });
+        markerElement.addEventListener("mouseenter", () => {
+          hoverPopup
+            .setLngLat([marker.lng, marker.lat])
+            .setHTML(buildMapMarkerHoverCard(marker))
+            .addTo(instance);
+        });
+        markerElement.addEventListener("mouseleave", () => {
+          hoverPopup.remove();
+        });
 
-        event.preventDefault();
-        event.stopPropagation();
-        handleMarkerSelection(marker);
-      });
-      markerElement.addEventListener("touchend", event => {
-        lastTouchSelectionAt = Date.now();
-        event.preventDefault();
-        event.stopPropagation();
-        handleMarkerSelection(marker);
-      }, { passive: false });
-      markerElement.addEventListener("pointerup", event => {
-        if (event.pointerType !== "touch") return;
-        lastTouchSelectionAt = Date.now();
-        event.preventDefault();
-        event.stopPropagation();
-        handleMarkerSelection(marker);
-      });
-      markerElement.addEventListener("mouseenter", () => {
-        hoverPopup
-          .setLngLat([marker.lng, marker.lat])
-          .setHTML(buildMapMarkerHoverCard(marker))
-          .addTo(instance);
-      });
-      markerElement.addEventListener("mouseleave", () => {
-        hoverPopup.remove();
+        markerInstances.push(markerInstance);
+        bounds.extend([marker.lng, marker.lat]);
       });
 
-      bounds.extend([marker.lng, marker.lat]);
-    });
+      const nextSelectedMarker = preserveSelection && selectedMarker
+        ? markers.find(marker => String(marker.id) === String(selectedMarker.id)) || null
+        : null;
+
+      if (!isMobileMapInteractionContext()) {
+        setSelectedMarker(nextSelectedMarker || markers[0]);
+      } else {
+        selectedMarker = nextSelectedMarker || markers[0] || null;
+      }
+
+      instance.resize?.();
+      return bounds;
+    };
+
+    const fitInitialViewport = bounds => {
+      if (!bounds || !markers.length) return;
+
+      if (mapMode === "home" && hasInitialCenter) {
+        instance.flyTo({ center: [initialLng, initialLat], zoom: zoomOutLevel(11) });
+      } else if (markers.length > 1) {
+        instance.fitBounds(bounds, { padding: 60 });
+      } else if (mapMode === "detail") {
+        instance.flyTo({ center: [markers[0].lng, markers[0].lat], zoom: zoomOutLevel(17.5) });
+      }
+    };
+
+    const syncRefreshButtonVisibility = button => {
+      if (!button) return;
+      button.hidden = !(mapMode !== "detail" && markersEndpoint);
+    };
+
+    const refreshVisibleMapMarkers = async () => {
+      if (!markersEndpoint) return;
+      const currentBounds = instance.getBounds?.();
+      if (!currentBounds) return;
+
+      const endpointUrl = new URL(markersEndpoint, window.location.origin);
+      endpointUrl.searchParams.set("north", String(currentBounds.getNorth()));
+      endpointUrl.searchParams.set("south", String(currentBounds.getSouth()));
+      endpointUrl.searchParams.set("east", String(currentBounds.getEast()));
+      endpointUrl.searchParams.set("west", String(currentBounds.getWest()));
+
+      const response = await fetch(endpointUrl.toString(), {
+        headers: { "X-Requested-With": "fetch" }
+      });
+      if (!response.ok) {
+        throw new Error(`Map refresh failed with status ${response.status}`);
+      }
+
+      const result = await response.json().catch(() => ({}));
+      markers = Array.isArray(result?.items) ? result.items : [];
+      mapElement.dataset.markers = JSON.stringify(markers);
+      renderMapMarkers({ preserveSelection: true });
+    };
+
+    const initialBounds = renderMapMarkers();
+    fitInitialViewport(initialBounds);
+
+    if (mapMode !== "detail" && markersEndpoint) {
+      const refreshHost = mapElement.parentElement?.classList.contains("map-canvas-shell")
+        ? mapElement.parentElement
+        : mapElement;
+      let refreshButton = refreshHost.querySelector("[data-map-refresh='true']");
+      if (!refreshButton) {
+        refreshButton = document.createElement("button");
+        refreshButton.type = "button";
+        refreshButton.className = "map-refresh-button";
+        refreshButton.dataset.mapRefresh = "true";
+        refreshButton.innerHTML = `<i class="fa-solid fa-rotate-right" aria-hidden="true"></i><span>Actualizar</span>`;
+        refreshButton.setAttribute("aria-label", "Actualizar anuncios en esta zona");
+        refreshHost.appendChild(refreshButton);
+      }
+
+      syncRefreshButtonVisibility(refreshButton);
+
+      if (refreshButton.dataset.bound !== "true") {
+        refreshButton.dataset.bound = "true";
+        refreshButton.addEventListener("click", async event => {
+          event.preventDefault();
+          const label = refreshButton.querySelector("span");
+          try {
+            refreshButton.disabled = true;
+            refreshButton.classList.add("is-loading");
+            if (label) {
+              label.textContent = "Actualizando...";
+            }
+            await refreshVisibleMapMarkers();
+            syncRefreshButtonVisibility(refreshButton);
+          } catch (error) {
+            console.error(error);
+          } finally {
+            refreshButton.classList.remove("is-loading");
+            if (label) {
+              label.textContent = "Actualizar";
+            }
+            refreshButton.disabled = false;
+          }
+        });
+      }
+    }
 
     if (!isMobileMapInteractionContext()) {
-      setSelectedMarker(markers[0]);
+      setSelectedMarker(selectedMarker || markers[0] || null);
     }
 
-    if (mapMode === "home" && hasInitialCenter) {
-      instance.flyTo({ center: [initialLng, initialLat], zoom: 11 });
-    } else if (markers.length > 1) {
-      instance.fitBounds(bounds, { padding: 60 });
-    } else if (mapMode === "detail") {
-      instance.flyTo({ center: [markers[0].lng, markers[0].lat], zoom: 17.5 });
-    }
+    instance.once?.("idle", () => {
+      detailDebugLog("initHomeMap:idle", {
+        mapMode,
+        ms: Number((performance.now() - mapStart).toFixed(1))
+      });
+      ensureInitialMapSize();
+      scrollMapIntoViewAfterRender(mapElement);
+      finishLoading();
+    });
+    instance.once?.("load", () => {
+      detailDebugLog("initHomeMap:load", {
+        mapMode,
+        ms: Number((performance.now() - mapStart).toFixed(1))
+      });
+      ensureInitialMapSize();
+    });
+    instance.once?.("error", () => {
+      detailDebugLog("initHomeMap:error", {
+        mapMode,
+        ms: Number((performance.now() - mapStart).toFixed(1))
+      });
+      finishLoading();
+    });
+    ensureInitialMapSize();
 
     mapElement._mapInstance = instance;
     mapElement.dataset.mapInitialized = "true";
@@ -1511,7 +3521,12 @@
       </button>
     `;
 
-    mapElement.insertAdjacentElement("afterend", actions);
+    const footer = panel.querySelector("[data-detail-map-footer]");
+    if (footer) {
+      footer.appendChild(actions);
+    } else {
+      mapElement.insertAdjacentElement("afterend", actions);
+    }
 
     const trigger = actions.querySelector("[data-map-fullscreen-trigger]");
     const syncTriggerLabel = () => {
@@ -1561,14 +3576,25 @@
     syncTriggerLabel();
   }
 
+  function requestCreateMapResize(mapElement) {
+    const instance = mapElement?._mapInstance;
+    if (!mapElement || !instance) return;
+
+    const resize = () => instance.resize?.();
+    resize();
+    window.requestAnimationFrame(resize);
+    window.setTimeout(resize, 120);
+    window.setTimeout(resize, 360);
+  }
+
   async function initCreateMap(mapElement, sdk) {
     if (mapElement.dataset.mapInitialized === "true") return;
     const styleUrl = String(mapElement.dataset.mapStyleUrl || "").trim();
     const tilesUrlTemplate = String(mapElement.dataset.mapTilesUrl || "").trim();
     if (!styleUrl && !tilesUrlTemplate) return;
     const attribution = String(mapElement.dataset.mapAttribution || "").trim();
-    const geocodingSearchUrlTemplate = String(mapElement.dataset.mapGeocodingSearchUrl || "").trim();
-    const reverseGeocodingUrlTemplate = String(mapElement.dataset.mapReverseGeocodingUrl || "").trim();
+    const geocodingSearchUrlTemplate = String(mapElement.dataset.mapGeocodingSearchUrl || "").trim() || defaultGeocodingSearchUrlTemplate;
+    const reverseGeocodingUrlTemplate = String(mapElement.dataset.mapReverseGeocodingUrl || "").trim() || defaultReverseGeocodingUrlTemplate;
 
     const form = mapElement.closest("form");
     if (!form) return;
@@ -1582,16 +3608,28 @@
     const searchButton = form.querySelector("[data-create-address-search]");
     const summary = form.querySelector("[data-create-location-summary]");
     let noLocationMode = Boolean(noLocationInput?.checked);
+    const fallbackLocality = String(localityInput?.value || "").trim();
+    const fallbackAddress = String(addressInput?.value || searchInput?.value || "").trim();
+    const fallbackLocalityLabel = String(searchInput?.defaultValue || fallbackAddress || fallbackLocality || "").trim();
+    const fallbackLatitude = numberOrNull(mapElement.dataset.mapInitialLat || "");
+    const fallbackLongitude = numberOrNull(mapElement.dataset.mapInitialLng || "");
     mapElement.innerHTML = "";
 
-    const defaultCenter = getCreateMapCenter(latitudeInput?.value, longitudeInput?.value);
+    const defaultCenter = getCreateMapCenter(
+      latitudeInput?.value || "",
+      longitudeInput?.value || "",
+      mapElement.dataset.mapInitialLat || "",
+      mapElement.dataset.mapInitialLng || ""
+    );
     const instance = new sdk.Map({
       container: mapElement,
-      style: buildMapStyle(styleUrl, tilesUrlTemplate, attribution),
+      style: buildMapStyle(styleUrl, tilesUrlTemplate, attribution, { preferRaster: true }),
+      attributionControl: false,
       maxBounds: supportedMapBounds,
       center: defaultCenter.center,
       zoom: defaultCenter.zoom
     });
+    addCompactAttributionControl(instance, sdk);
 
     const marker = new sdk.Marker({ color: "#ff4b5f", draggable: true })
       .setLngLat(defaultCenter.center)
@@ -1612,7 +3650,7 @@
       }
       syncCreateTitle(form);
       if (flyTo) {
-        instance.flyTo({ center: [lng, lat], zoom: 15 });
+        instance.flyTo({ center: [lng, lat], zoom: zoomOutLevel(15) });
       }
       marker.setLngLat([lng, lat]);
     };
@@ -1622,7 +3660,7 @@
       mapElement.classList.toggle("is-disabled", enabled);
 
       if (searchInput) {
-        searchInput.disabled = enabled || !geocodingSearchUrlTemplate;
+        searchInput.disabled = enabled;
       }
 
       if (searchButton) {
@@ -1630,13 +3668,15 @@
       }
 
       if (enabled) {
-        if (latitudeInput) latitudeInput.value = "";
-        if (longitudeInput) longitudeInput.value = "";
-        if (localityInput) localityInput.value = "";
+        if (latitudeInput) latitudeInput.value = fallbackLatitude !== null ? String(fallbackLatitude) : "";
+        if (longitudeInput) longitudeInput.value = fallbackLongitude !== null ? String(fallbackLongitude) : "";
+        if (localityInput) localityInput.value = fallbackLocality;
         if (addressInput) addressInput.value = "";
-        if (searchInput) searchInput.value = "";
+        if (searchInput) searchInput.value = fallbackLocalityLabel;
         if (summary) {
-          summary.textContent = "Sin ubicaciÃ³n disponible";
+          summary.innerHTML = fallbackLocalityLabel
+            ? `Se publicará para tu localidad de usuario: <strong>${escapeHtml(fallbackLocalityLabel)}</strong>, sin punto en el mapa.`
+            : "Se publicará sin punto en el mapa.";
         }
         syncCreateTitle(form);
         return;
@@ -1657,12 +3697,12 @@
       }
 
       if (summary) {
-        summary.textContent = "ElegÃ­ una ubicaciÃ³n en el mapa o buscala por direcciÃ³n.";
+        summary.textContent = "Elegí una ubicación en el mapa o buscala por dirección.";
       }
     };
 
     if (searchInput) {
-      searchInput.disabled = !geocodingSearchUrlTemplate || noLocationMode;
+      searchInput.disabled = noLocationMode;
     }
 
     if (searchButton) {
@@ -1683,7 +3723,7 @@
         flyTo: false
       });
     } else if (summary) {
-      summary.textContent = "ElegÃ­ una ubicaciÃ³n en el mapa o buscala por direcciÃ³n.";
+      summary.textContent = "Elegí una ubicación en el mapa o buscala por dirección.";
     }
 
     marker.on("dragend", async () => {
@@ -1703,15 +3743,10 @@
       const query = String(searchInput?.value || "").trim();
       if (!query) return;
 
-      if (!geocodingSearchUrlTemplate) {
-        if (summary) summary.textContent = "La búsqueda por dirección no está configurada en este entorno.";
-        return;
-      }
-
       const results = await geocodeCreateLocation(geocodingSearchUrlTemplate, query);
       const feature = results?.[0];
       if (!feature) {
-        if (summary) summary.textContent = "No encontramos esa direcciÃ³n. ProbÃ¡ con otra bÃºsqueda.";
+        if (summary) summary.textContent = "No encontramos esa dirección. Probá con otra búsqueda.";
         return;
       }
 
@@ -1745,6 +3780,20 @@
       }
     });
 
+    if ("ResizeObserver" in window) {
+      const resizeObserver = new ResizeObserver(() => {
+        requestCreateMapResize(mapElement);
+      });
+      resizeObserver.observe(mapElement);
+      const sectionBody = mapElement.closest('[data-section-body="location"]');
+      if (sectionBody) {
+        resizeObserver.observe(sectionBody);
+      }
+    }
+
+    instance.once?.("load", () => requestCreateMapResize(mapElement));
+    instance.once?.("idle", () => requestCreateMapResize(mapElement));
+    mapElement._mapInstance = instance;
     mapElement.dataset.mapInitialized = "true";
   }
 
@@ -1783,11 +3832,17 @@
     }
   }
 
-  function getCreateMapCenter(latValue, lngValue) {
+  function getCreateMapCenter(latValue, lngValue, fallbackLatValue = "", fallbackLngValue = "") {
     const lat = numberOrNull(latValue);
     const lng = numberOrNull(lngValue);
     if (lat !== null && lng !== null && isWithinSupportedRegion(lng, lat)) {
       return { center: [lng, lat], zoom: 15 };
+    }
+
+    const fallbackLat = numberOrNull(fallbackLatValue);
+    const fallbackLng = numberOrNull(fallbackLngValue);
+    if (fallbackLat !== null && fallbackLng !== null && isWithinSupportedRegion(fallbackLng, fallbackLat)) {
+      return { center: [fallbackLng, fallbackLat], zoom: 13 };
     }
 
     return { center: supportedMapCenter, zoom: 4.8 };
@@ -1802,9 +3857,9 @@
     syncLocation({
       lat,
       lng,
-      locality: feature ? extractLocalityFromFeature(feature) : "",
-      address: feature?.address || "",
-      searchValue: feature?.address || ""
+      locality: feature ? extractLocalityFromFeature(feature) : `Lat ${Number(lat).toFixed(5)}, Lng ${Number(lng).toFixed(5)}`,
+      address: feature?.address || `Lat ${Number(lat).toFixed(5)}, Lng ${Number(lng).toFixed(5)}`,
+      searchValue: feature?.address || `Lat ${Number(lat).toFixed(5)}, Lng ${Number(lng).toFixed(5)}`
     });
   }
 
@@ -1868,8 +3923,9 @@
     };
   }
 
-  function buildMapStyle(styleUrl, tilesUrlTemplate, attribution) {
-    if (styleUrl) {
+  function buildMapStyle(styleUrl, tilesUrlTemplate, attribution, options = {}) {
+    const preferRaster = options?.preferRaster === true;
+    if (styleUrl && !(preferRaster && tilesUrlTemplate)) {
       return styleUrl;
     }
 
@@ -1909,19 +3965,23 @@
       pieces.push(location.address);
     }
     if (!pieces.length) {
-      pieces.push(`Lat ${Number(location.lat).toFixed(5)} Â· Lng ${Number(location.lng).toFixed(5)}`);
+      pieces.push(`Lat ${Number(location.lat).toFixed(5)} · Lng ${Number(location.lng).toFixed(5)}`);
     }
 
-    return `UbicaciÃ³n seleccionada: ${pieces.join(" Â· ")}`;
+    return `Ubicación seleccionada: ${pieces.join(" · ")}`;
   }
 
   function syncCreateTitle(form) {
     const category = String(form.querySelector('[name="category"]')?.selectedOptions?.[0]?.textContent || "").trim();
     const locality = String(form.querySelector('input[name="locality"]')?.value || "").trim();
+    const latitude = numberOrNull(form.querySelector('input[name="latitude"]')?.value || "");
+    const longitude = numberOrNull(form.querySelector('input[name="longitude"]')?.value || "");
+    const noLocation = Boolean(form.querySelector('[name="noLocation"]')?.checked);
     const titleInput = form.querySelector('input[name="title"]');
     if (!titleInput) return;
 
-    if (category && locality) {
+    const hasSelectedMapLocation = !noLocation && latitude !== null && longitude !== null;
+    if (category && locality && hasSelectedMapLocation) {
       titleInput.value = `${category} en ${locality}`;
       return;
     }
@@ -1931,6 +3991,7 @@
 
   function wireBrowseSearchFilters(root = document) {
     root.querySelectorAll("[data-price-range-filter]").forEach(wirePriceRangeFilter);
+    root.querySelectorAll("[data-radius-range-filter]").forEach(wireRadiusRangeFilter);
     root.querySelectorAll("[data-group-aware-search-form='true']").forEach(wireGroupAwareSearchPlaceholder);
 
     const form = root.querySelector?.("[data-required-filter-form='true']");
@@ -1941,6 +4002,7 @@
     const panel = form.querySelector("[data-required-filter-panel]");
     const list = form.querySelector("[data-required-filter-list]");
     const fieldsScript = form.querySelector("[data-required-filter-fields-json]");
+    const advancedPanel = panel?.closest(".search-advanced-panel");
     form.dataset.requiredFiltersBound = "true";
 
     let fields = parseRequiredFilterFields(fieldsScript?.textContent);
@@ -1952,15 +4014,24 @@
       list.innerHTML = fields.map(field => buildRequiredFilterRow(field)).join("");
     };
 
-    groupSelect?.addEventListener("change", async () => {
-      if (!endpoint) return;
+    const loadFieldsForGroup = async () => {
+      if (!endpoint || !groupSelect) return;
 
       const response = await fetch(`${endpoint}?group=${encodeURIComponent(groupSelect.value)}`, {
         headers: { "X-Requested-With": "fetch" }
       });
       fields = response.ok ? parseRequiredFilterFields(await response.text()) : [];
       renderFields();
+    };
+
+    groupSelect?.addEventListener("change", async () => {
+      await loadFieldsForGroup();
     });
+
+    renderFields();
+    if (fields.length === 0) {
+      loadFieldsForGroup().catch(console.error);
+    }
   }
 
   function wireGroupAwareSearchPlaceholder(form) {
@@ -1968,6 +4039,8 @@
 
     const groupSelect = form.querySelector('select[name="group"]');
     const queryInput = form.querySelector("[data-group-aware-query-input='true']");
+    const categorySelect = form.querySelector("[data-group-category-select='true']");
+    const operationSelect = form.querySelector("[data-group-operation-select='true']");
     if (!groupSelect || !queryInput) return;
 
     form.dataset.groupAwarePlaceholderBound = "true";
@@ -1976,7 +4049,10 @@
       inmuebles: groupSelect.dataset.placeholderInmuebles || "Ej. departamento, casa con patio, lote",
       rodados: groupSelect.dataset.placeholderRodados || "Ej. Ford Fiesta, moto, camioneta",
       embarcaciones: groupSelect.dataset.placeholderEmbarcaciones || "Ej. lancha, velero, semirrígido",
-      generales: groupSelect.dataset.placeholderGenerales || "Ej. iPhone, bicicleta, heladera",
+      agro: groupSelect.dataset.placeholderAgro || "Ej. tractor, sembradora, generador",
+      electronica: groupSelect.dataset.placeholderElectronica || "Ej. celular, notebook, playstation",
+      generales: groupSelect.dataset.placeholderGenerales || "Ej. muebles, bicicleta, herramientas",
+      moda: groupSelect.dataset.placeholderModa || "Ej. zapatillas, campera, cartera",
       todos: groupSelect.dataset.placeholderTodos || "Ej. departamento, Ford Fiesta, iPhone"
     };
 
@@ -1985,8 +4061,115 @@
       queryInput.placeholder = placeholders[key] || placeholders.todos;
     };
 
+    const syncCategoryVisibility = () => {
+      const wrapper = categorySelect?.closest("[data-group-category-wrapper]");
+      const isAllGroups = String(groupSelect.value || "").trim().toLowerCase() === "todos";
+      if (wrapper) {
+        wrapper.hidden = isAllGroups;
+      }
+
+      if (categorySelect) {
+        categorySelect.disabled = isAllGroups;
+        if (isAllGroups) {
+          categorySelect.value = "";
+        }
+      }
+    };
+
+    const syncCategories = async () => {
+      if (!categorySelect) return;
+
+      syncCategoryVisibility();
+      if (categorySelect.disabled) {
+        return;
+      }
+
+      const endpoint = categorySelect.dataset.categoriesEndpoint || "";
+      if (!endpoint) return;
+
+      const selectedCategoryId = String(categorySelect.dataset.selectedCategoryId || categorySelect.value || "").trim();
+
+      try {
+        const response = await fetch(`${endpoint}?group=${encodeURIComponent(groupSelect.value)}`, {
+          headers: { "X-Requested-With": "fetch" }
+        });
+        const categories = response.ok ? await response.json() : [];
+        const items = Array.isArray(categories) ? categories : [];
+
+        categorySelect.innerHTML = '<option value="">Todas</option>';
+        items.forEach(category => {
+          const option = document.createElement("option");
+          option.value = String(category?.id ?? "");
+          option.textContent = String(category?.name ?? "");
+          if (option.value && option.value === selectedCategoryId) {
+            option.selected = true;
+          }
+          categorySelect.appendChild(option);
+        });
+
+        categorySelect.dataset.selectedCategoryId = "";
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    const syncOperations = async () => {
+      if (!operationSelect) return;
+
+      const endpoint = form.dataset.requiredFilterFieldsEndpoint || "";
+      if (!endpoint) return;
+
+      const selectedOperation = String(operationSelect.dataset.selectedOperation || operationSelect.value || "").trim();
+
+      try {
+        const response = await fetch(`${endpoint}?group=${encodeURIComponent(groupSelect.value)}`, {
+          headers: { "X-Requested-With": "fetch" }
+        });
+        const fields = response.ok ? parseRequiredFilterFields(await response.text()) : [];
+        const operationField = Array.isArray(fields)
+          ? fields.find(field => String(field?.internalName || "").trim().toLowerCase() === "operacion")
+          : null;
+        const options = Array.isArray(operationField?.options) ? operationField.options : [];
+        const defaultOperation = options.find(operation => String(operation || "").trim().toLowerCase() === "venta") || "";
+        const nextSelectedOperation = options.some(operation => String(operation || "").trim() === selectedOperation)
+          ? selectedOperation
+          : String(defaultOperation || "").trim();
+
+        operationSelect.innerHTML = '<option value="">Tipo de operación</option>';
+        options.forEach(operation => {
+          const value = String(operation || "").trim();
+          if (!value) return;
+
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = value;
+          if (value === nextSelectedOperation) {
+            option.selected = true;
+          }
+
+          operationSelect.appendChild(option);
+        });
+
+        operationSelect.dataset.selectedOperation = "";
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
     syncPlaceholder();
-    groupSelect.addEventListener("change", syncPlaceholder);
+    syncCategories().catch(console.error);
+    syncOperations().catch(console.error);
+    groupSelect.addEventListener("change", () => {
+      syncPlaceholder();
+      if (categorySelect) {
+        categorySelect.dataset.selectedCategoryId = "";
+      }
+      if (operationSelect) {
+        operationSelect.dataset.selectedOperation = "";
+      }
+      syncCategories().catch(console.error);
+      syncOperations().catch(console.error);
+    });
   }
 
   function wirePriceRangeFilter(wrapper) {
@@ -2038,6 +4221,34 @@
     sync();
   }
 
+  function wireRadiusRangeFilter(wrapper) {
+    if (!wrapper || wrapper.dataset.radiusRangeBound === "true") return;
+
+    const max = Number(wrapper.dataset.radiusMax || 200) || 200;
+    const range = wrapper.querySelector("[data-radius-range]");
+    const hiddenValue = wrapper.querySelector("[data-radius-value]");
+    const label = wrapper.querySelector("[data-radius-label]");
+    const fill = wrapper.querySelector("[data-radius-range-fill]");
+    if (!range || !hiddenValue || !label) return;
+
+    wrapper.dataset.radiusRangeBound = "true";
+
+    const sync = () => {
+      const value = Math.max(0, Math.min(max, Number(range.value || 0)));
+      range.value = String(value);
+      hiddenValue.value = value > 0 ? String(value) : "";
+      label.textContent = value > 0 ? `${value} km` : "Sin limite";
+
+      if (fill) {
+        fill.style.left = "0%";
+        fill.style.right = `${Math.max(0, Math.min(100, 100 - ((value / max) * 100)))}%`;
+      }
+    };
+
+    range.addEventListener("input", sync);
+    sync();
+  }
+
   function buildRequiredFilterRow(field) {
     return `
       <label data-required-filter-row>
@@ -2080,9 +4291,10 @@
         ? parsed.map(field => ({
           id: Number(field.id || 0),
           label: String(field.label || ""),
+          internalName: String(field.internalName || ""),
           dataType: String(field.dataType || "texto").toLowerCase(),
           options: Array.isArray(field.options) ? field.options.map(option => String(option || "")).filter(Boolean) : []
-        })).filter(field => field.id > 0 && field.label)
+        })).filter(field => (field.id > 0 || field.internalName === "operacion") && field.label)
         : [];
     } catch {
       return [];
@@ -2093,6 +4305,9 @@
     const title = escapeHtml(marker.title || "");
     const code = escapeHtml(marker.code || "");
     const price = escapeHtml(marker.price || "");
+    const operationLabel = escapeHtml(marker.operationLabel || "");
+    const operationLetter = escapeHtml(String(marker.operationLabel || "").trim().charAt(0).toUpperCase());
+    const priceTooltipLabel = buildPriceTooltipLabel(marker);
     const detailsUrl = escapeAttribute(marker.detailsUrl || "#");
     const publicationId = escapeAttribute(marker.id || "");
     const videoUrl = escapeAttribute(marker.videoUrl || "");
@@ -2101,24 +4316,30 @@
       : [marker.image || "/images/logo4.png"];
     const escapedImages = images.map(image => escapeAttribute(image || "/images/logo4.png"));
     const firstImage = escapedImages[0];
-    const galleryTitle = escapeHtml(String(marker.title || "").split(" - oportunidad")[0]);
+    const galleryTitle = escapeHtml(getGalleryDescription(marker));
     const mediaCount = escapedImages.length + (videoUrl ? 1 : 0);
     const navButtons = mediaCount > 1
       ? `
-          <button type="button" class="gallery-nav gallery-nav-prev" data-direction="-1" aria-label="Foto anterior">&#8249;</button>
-          <button type="button" class="gallery-nav gallery-nav-next" data-direction="1" aria-label="Foto siguiente">&#8250;</button>
+          <span class="gallery-nav gallery-nav-prev" data-direction="-1" data-gallery-nav="true" role="button" tabindex="0" aria-label="Foto anterior">&#8249;</span>
+          <span class="gallery-nav gallery-nav-next" data-direction="1" data-gallery-nav="true" role="button" tabindex="0" aria-label="Foto siguiente">&#8250;</span>
         `
       : "";
 
+        const priceCluster = `
+          <span class="map-popup-price-cluster">
+            <span class="map-popup-price gallery-badge gallery-tooltip-trigger gallery-tooltip-bottom" data-tooltip-label="${priceTooltipLabel}">${operationLabel && operationLetter ? `<strong class="gallery-operation-letter">${operationLetter}</strong>` : ""}${price}</span>
+          </span>
+        `;
+
     return `
       <article class="map-popup-card listing-card listing-card-compact">
-        <a href="${detailsUrl}" class="card-image-wrap map-popup-image-wrap publication-preview-trigger" data-publication-id="${publicationId}" data-details-url="/api/content/details/${publicationId}" data-images="${escapedImages.join("|||")}" data-video-url="${videoUrl}" data-media-index="0">
+        <a href="${detailsUrl}" class="card-image-wrap map-popup-image-wrap publication-preview-trigger" data-publication-id="${publicationId}" data-details-url="${buildPublicationApiDetailsUrl(publicationId)}" data-images="${escapedImages.join("|||")}" data-video-url="${videoUrl}" data-media-index="0">
           ${videoUrl
-            ? `<video src="${videoUrl}" class="gallery-carousel-video" preload="metadata" muted playsinline></video><button type="button" class="gallery-play-toggle" data-gallery-play-toggle="true" aria-label="Reproducir video"></button><button type="button" class="gallery-audio-toggle" data-gallery-audio-toggle="true" aria-label="Activar audio">Activar audio</button>`
+            ? `<video src="${videoUrl}" class="gallery-carousel-video" preload="metadata" muted playsinline></video><button type="button" class="gallery-play-toggle gallery-tooltip-trigger gallery-tooltip-top" data-gallery-play-toggle="true" aria-label="Reproducir video" data-tooltip-label="Reproducir video"></button><button type="button" class="gallery-audio-toggle gallery-tooltip-trigger gallery-tooltip-side" data-gallery-audio-toggle="true" aria-label="Activar audio" data-tooltip-label="Activar audio"><i class="fa-solid fa-volume-xmark" aria-hidden="true"></i></button>`
             : `<img src="${firstImage}" alt="${title}" class="gallery-carousel-image" />`}
-          <span class="gallery-badge">${price}</span>
+          ${priceCluster}
           ${navButtons}
-          <button type="button" class="gallery-flag report-trigger" data-publication-id="${publicationId}" data-publication-code="${code}" data-publication-title="${title}" aria-label="Denunciar ${title}">Denunciar</button>
+          <button type="button" class="gallery-action-button gallery-report-overlay gallery-tooltip-trigger gallery-tooltip-side report-trigger" data-publication-id="${publicationId}" data-publication-code="${code}" data-publication-title="${title}" data-tooltip-label="Denunciar" aria-label="Denunciar ${title}"><span class="gallery-report-letter" aria-hidden="true">D</span></button>
           <span class="gallery-title-overlay">${galleryTitle}</span>
         </a>
       </article>
@@ -2126,7 +4347,7 @@
   }
 
   function buildMapMarkerHoverCard(marker) {
-    const title = escapeHtml(stripOpportunitySuffix(marker?.title || ""));
+    const title = escapeHtml(getGalleryDescription(marker));
     const price = escapeHtml(marker?.price || "");
 
     return `
@@ -2138,9 +4359,9 @@
   }
 
   function buildMapMarkerTapCard(marker) {
-    const title = escapeHtml(stripOpportunitySuffix(marker?.title || ""));
+    const title = escapeHtml(getGalleryDescription(marker));
     const price = escapeHtml(marker?.price || "");
-    const detailsUrl = escapeAttribute(`/api/content/details/${marker?.id || ""}`);
+    const detailsUrl = escapeAttribute(buildPublicationApiDetailsUrl(marker?.id || ""));
 
     return `
       <div class="map-tap-card">
@@ -2157,6 +4378,9 @@
     const rawTitle = stripOpportunitySuffix(marker?.title || "");
     const title = escapeHtml(rawTitle);
     const price = escapeHtml(marker?.price || "");
+    const operationLabel = escapeHtml(marker?.operationLabel || "");
+    const operationLetter = escapeHtml(String(marker?.operationLabel || "").trim().charAt(0).toUpperCase());
+    const priceTooltipLabel = buildPriceTooltipLabel(marker);
     const location = escapeHtml(marker?.locality || "Ubicación no informada");
     const shortDescription = escapeHtml(marker?.shortDescription || "Sin descripción breve.");
     const detailsUrl = escapeAttribute(marker?.detailsUrl || "#");
@@ -2169,19 +4393,21 @@
       <article class="map-selection-text-card">
         <div class="map-selection-text-meta">
           <p class="map-selection-text-location">${location}</p>
-          <span class="map-selection-text-price">${price || "Precio sin informar"}</span>
         </div>
         <h3 class="map-selection-text-title">${title || "Publicación"}</h3>
         <p class="map-selection-text-description">${shortDescription}</p>
         <div class="map-selection-text-actions">
-          <a href="${detailsUrl}" class="primary-pill compact map-selection-text-link publication-preview-trigger" data-publication-id="${publicationId}" data-details-url="/api/content/details/${publicationId}">
+          <span class="map-selection-text-price gallery-tooltip-trigger gallery-tooltip-bottom" data-tooltip-label="${priceTooltipLabel}">
+            <span>${operationLabel && operationLetter ? `<strong class="gallery-operation-letter">${operationLetter}</strong>` : ""}${price || "Precio sin informar"}</span>
+          </span>
+          <a href="${detailsUrl}" class="primary-pill compact map-selection-text-link publication-preview-trigger" data-publication-id="${publicationId}" data-details-url="${buildPublicationApiDetailsUrl(publicationId)}">
             Ver anuncio
           </a>
-          <button type="button" class="favorite-toggle ghost-pill compact ${isFavorite ? "is-active" : ""}" data-favorite-toggle="true" data-publication-id="${publicationId}" data-publication-title="${title}" data-suggested-list-name="${suggestedListName}" title="Añadir a mi lista de favoritos" aria-label="Añadir a mi lista de favoritos">
+          <button type="button" class="favorite-toggle ghost-pill compact ${isFavorite ? "is-active" : ""}" data-favorite-toggle="true" data-publication-id="${publicationId}" data-publication-title="${title}" data-suggested-list-name="${suggestedListName}" aria-label="Añadir a mi lista de favoritos">
             ${renderFavoriteIcon(isFavorite)}
           </button>
-          <button type="button" class="ghost-pill compact map-selection-text-report report-trigger" data-publication-id="${publicationId}" data-publication-code="${publicationCode}" data-publication-title="${title}">
-            Denunciar
+          <button type="button" class="report-trigger map-selection-text-report gallery-tooltip-trigger gallery-tooltip-top" data-publication-id="${publicationId}" data-publication-code="${publicationCode}" data-publication-title="${title}" aria-label="Denunciar ${title}" data-tooltip-label="Denunciar">
+            <span class="gallery-report-letter" aria-hidden="true">D</span>
           </button>
         </div>
       </article>
@@ -2210,6 +4436,246 @@
     }
 
     return `upload-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+  }
+
+  function supportsCanvasWebp() {
+    try {
+      const canvas = document.createElement("canvas");
+      return canvas.toDataURL("image/webp").startsWith("data:image/webp");
+    } catch {
+      return false;
+    }
+  }
+
+  async function loadImageElementFromFile(file) {
+    const objectUrl = URL.createObjectURL(file);
+
+    try {
+      const image = await new Promise((resolve, reject) => {
+        const element = new Image();
+        element.onload = () => resolve(element);
+        element.onerror = () => reject(new Error("No se pudo leer la imagen seleccionada."));
+        element.src = objectUrl;
+      });
+
+      return image;
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
+  async function readImageDimensions(file) {
+    const image = await loadImageElementFromFile(file);
+    return {
+      width: Number(image.naturalWidth || image.width || 0),
+      height: Number(image.naturalHeight || image.height || 0)
+    };
+  }
+
+  async function readVideoMetadata(file) {
+    const objectUrl = URL.createObjectURL(file);
+
+    try {
+      return await new Promise((resolve, reject) => {
+        const video = document.createElement("video");
+        video.preload = "metadata";
+        video.muted = true;
+        video.playsInline = true;
+        video.onloadedmetadata = () => {
+          resolve({
+            width: Number(video.videoWidth || 0),
+            height: Number(video.videoHeight || 0),
+            duration: Number(video.duration || 0)
+          });
+        };
+        video.onerror = () => reject(new Error("No pudimos procesar ese archivo de video."));
+        video.src = objectUrl;
+      });
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
+  function getSupportedMediaRecorderMimeType() {
+    if (typeof MediaRecorder === "undefined") {
+      return "";
+    }
+
+    const candidates = [
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm"
+    ];
+
+    return candidates.find(type => MediaRecorder.isTypeSupported(type)) || "";
+  }
+
+  async function optimizeVideoForUpload(file, options = {}) {
+    const mimeType = getSupportedMediaRecorderMimeType();
+    if (!mimeType || typeof MediaRecorder === "undefined") {
+      throw new Error("Este navegador no permite comprimir el video antes de subirlo.");
+    }
+
+    const sourceUrl = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.src = sourceUrl;
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "auto";
+
+    try {
+      await new Promise((resolve, reject) => {
+        video.onloadedmetadata = () => resolve();
+        video.onerror = () => reject(new Error("No pudimos procesar ese archivo de video."));
+      });
+
+      if (video.videoWidth <= 0 || video.videoHeight <= 0) {
+        throw new Error("No pudimos leer el tamaño del video.");
+      }
+
+      const maxWidth = Number(options.maxWidth || 1080);
+      const maxHeight = Number(options.maxHeight || 1920);
+      const maxSideScale = Math.min(1, maxWidth / video.videoWidth, maxHeight / video.videoHeight);
+      const targetWidth = Math.max(2, Math.floor((video.videoWidth * maxSideScale) / 2) * 2);
+      const targetHeight = Math.max(2, Math.floor((video.videoHeight * maxSideScale) / 2) * 2);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const context = canvas.getContext("2d", { alpha: false });
+      if (!context || typeof canvas.captureStream !== "function") {
+        throw new Error("Este navegador no permite redimensionar el video antes de subirlo.");
+      }
+
+      const renderedStream = canvas.captureStream(30);
+      const sourceStream = typeof video.captureStream === "function"
+        ? video.captureStream()
+        : typeof video.mozCaptureStream === "function"
+          ? video.mozCaptureStream()
+          : null;
+      if (!sourceStream) {
+        throw new Error("Este navegador no permite capturar el video para comprimirlo.");
+      }
+
+      sourceStream.getAudioTracks().forEach(track => renderedStream.addTrack(track));
+
+      const recorder = new MediaRecorder(renderedStream, {
+        mimeType,
+        videoBitsPerSecond: Number(options.videoBitsPerSecond || 6_500_000),
+        audioBitsPerSecond: Number(options.audioBitsPerSecond || 128_000)
+      });
+
+      const chunks = [];
+      recorder.ondataavailable = event => {
+        if (event.data && event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      await new Promise((resolve, reject) => {
+        let animationFrameId = 0;
+
+        const paintFrame = () => {
+          if (!video.paused && !video.ended) {
+            context.drawImage(video, 0, 0, targetWidth, targetHeight);
+            animationFrameId = requestAnimationFrame(paintFrame);
+          }
+        };
+
+        recorder.onerror = () => reject(new Error("No pudimos comprimir el video antes de subirlo."));
+        recorder.onstop = () => {
+          cancelAnimationFrame(animationFrameId);
+          resolve();
+        };
+        video.onended = () => recorder.stop();
+
+        recorder.start(1000);
+        video.play().then(() => {
+          paintFrame();
+        }).catch(reject);
+      });
+
+      const blob = new Blob(chunks, { type: mimeType });
+      if (!blob.size || blob.size >= file.size) {
+        throw new Error("La compresion previa no mejoro el tamaño del video.");
+      }
+
+      return new File([blob], `${String(file.name || "video").replace(/\.[^.]+$/, "")}.webm`, {
+        type: "video/webm",
+        lastModified: file.lastModified || Date.now()
+      });
+    } finally {
+      video.pause();
+      URL.revokeObjectURL(sourceUrl);
+    }
+  }
+
+  async function optimizeImageForUpload(file, options = {}) {
+    const maxSide = Number(options.maxSide || 2000);
+    const preferredQuality = Number(options.quality || 0.9);
+    const preferredType = supportsCanvasWebp() ? "image/webp" : "image/jpeg";
+    const originalType = String(file?.type || "").toLowerCase();
+
+    if (!(file instanceof File)) {
+      throw new Error("El archivo seleccionado no es valido.");
+    }
+
+    if (!originalType.startsWith("image/") || originalType === "image/gif") {
+      return file;
+    }
+
+    const image = await loadImageElementFromFile(file);
+    const width = Number(image.naturalWidth || image.width || 0);
+    const height = Number(image.naturalHeight || image.height || 0);
+    if (!width || !height) {
+      throw new Error("No se pudo obtener el tamaño de la imagen.");
+    }
+
+    const largestSide = Math.max(width, height);
+    if (largestSide <= maxSide) {
+      return file;
+    }
+
+    const scale = Math.min(1, maxSide / largestSide);
+    const targetWidth = Math.max(1, Math.round(width * scale));
+    const targetHeight = Math.max(1, Math.round(height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) {
+      throw new Error("Este navegador no permite procesar la imagen antes de subirla.");
+    }
+
+    context.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(result => {
+        if (result) {
+          resolve(result);
+          return;
+        }
+
+        reject(new Error("Este navegador no pudo comprimir la imagen antes de subirla."));
+      }, preferredType, preferredQuality);
+    });
+
+    if (!(blob instanceof Blob)) {
+      throw new Error("No se pudo preparar la imagen para la subida.");
+    }
+
+    if (blob.size >= file.size && targetWidth === width && targetHeight === height) {
+      return file;
+    }
+
+    const originalName = String(file.name || "imagen");
+    const sanitizedBaseName = originalName.replace(/\.[^.]+$/, "") || "imagen";
+    const extension = preferredType === "image/webp" ? ".webp" : ".jpg";
+    return new File([blob], `${sanitizedBaseName}${extension}`, {
+      type: preferredType,
+      lastModified: file.lastModified || Date.now()
+    });
   }
 
   function uploadImagesRequest(formData) {
@@ -2280,8 +4746,42 @@
     });
   }
 
+  async function deleteUploadedMediaRequest(urls) {
+    const mediaUrls = Array.isArray(urls)
+      ? urls.map(url => String(url || "").trim()).filter(Boolean)
+      : [];
+    if (!mediaUrls.length) {
+      return { ok: true, deleted: 0 };
+    }
+
+    const response = await fetch("/api/content/delete-uploaded-media", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "fetch"
+      },
+      body: JSON.stringify({ urls: mediaUrls })
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    return {
+      ok: response.ok,
+      status: response.status,
+      deleted: payload?.deleted || 0,
+      message: payload?.message || ""
+    };
+  }
+
   function escapeAttribute(value) {
     return escapeHtml(value);
+  }
+
+  function buildPriceTooltipLabel(item) {
+    const operation = String(item?.operationLabel || "").trim();
+    const category = String(item?.categoryLabel || "").trim();
+    const price = String(item?.priceTooltip || item?.price || "").trim();
+
+    return escapeAttribute([operation, category, price].filter(Boolean).join(" · "));
   }
 
   function wirePublicationPreviewModal() {
@@ -2292,11 +4792,14 @@
     const body = document.getElementById("publicationPreviewBody");
     const title = document.getElementById("publicationPreviewTitle");
     if (!modalElement || !body || !title) return;
+    let disposePreviewMapObserver = null;
 
     const closePreview = () => {
+      disposePreviewMapObserver?.();
+      disposePreviewMapObserver = null;
       modalElement.hidden = true;
       modalElement.classList.remove("is-open");
-      document.body.classList.remove("preview-open");
+      syncPreviewOpenState();
       title.textContent = "Detalle de publicaciÃ³n";
       body.innerHTML = "";
     };
@@ -2317,18 +4820,21 @@
 
     openPublicationPreview = async detailsUrl => {
       if (!detailsUrl) return;
+      detailDebugLog("openPublicationPreview:called", { detailsUrl });
+      clearPersistedSystemLoading();
+      forceHideSystemLoading();
 
       title.textContent = "Cargando publicaciÃƒÂ³n";
-      body.innerHTML = `<div class="preview-modal-loading">Cargando detalleÃ¢â‚¬Â¦</div>`;
+      body.innerHTML = `<div class="preview-modal-loading">Cargando detalle...</div>`;
 
       let response;
       try {
-        response = await fetch(detailsUrl, {
+        response = await detailDebugMeasure("openPublicationPreview:fetch", () => fetch(detailsUrl, {
           headers: { "X-Requested-With": "fetch" }
-        });
+        }), { detailsUrl });
       } catch {
         title.textContent = "No se pudo cargar";
-        body.innerHTML = `<section class="empty-state"><h2>Error al abrir la publicaciÃƒÂ³n</h2><p>RevisÃƒÂ¡ la conexiÃƒÂ³n e intentÃƒÂ¡ nuevamente.</p></section>`;
+        body.innerHTML = `<section class="empty-state"><h2>Error al abrir la publicacion</h2><p>Revisa la conexion e intenta nuevamente.</p></section>`;
         modalElement.hidden = false;
         modalElement.classList.add("is-open");
         document.body.classList.add("preview-open");
@@ -2337,29 +4843,56 @@
 
       if (!response.ok) {
         title.textContent = "No se pudo cargar";
-        body.innerHTML = `<section class="empty-state"><h2>Error al abrir la publicaciÃƒÂ³n</h2><p>IntentÃƒÂ¡ nuevamente en unos segundos.</p></section>`;
+        body.innerHTML = `<section class="empty-state"><h2>Error al abrir la publicacion</h2><p>Intenta nuevamente en unos segundos.</p></section>`;
         modalElement.hidden = false;
         modalElement.classList.add("is-open");
         document.body.classList.add("preview-open");
         return;
       }
 
-      body.innerHTML = await response.text();
+      const html = await detailDebugMeasure("openPublicationPreview:responseText", () => response.text(), {
+        detailsUrl
+      });
+      body.innerHTML = html;
+      detailDebugLog("openPublicationPreview:htmlInjected", {
+        detailsUrl,
+        htmlLength: html.length
+      });
       wireDetailGalleryLayout();
       const publicationTitle = body.querySelector(".detail-hero h1")?.textContent?.trim();
-      title.textContent = stripOpportunitySuffix(publicationTitle) || "Detalle de publicaciÃƒÂ³n";
+      title.textContent = stripOpportunitySuffix(publicationTitle) || "Detalle de publicacion";
       modalElement.hidden = false;
       modalElement.classList.add("is-open");
       document.body.classList.add("preview-open");
-      await initContentMaps();
+      body.scrollTop = 0;
+      detailDebugLog("openPublicationPreview:modalShown", { detailsUrl });
+      disposePreviewMapObserver?.();
+      disposePreviewMapObserver = null;
+      const publicationMap = body.querySelector("[data-publication-map]");
+      detailDebugLog("openPublicationPreview:mapFound", {
+        detailsUrl,
+        hasPublicationMap: Boolean(publicationMap)
+      });
+      if (publicationMap) {
+        disposePreviewMapObserver = schedulePublicationMapInitialization(publicationMap, { scrollRoot: body });
+      }
     };
 
     document.addEventListener("click", async event => {
       const mapPreviewTrigger = event.target.closest("[data-map-open-preview='true']");
       if (mapPreviewTrigger) {
+        const pageUrl = getPublicationPageUrl(mapPreviewTrigger);
+        if (getPublicationOpenMode() === "page" && pageUrl) {
+          event.preventDefault();
+          event.stopPropagation();
+          window.open(pageUrl, "_blank", "noopener");
+          return;
+        }
+
         event.preventDefault();
         event.stopPropagation();
         const detailsUrl = mapPreviewTrigger.getAttribute("data-details-url");
+        detailDebugLog("previewTrigger:mapButtonClick", { detailsUrl });
         await openPublicationPreview(detailsUrl);
         return;
       }
@@ -2374,6 +4907,13 @@
       event.preventDefault();
 
       const detailsUrl = trigger.getAttribute("data-details-url") || trigger.getAttribute("href");
+      const pageUrl = getPublicationPageUrl(trigger);
+      if (getPublicationOpenMode() === "page" && pageUrl) {
+        window.open(pageUrl, "_blank", "noopener");
+        return;
+      }
+
+      detailDebugLog("previewTrigger:cardClick", { detailsUrl });
       await openPublicationPreview(detailsUrl);
       return;
 
@@ -2432,7 +4972,7 @@
       overlayState.index = 0;
       overlay.hidden = true;
       overlay.classList.remove("is-open");
-      document.body.classList.remove("preview-open");
+      syncPreviewOpenState();
     };
 
     const renderOverlayItem = (overlay, index) => {
@@ -2444,6 +4984,11 @@
       if (!overlay || !body || !item) return;
 
       overlayState.index = index;
+      if (index >= MEDIA_PRELOAD_CONFIG.galleryInitialItems - 1) {
+        const activeGallery = overlay?.closest("#publicationPreviewBody")?.querySelector(".detail-gallery")
+          || document.querySelector(".detail-gallery");
+        mediaPreloadService.warmRemainingDetailGallery(activeGallery);
+      }
       body.innerHTML = item.type === "video"
         ? `<video src="${escapeAttribute(item.src)}" controls autoplay playsinline preload="metadata"></video>`
         : `<img src="${escapeAttribute(item.src)}" alt="${escapeAttribute(item.title)}" />`;
@@ -2544,6 +5089,11 @@
         title: stripOpportunitySuffix(el.getAttribute("data-detail-media-title") || el.getAttribute("alt") || mediaTitle || "Vista ampliada")
       })).filter(item => item.src);
 
+      const triggerIndex = Number(trigger.getAttribute("data-detail-media-index") || 0);
+      if (triggerIndex >= MEDIA_PRELOAD_CONFIG.galleryInitialItems - 1) {
+        mediaPreloadService.warmRemainingDetailGallery(gallery);
+      }
+
       overlayState.items = items.length ? items : [{ type: mediaType, src: mediaSrc, title: mediaTitle }];
       overlayState.index = Math.max(0, overlayState.items.findIndex(item => item.src === mediaSrc));
       if (overlayState.index < 0) overlayState.index = 0;
@@ -2605,12 +5155,16 @@
 
     form.dataset.bound = "true";
     syncCreateTitle(form);
+    syncCreateDescriptionExamples(form);
+    wireCreateDescriptionHyperlinkGuards(form);
     wireCreateSectionToggles(form);
 
     const groupInput = form.querySelector('[name="group"]');
     const categorySelect = form.querySelector("[data-category-select]");
+    const operationSelect = form.querySelector("[data-create-operation-select]");
     const localityInput = form.querySelector('input[name="locality"]');
     const addressInput = form.querySelector('input[name="address"]');
+    syncCreatePricePeriodHint(form);
     [categorySelect, localityInput, addressInput].forEach(input => {
       input?.addEventListener("input", () => syncCreateTitle(form));
       input?.addEventListener("change", () => syncCreateTitle(form));
@@ -2621,6 +5175,7 @@
       await reloadDynamicCategoryFields(form);
       enhanceSearchableSelects(form);
       syncCreateTitle(form);
+      syncCreateDescriptionExamples(form);
     });
 
     groupInput?.addEventListener("change", async () => {
@@ -2628,6 +5183,12 @@
       await reloadDynamicCategoryFields(form);
       enhanceSearchableSelects(form);
       syncCreateTitle(form);
+      syncCreateDescriptionExamples(form);
+    });
+
+    operationSelect?.addEventListener("change", () => {
+      operationSelect.dataset.selectedOperation = operationSelect.value || "";
+      syncCreatePricePeriodHint(form);
     });
 
     const uploader = wireCreateImageUploader(form);
@@ -2636,6 +5197,13 @@
     form.addEventListener("submit", async event => {
       event.preventDefault();
       clearCreateFormErrors(form);
+
+      const hyperlinkErrors = validateCreateDescriptionHyperlinks(form);
+      if (hyperlinkErrors.length) {
+        renderCreateFormErrors(form, hyperlinkErrors);
+        focusFirstCreateError(form, hyperlinkErrors);
+        return;
+      }
 
       await uploader.waitForUploads();
       await videoUploader.waitForUploads();
@@ -2682,6 +5250,7 @@
         feedback.innerHTML = "";
       }
 
+      uploader.markPersisted();
       if (result.redirectUrl) {
         window.location.href = result.redirectUrl;
       }
@@ -2689,11 +5258,15 @@
 
     reloadCategoryOptions(form, true)
       .then(() => reloadDynamicCategoryFields(form))
-      .then(() => enhanceSearchableSelects(form));
+      .then(() => {
+        enhanceSearchableSelects(form);
+        syncCreateDescriptionExamples(form);
+      });
   }
 
   function wireCreateSectionToggles(form) {
     const toggles = form.querySelectorAll("[data-section-toggle]");
+    const noLocationInput = form.querySelector("[data-create-no-location]");
     toggles.forEach(toggle => {
       const section = toggle.closest("section");
       const sectionKey = toggle.dataset.sectionToggle || "";
@@ -2710,11 +5283,174 @@
           });
         }
         body.hidden = !toggle.checked;
+        if (sectionKey === "location" && noLocationInput) {
+          noLocationInput.checked = !toggle.checked;
+          noLocationInput.dispatchEvent(new Event("change", { bubbles: true }));
+          if (toggle.checked) {
+            const mapElement = body.querySelector("[data-create-map]");
+            requestCreateMapResize(mapElement);
+          }
+        }
+        if (sectionKey === "technical") {
+          syncTechnicalCategoryNotice(form);
+        }
       };
 
       toggle.addEventListener("change", sync);
       sync();
     });
+  }
+
+  function syncCreateDescriptionExamples(form) {
+    const shortNode = form.querySelector('[data-description-example="short"]');
+    const longNode = form.querySelector('[data-description-example="long"]');
+    if (!shortNode && !longNode) return;
+
+    const categorySelect = form.querySelector("[data-category-select]");
+    const groupSelect = form.querySelector('[name="group"]');
+    const categoryName = categorySelect?.selectedOptions?.[0]?.textContent?.trim() || "";
+    const groupName = groupSelect?.selectedOptions?.[0]?.textContent?.trim() || "";
+    const examples = getCreateDescriptionExamples(categoryName, groupName);
+
+    if (shortNode) {
+      shortNode.textContent = `Ejemplo: ${examples.short}`;
+    }
+    if (longNode) {
+      longNode.textContent = `Ejemplo: ${examples.long}`;
+    }
+  }
+
+  function getCreateDescriptionExamples(categoryName, groupName) {
+    const text = `${categoryName} ${groupName}`.toLocaleLowerCase("es");
+
+    if (text.includes("departamento") || text.includes("casa") || text.includes("ph")) {
+      return {
+        short: "Depto de 2 ambientes con balcón y luz en cada rincón.",
+        long: "Departamento de 2 ambientes con balcón, cocina equipada y living lleno de luz. Un espacio cómodo para disfrutar todos los días, cerca de comercios y transporte."
+      };
+    }
+
+    if (text.includes("terreno") || text.includes("campo") || text.includes("quinta") || text.includes("inmueble")) {
+      return {
+        short: "Amplio terreno con mucho verde, ideal para construir tu casa",
+        long: "Amplio terreno rodeado de verde, en un entorno tranquilo y con buen acceso. Espacio para construir tu casa, sumar un jardín y disfrutar de la vida al aire libre."
+      };
+    }
+
+    if (text.includes("auto") || text.includes("camioneta") || text.includes("utilitario") || text.includes("moto") || text.includes("rodado")) {
+      return {
+        short: "Toyota Hilux SRV 2020, confort y fuerza para cada camino.",
+        long: "Toyota Hilux SRV 2020 con interior amplio y cómodo, ideal para trabajar y salir de viaje. De uso particular, con mantenimiento al día y espacio para llevar todo lo que necesitás."
+      };
+    }
+
+    if (text.includes("celular") || text.includes("computacion") || text.includes("consola") || text.includes("camara") || text.includes("electronica")) {
+      return {
+        short: "iPhone 13 de 128 GB, gran cámara y diseño que enamora.",
+        long: "iPhone 13 de 128 GB, con una gran cámara para guardar tus mejores momentos y espacio para tus fotos y apps. Muy cuidado y con funda incluida."
+      };
+    }
+
+    if (text.includes("ropa") || text.includes("indumentaria") || text.includes("calzado") || text.includes("moda")) {
+      return {
+        short: "Zapatillas Nike talle 42, comodidad y estilo para cada día.",
+        long: "Zapatillas Nike talle 42, livianas y cómodas para acompañarte todos los días. Un diseño fácil de combinar, con poco uso y muy bien cuidadas."
+      };
+    }
+
+    if (text.includes("lancha") || text.includes("velero") || text.includes("nautic") || text.includes("embarcacion")) {
+      return {
+        short: "Lancha Bermuda 180 con Yamaha, ideal para disfrutar del río.",
+        long: "Lancha Bermuda 180 con motor Yamaha y cómodos asientos para compartir paseos por el río. Ideal para salir a pescar o disfrutar una tarde en el agua con amigos."
+      };
+    }
+
+    if (text.includes("agro") || text.includes("maquina") || text.includes("insumo") || text.includes("animal") || text.includes("rural")) {
+      return {
+        short: "Tractor John Deere 5075E, fuerza para trabajar tu campo.",
+        long: "Tractor John Deere 5075E, una herramienta versátil para las tareas de tu campo. Bien cuidado, con mantenimiento al día y listo para acompañar la próxima temporada."
+      };
+    }
+
+    return {
+      short: "Mesa de madera maciza de 1,60 m, calidez para tu comedor.",
+      long: "Mesa de comedor de 1,60 m en madera maciza, con vetas naturales y una terminación cálida. Ideal para compartir comidas y sumar un detalle especial a tu casa."
+    };
+  }
+
+  function syncTechnicalCategoryNotice(form) {
+    const categorySelect = form.querySelector("[data-category-select]");
+    const optionalEmptyNode = form.querySelector("[data-dynamic-optional-fields-empty]");
+    const technicalToggle = form.querySelector('[data-section-toggle="technical"]');
+    if (!categorySelect || !optionalEmptyNode) return;
+
+    const hasCategory = String(categorySelect.value || "").trim().length > 0;
+    const isTryingTechnicalSection = Boolean(technicalToggle?.checked);
+    const isMissingCategoryMessage = optionalEmptyNode.textContent.trim() === "Seleccioná una categoría para cargar la ficha técnica opcional.";
+    optionalEmptyNode.classList.toggle("is-error", !hasCategory && isTryingTechnicalSection && isMissingCategoryMessage);
+  }
+
+  function wireCreateDescriptionHyperlinkGuards(form) {
+    const shortInput = form.querySelector('input[name="shortDescription"]');
+    const counter = form.querySelector("[data-short-description-count]");
+    if (shortInput && counter && shortInput.dataset.counterBound !== "true") {
+      shortInput.dataset.counterBound = "true";
+      const updateCounter = () => {
+        const length = shortInput.value.length;
+        counter.textContent = `${length}/60 caracteres${length > 60 ? ". Acortá la descripción para guardar el anuncio." : ""}`;
+        shortInput.setCustomValidity(length > 60 ? "La descripción corta debe tener como máximo 60 caracteres, incluidos los espacios." : "");
+      };
+      shortInput.addEventListener("input", updateCounter);
+      updateCounter();
+    }
+    form.querySelectorAll('input[name="shortDescription"], textarea[name="longDescription"]').forEach(input => {
+      if (input.dataset.hyperlinkGuardBound === "true") return;
+      input.dataset.hyperlinkGuardBound = "true";
+
+      input.addEventListener("paste", event => {
+        const pastedText = event.clipboardData?.getData("text") || "";
+        if (!containsHyperlink(pastedText)) return;
+
+        event.preventDefault();
+        const field = input.name === "shortDescription" ? "shortDescription" : "longDescription";
+        renderCreateFormErrors(form, [{
+          field,
+          message: "No se permiten hipervinculos en la descripcion."
+        }]);
+      });
+
+      input.addEventListener("input", () => {
+        if (containsHyperlink(input.value)) return;
+        const container = input.closest("[data-field-container]");
+        const errorNode = form.querySelector(`[data-field-error="${input.name}"]`);
+        if (errorNode?.textContent === "No se permiten hipervinculos en la descripcion.") {
+          errorNode.textContent = "";
+        }
+        if (!container?.querySelector(".field-error:not(:empty)")) {
+          container?.classList.remove("field-invalid");
+          input.classList.remove("input-invalid");
+        }
+      });
+    });
+  }
+
+  function validateCreateDescriptionHyperlinks(form) {
+    const errors = ["shortDescription", "longDescription"]
+      .map(field => ({
+        field,
+        message: containsHyperlink(form.querySelector(`[name="${field}"]`)?.value || "")
+          ? "No se permiten hipervinculos en la descripcion."
+          : ""
+      }))
+      .filter(error => error.message);
+    if ((form.querySelector('[name="shortDescription"]')?.value || "").length > 60) {
+      errors.push({ field: "shortDescription", message: "La descripción corta debe tener como máximo 60 caracteres, incluidos los espacios." });
+    }
+    return errors;
+  }
+
+  function containsHyperlink(value) {
+    return /(https?:\/\/|ftp:\/\/|mailto:|www\.|\b[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.(?:com\.ar|net\.ar|org\.ar|com|net|org|info|io|app|co|uy|py|br|cl|es|dev|site|online|store|shop|me|ly)\b)/i.test(String(value || ""));
   }
 
   function normalizeCreateFieldErrors(errors) {
@@ -2762,6 +5498,7 @@
       categoryid: "category",
       category: "category",
       price: "price",
+      operation: "operation",
       currency: "currency",
       locality: "locationSearch",
       latitude: "locationSearch",
@@ -2924,6 +5661,7 @@
     const categoryId = String(categorySelect.value || "").trim();
     const template = requiredContainer.dataset.categoryFieldsEndpointTemplate || optionalContainer.dataset.categoryFieldsEndpointTemplate || "";
     if (!categoryId || !template) {
+      syncCreateOperationOptions(form, []);
       requiredContainer.querySelectorAll("[data-dynamic-field]").forEach(node => node.remove());
       optionalContainer.querySelectorAll("[data-dynamic-field]").forEach(node => node.remove());
       if (technicalPanel) {
@@ -2936,6 +5674,7 @@
       if (optionalEmptyNode) {
         optionalEmptyNode.hidden = false;
         optionalEmptyNode.textContent = "Seleccioná una categoría para cargar la ficha técnica opcional.";
+        syncTechnicalCategoryNotice(form);
       }
       return;
     }
@@ -2949,6 +5688,7 @@
     optionalContainer.querySelectorAll("[data-dynamic-field]").forEach(node => node.remove());
 
     if (!response.ok) {
+      syncCreateOperationOptions(form, []);
       if (technicalPanel) {
         technicalPanel.hidden = false;
       }
@@ -2959,12 +5699,15 @@
       if (optionalEmptyNode) {
         optionalEmptyNode.hidden = false;
         optionalEmptyNode.textContent = "No se pudo cargar la ficha técnica de esta categoría.";
+        optionalEmptyNode.classList.remove("is-error");
       }
       return;
     }
 
-    const payload = await response.json();
-    const fields = Array.isArray(payload) ? payload : [];
+      const payload = await response.json();
+    const fields = Array.isArray(payload?.fields) ? payload.fields : (Array.isArray(payload) ? payload : []);
+    const operationOptions = Array.isArray(payload?.operationOptions) ? payload.operationOptions : [];
+    syncCreateOperationOptions(form, operationOptions);
     if (!fields.length) {
       if (technicalPanel) {
         technicalPanel.hidden = false;
@@ -2976,6 +5719,7 @@
       if (optionalEmptyNode) {
         optionalEmptyNode.hidden = false;
         optionalEmptyNode.textContent = "Esta categoría no tiene ficha técnica opcional.";
+        optionalEmptyNode.classList.remove("is-error");
       }
       return;
     }
@@ -2996,6 +5740,7 @@
 
     if (optionalEmptyNode) {
       optionalEmptyNode.hidden = optionalFields.length > 0;
+      optionalEmptyNode.classList.remove("is-error");
       if (!optionalFields.length) {
         optionalEmptyNode.textContent = "Esta categoría no tiene ficha técnica opcional.";
       }
@@ -3072,6 +5817,14 @@
       }));
       const emptyOptionLabel = select.options[0]?.textContent?.trim() || "Debe seleccionar";
       let activeIndex = -1;
+      const createBasicsPanel = select.closest("[data-create-basics-panel]");
+
+      const syncOverlayState = isOpen => {
+        wrapper.classList.toggle("is-open", isOpen);
+        if (createBasicsPanel) {
+          createBasicsPanel.classList.toggle("has-open-searchable-select", isOpen);
+        }
+      };
 
       const normalizeSearchText = value => String(value || "").trim().toLocaleLowerCase("es");
 
@@ -3132,6 +5885,7 @@
         menu.hidden = true;
         input.setAttribute("aria-expanded", "false");
         input.removeAttribute("aria-activedescendant");
+        syncOverlayState(false);
       };
 
       const setActiveItem = index => {
@@ -3192,6 +5946,7 @@
         menu.hidden = false;
         input.setAttribute("aria-expanded", "true");
         activeIndex = -1;
+        syncOverlayState(true);
       };
 
       const openMenu = () => {
@@ -3318,6 +6073,65 @@
     });
 
     return values;
+  }
+
+  function syncCreateOperationOptions(form, options) {
+    const field = form.querySelector("[data-create-operation-field]");
+    const select = form.querySelector("[data-create-operation-select]");
+    if (!field || !select) return;
+
+    const normalizedOptions = Array.isArray(options)
+      ? options
+        .map(option => String(option || "").trim())
+        .filter(Boolean)
+      : [];
+    const selectedValue = String(select.value || select.dataset.selectedOperation || "").trim();
+    const defaultValue = normalizedOptions.find(option => option.toLowerCase() === "venta") || "";
+    const nextValue = normalizedOptions.some(option => option.localeCompare(selectedValue, "es", { sensitivity: "base" }) === 0)
+      ? selectedValue
+      : defaultValue;
+
+    select.innerHTML = '<option value="">Seleccioná una opción</option>';
+    normalizedOptions.forEach(optionValue => {
+      const option = document.createElement("option");
+      option.value = optionValue;
+      option.textContent = optionValue;
+      option.selected = optionValue.localeCompare(nextValue, "es", { sensitivity: "base" }) === 0;
+      select.appendChild(option);
+    });
+
+    select.value = nextValue;
+    select.dataset.selectedOperation = nextValue;
+    field.hidden = normalizedOptions.length === 0;
+
+    if (!normalizedOptions.length) {
+      select.value = "";
+      select.dataset.selectedOperation = "";
+    }
+
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function syncCreatePricePeriodHint(form) {
+    const operation = String(form.querySelector("[data-create-operation-select]")?.value || "").trim().toLocaleLowerCase("es-AR");
+    const label = form.querySelector("[data-create-price-label]");
+    const hint = form.querySelector("[data-create-price-period-hint]");
+    if (!label || !hint) return;
+
+    if (operation === "alquiler") {
+      label.textContent = "Precio por mes";
+      hint.textContent = "El precio publicado se mostrará como valor mensual.";
+      return;
+    }
+
+    if (operation === "temporario") {
+      label.textContent = "Precio por día";
+      hint.textContent = "El precio publicado se mostrará como valor diario.";
+      return;
+    }
+
+    label.textContent = "Precio";
+    hint.textContent = "Para alquileres indicá el valor mensual; para temporarios, el valor diario.";
   }
 
   function buildDynamicFieldNode(field, currentValue, mode = "optional") {
@@ -3511,10 +6325,85 @@
     const previews = form.querySelector("[data-image-previews]");
     const countNode = form.querySelector("[data-image-count]");
     const imagesCsvInput = form.querySelector('input[name="imagesCsv"]');
+    const videoUrlInput = form.querySelector('input[name="videoUrl"]');
     const feedback = document.getElementById("create-feedback");
 
     const state = [];
     let uploadChain = Promise.resolve();
+    let draggingImageId = null;
+    let didPersistPublication = false;
+    let cleanupQueued = false;
+
+    const allowedImageExtensions = new Set([".jpg", ".jpeg", ".jfif", ".png", ".webp", ".gif", ".bmp"]);
+    const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"]);
+
+    const showDeleteWarning = message => {
+      if (!feedback) return;
+      feedback.innerHTML = `<div class="status-banner warning">${escapeHtml(message || "No se pudo borrar alguna imagen en R2.")}</div>`;
+    };
+
+    const showUploadWarning = message => {
+      if (!feedback) return;
+      feedback.innerHTML = `<div class="status-banner warning">${escapeHtml(message || "No se pudieron subir las imagenes.")}</div>`;
+    };
+
+    const showVerticalImageWarning = () => {
+      window.alert('Ventagram fue optimizada para mostrar imagenes "Verticales" tamaño celular si pones otro tipo de imagenes pueden cortarse en los listados de anuncios.\n\nLo óptimo sería que todas sean verticales o al menos la principal.');
+    };
+
+    const isSupportedImageFile = file => {
+      const type = String(file?.type || "").trim().toLowerCase();
+      const name = String(file?.name || "");
+      const dotIndex = name.lastIndexOf(".");
+      const extension = dotIndex >= 0 ? name.slice(dotIndex).toLowerCase() : "";
+      return allowedImageTypes.has(type) || allowedImageExtensions.has(extension);
+    };
+
+    const deleteUploadedUrls = async urls => {
+      const result = await deleteUploadedMediaRequest(urls);
+      if (!result.ok) {
+        throw new Error(result.message || "No se pudo borrar alguna imagen en R2.");
+      }
+    };
+
+    const collectTemporaryUploadedUrls = () => state
+      .filter(item => item.deleteOnRemove && item.uploadedUrl)
+      .map(item => item.uploadedUrl);
+
+    const queueTemporaryCleanup = () => {
+      if (didPersistPublication || cleanupQueued) {
+        return;
+      }
+
+      const urls = collectTemporaryUploadedUrls();
+      if (!urls.length) {
+        return;
+      }
+
+      cleanupQueued = true;
+      const payload = JSON.stringify({ urls });
+
+      try {
+        if (navigator.sendBeacon) {
+          const blob = new Blob([payload], { type: "application/json" });
+          if (navigator.sendBeacon("/api/content/delete-uploaded-media", blob)) {
+            return;
+          }
+        }
+      } catch {
+        // Fallback below.
+      }
+
+      fetch("/api/content/delete-uploaded-media", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "fetch"
+        },
+        body: payload,
+        keepalive: true
+      }).catch(() => {});
+    };
 
     const seedExistingImages = () => {
       const existingUrls = String(imagesCsvInput?.value || "")
@@ -3527,7 +6416,10 @@
           id: createClientId(),
           file: { name: "Imagen actual" },
           previewUrl: url,
-          uploadedUrl: url
+          uploadedUrl: url,
+          statusText: "Listo",
+          deleteOnRemove: false,
+          removed: false
         });
       });
     };
@@ -3539,6 +6431,19 @@
           .filter(Boolean)
           .join(",");
       }
+    };
+
+    const hasPrimaryVideo = () => String(videoUrlInput?.value || "").trim().length > 0;
+
+    const moveImage = (fromId, toId) => {
+      if (!fromId || !toId || fromId === toId) return;
+      const fromIndex = state.findIndex(item => item.id === fromId);
+      const toIndex = state.findIndex(item => item.id === toId);
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+
+      const [item] = state.splice(fromIndex, 1);
+      state.splice(toIndex, 0, item);
+      render();
     };
 
     const render = () => {
@@ -3555,10 +6460,10 @@
       }
 
       previews.innerHTML = state.map((item, index) => `
-        <article class="upload-preview ${index === 0 ? "main" : ""}">
+        <article class="upload-preview ${index === 0 && !hasPrimaryVideo() ? "main" : ""}" draggable="true" data-upload-item-id="${item.id}">
           <img src="${escapeAttribute(item.previewUrl)}" alt="${escapeAttribute(item.file.name)}" />
-          <span class="gallery-badge">${index === 0 ? "Principal" : `#${index + 1}`}</span>
-          <span class="upload-status">${item.uploadedUrl ? "Listo" : "Subiendo..."}</span>
+          <span class="gallery-badge ${index === 0 && !hasPrimaryVideo() ? "upload-primary-badge" : ""}">${index === 0 && !hasPrimaryVideo() ? "Principal" : `#${index + 1}`}</span>
+          <span class="upload-status">${escapeHtml(item.statusText || (item.uploadedUrl ? "Listo" : "Subiendo..."))}</span>
           <button type="button" class="gallery-nav gallery-nav-next upload-action" data-upload-action="remove" data-upload-id="${item.id}" aria-label="Quitar imagen">&times;</button>
         </article>
       `).join("");
@@ -3567,9 +6472,24 @@
     };
 
     const uploadFiles = async files => {
-      const validFiles = Array.from(files)
-        .filter(file => file.type.startsWith("image/"))
+      const selectedFiles = Array.from(files).filter(Boolean);
+      const unsupportedFiles = selectedFiles.filter(file => !isSupportedImageFile(file));
+      const validFiles = selectedFiles
+        .filter(file => isSupportedImageFile(file))
         .slice(0, Math.max(0, 11 - state.length));
+
+      if (unsupportedFiles.length) {
+        const unsupportedNames = unsupportedFiles
+          .map(file => file.name)
+          .filter(Boolean)
+          .slice(0, 3)
+          .join(", ");
+        showUploadWarning(
+          unsupportedNames
+            ? `Estas imagenes no son compatibles: ${unsupportedNames}. Usa JPG, PNG o WEBP.`
+            : "Alguna imagen no es compatible. Usa JPG, PNG o WEBP."
+        );
+      }
 
       if (!validFiles.length) {
         return;
@@ -3579,54 +6499,110 @@
         id: createClientId(),
         file,
         previewUrl: URL.createObjectURL(file),
-        uploadedUrl: null
+        uploadedUrl: null,
+        statusText: "Preparando...",
+        shouldWarnAboutOrientation: false,
+        deleteOnRemove: true,
+        removed: false
       }));
 
       state.push(...items);
       render();
 
       const currentUpload = uploadChain.then(async () => {
-        const formData = new FormData();
-        items.forEach(item => formData.append("files", item.file));
+        let shouldShowVerticalWarning = false;
 
-        const result = await uploadImagesRequest(formData);
-        if (!result.ok) {
-          items.forEach(item => {
+        for (const item of items) {
+          const currentItem = state.find(entry => entry.id === item.id);
+          if (!currentItem || currentItem.removed) {
+            continue;
+          }
+
+          let fileToUpload = currentItem.file;
+          try {
+            currentItem.statusText = "Comprimiendo...";
+            render();
+            const dimensions = await readImageDimensions(currentItem.file);
+            currentItem.shouldWarnAboutOrientation = dimensions.width >= dimensions.height;
+            shouldShowVerticalWarning = shouldShowVerticalWarning || currentItem.shouldWarnAboutOrientation;
+            fileToUpload = await optimizeImageForUpload(currentItem.file, {
+              maxSide: 2000,
+              quality: 0.9
+            });
+          } catch {
+            fileToUpload = currentItem.file;
+          }
+
+          currentItem.statusText = "Subiendo...";
+          render();
+
+          const formData = new FormData();
+          formData.append("files", fileToUpload);
+
+          const result = await uploadImagesRequest(formData);
+          if (!result.ok) {
             const index = state.findIndex(x => x.id === item.id);
             if (index >= 0) {
               URL.revokeObjectURL(state[index].previewUrl);
               state.splice(index, 1);
             }
-          });
+            render();
+            throw new Error(result.message || "No se pudo subir una de las imagenes.");
+          }
+
+          const uploadedUrl = Array.isArray(result.urls) ? result.urls[0] : null;
+          if (!uploadedUrl) {
+            const index = state.findIndex(x => x.id === item.id);
+            if (index >= 0) {
+              URL.revokeObjectURL(state[index].previewUrl);
+              state.splice(index, 1);
+            }
+            render();
+            throw new Error("La subida termino sin devolver la imagen procesada.");
+          }
+
+          currentItem.uploadedUrl = uploadedUrl;
+          currentItem.statusText = "Listo";
+
+          if (currentItem.removed && currentItem.deleteOnRemove) {
+            try {
+              await deleteUploadedUrls([uploadedUrl]);
+            } catch (error) {
+              showDeleteWarning(error?.message || "No se pudo borrar alguna imagen descartada.");
+            }
+          }
+
           render();
-          throw new Error(result.message || "No se pudieron subir las imÃ¡genes.");
         }
 
-        const urls = Array.isArray(result.urls) ? result.urls : [];
-        urls.forEach((url, index) => {
-          if (items[index]) {
-            items[index].uploadedUrl = url;
-          }
-        });
-        render();
+        if (shouldShowVerticalWarning) {
+          showVerticalImageWarning();
+        }
       });
 
       try {
         uploadChain = currentUpload.catch(() => {});
         await currentUpload;
       } catch (error) {
-        if (feedback) {
-          feedback.innerHTML = `<div class="status-banner warning">${escapeHtml(error.message || "No se pudieron subir las imÃ¡genes.")}</div>`;
-        }
+        showUploadWarning(error.message || "No se pudieron subir las imagenes.");
       }
     };
 
-    const removeById = id => {
+    const removeById = async id => {
       const index = state.findIndex(item => item.id === id);
       if (index < 0) return;
-      URL.revokeObjectURL(state[index].previewUrl);
-      state.splice(index, 1);
+      const [item] = state.splice(index, 1);
+      item.removed = true;
+      URL.revokeObjectURL(item.previewUrl);
       render();
+
+      if (item.deleteOnRemove && item.uploadedUrl) {
+        try {
+          await deleteUploadedUrls([item.uploadedUrl]);
+        } catch (error) {
+          showDeleteWarning(error?.message || "No se pudo borrar la imagen quitada.");
+        }
+      }
     };
 
     pickButton?.addEventListener("click", event => {
@@ -3634,16 +6610,28 @@
       input?.click();
     });
 
-    clearButton?.addEventListener("click", event => {
+    clearButton?.addEventListener("click", async event => {
       event.preventDefault();
+      const urlsToDelete = [];
       while (state.length) {
         const item = state.pop();
+        item.removed = true;
+        if (item.deleteOnRemove && item.uploadedUrl) {
+          urlsToDelete.push(item.uploadedUrl);
+        }
         URL.revokeObjectURL(item.previewUrl);
       }
       if (input) {
         input.value = "";
       }
       render();
+      if (urlsToDelete.length) {
+        try {
+          await deleteUploadedUrls(urlsToDelete);
+        } catch (error) {
+          showDeleteWarning(error?.message || "No se pudieron borrar algunas imagenes quitadas.");
+        }
+      }
     });
 
     input?.addEventListener("change", () => {
@@ -3684,11 +6672,74 @@
       }
     });
 
+    previews?.addEventListener("dragstart", event => {
+      const card = event.target.closest("[data-upload-item-id]");
+      if (!card) return;
+      draggingImageId = card.getAttribute("data-upload-item-id");
+      card.classList.add("is-dragging");
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", draggingImageId || "");
+      }
+    });
+
+    previews?.addEventListener("dragend", event => {
+      const card = event.target.closest("[data-upload-item-id]");
+      draggingImageId = null;
+      card?.classList.remove("is-dragging");
+      previews.querySelectorAll(".upload-preview.is-drop-target").forEach(node => {
+        node.classList.remove("is-drop-target");
+      });
+    });
+
+    previews?.addEventListener("dragover", event => {
+      const card = event.target.closest("[data-upload-item-id]");
+      if (!card || !draggingImageId) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "move";
+      }
+      previews.querySelectorAll(".upload-preview.is-drop-target").forEach(node => {
+        if (node !== card) {
+          node.classList.remove("is-drop-target");
+        }
+      });
+      if (card.getAttribute("data-upload-item-id") !== draggingImageId) {
+        card.classList.add("is-drop-target");
+      }
+    });
+
+    previews?.addEventListener("dragleave", event => {
+      const card = event.target.closest("[data-upload-item-id]");
+      if (!card) return;
+      const nextTarget = event.relatedTarget;
+      if (nextTarget instanceof Node && card.contains(nextTarget)) {
+        return;
+      }
+      card.classList.remove("is-drop-target");
+    });
+
+    previews?.addEventListener("drop", event => {
+      const card = event.target.closest("[data-upload-item-id]");
+      if (!card || !draggingImageId) return;
+      event.preventDefault();
+      event.stopPropagation();
+      card.classList.remove("is-drop-target");
+      moveImage(draggingImageId, card.getAttribute("data-upload-item-id"));
+    });
+
+    form.addEventListener("create:video-state-changed", render);
+    window.addEventListener("pagehide", queueTemporaryCleanup);
+
     seedExistingImages();
     render();
 
     return {
       waitForUploads: () => uploadChain,
+      markPersisted: () => {
+        didPersistPublication = true;
+      },
       hasPendingFiles: () => state.some(item => !item.uploadedUrl)
     };
   }
@@ -3706,6 +6757,18 @@
     let state = null;
     let uploadChain = Promise.resolve();
 
+    const showDeleteWarning = message => {
+      if (!feedback) return;
+      feedback.innerHTML = `<div class="status-banner warning">${escapeHtml(message || "No se pudo borrar el video en R2.")}</div>`;
+    };
+
+    const deleteUploadedUrls = async urls => {
+      const result = await deleteUploadedMediaRequest(urls);
+      if (!result.ok) {
+        throw new Error(result.message || "No se pudo borrar el video en R2.");
+      }
+    };
+
     const seedExistingVideo = () => {
       const existingUrl = String(videoUrlInput?.value || "").trim();
       if (!existingUrl) return;
@@ -3714,7 +6777,10 @@
         id: createClientId(),
         file: { name: "Video actual" },
         previewUrl: existingUrl,
-        uploadedUrl: existingUrl
+        uploadedUrl: existingUrl,
+        statusText: "Listo",
+        deleteOnRemove: false,
+        removed: false
       };
     };
 
@@ -3722,12 +6788,13 @@
       if (videoUrlInput) {
         videoUrlInput.value = state?.uploadedUrl || "";
       }
+      form.dispatchEvent(new CustomEvent("create:video-state-changed", { bubbles: true }));
     };
 
     const render = () => {
       if (statusNode) {
         statusNode.textContent = state
-          ? (state.uploadedUrl ? "Video listo" : "Subiendo video...")
+          ? (state.statusText || (state.uploadedUrl ? "Video listo" : "Subiendo video..."))
           : "Sin video";
       }
 
@@ -3743,7 +6810,7 @@
         <article class="upload-preview upload-preview-video main">
           <video src="${escapeAttribute(state.previewUrl)}" preload="metadata" muted playsinline controls></video>
           <span class="gallery-badge">Video principal</span>
-          <span class="upload-status">${state.uploadedUrl ? "Listo" : "Subiendo..."}</span>
+          <span class="upload-status">${escapeHtml(state.statusText || (state.uploadedUrl ? "Listo" : "Subiendo..."))}</span>
           <button type="button" class="gallery-nav gallery-nav-next upload-action" data-video-action="remove" aria-label="Quitar video">&times;</button>
         </article>
       `;
@@ -3751,9 +6818,19 @@
       updateHiddenValue();
     };
 
-    const clearState = () => {
-      if (state?.previewUrl) {
-        URL.revokeObjectURL(state.previewUrl);
+    const clearState = async () => {
+      if (!state) {
+        if (input) {
+          input.value = "";
+        }
+        render();
+        return;
+      }
+
+      const currentState = state;
+      currentState.removed = true;
+      if (currentState.previewUrl) {
+        URL.revokeObjectURL(currentState.previewUrl);
       }
 
       state = null;
@@ -3761,53 +6838,72 @@
         input.value = "";
       }
       render();
+
+      if (currentState.deleteOnRemove && currentState.uploadedUrl) {
+        try {
+          await deleteUploadedUrls([currentState.uploadedUrl]);
+        } catch (error) {
+          showDeleteWarning(error?.message || "No se pudo borrar el video quitado.");
+        }
+      }
     };
-
-    const validateVideoDuration = file => new Promise((resolve, reject) => {
-      const tempUrl = URL.createObjectURL(file);
-      const probe = document.createElement("video");
-      probe.preload = "metadata";
-      probe.onloadedmetadata = () => {
-        const duration = Number(probe.duration || 0);
-        URL.revokeObjectURL(tempUrl);
-        if (!Number.isFinite(duration) || duration <= 0) {
-          reject(new Error("No pudimos leer la duracion del video."));
-          return;
-        }
-
-        if (duration > 60) {
-          reject(new Error("El video no puede durar mas de 1 minuto."));
-          return;
-        }
-
-        resolve();
-      };
-      probe.onerror = () => {
-        URL.revokeObjectURL(tempUrl);
-        reject(new Error("No pudimos procesar ese archivo de video."));
-      };
-      probe.src = tempUrl;
-    });
 
     const uploadFile = async file => {
       if (!file?.type?.startsWith("video/")) {
         throw new Error("Selecciona un archivo de video valido.");
       }
 
-      await validateVideoDuration(file);
-      clearState();
+      const metadata = await readVideoMetadata(file);
+      if (!Number.isFinite(metadata.width) || !Number.isFinite(metadata.height) || metadata.width <= 0 || metadata.height <= 0) {
+        throw new Error("No pudimos leer el tamaño del video.");
+      }
+
+      if (metadata.width >= metadata.height) {
+        window.alert("Ventagram sólo permite videos Verticales");
+        throw new Error("Ventagram sólo permite videos Verticales");
+      }
+
+      if (!Number.isFinite(metadata.duration) || metadata.duration <= 0) {
+        throw new Error("No pudimos leer la duracion del video.");
+      }
+
+      if (metadata.duration > 60) {
+        throw new Error("El video no puede durar mas de 1 minuto.");
+      }
+
+      await clearState();
 
       state = {
         id: createClientId(),
         file,
         previewUrl: URL.createObjectURL(file),
-        uploadedUrl: null
+        uploadedUrl: null,
+        statusText: "Preparando...",
+        deleteOnRemove: true,
+        removed: false
       };
+      const currentState = state;
       render();
 
       const currentUpload = uploadChain.then(async () => {
+        let fileToUpload = file;
+        try {
+          currentState.statusText = "Comprimiendo...";
+          render();
+          fileToUpload = await optimizeVideoForUpload(file, {
+            maxWidth: 1080,
+            maxHeight: 1920,
+            videoBitsPerSecond: 6_500_000,
+            audioBitsPerSecond: 128_000
+          });
+        } catch {
+          fileToUpload = file;
+        }
+
+        currentState.statusText = "Subiendo...";
+        render();
         const formData = new FormData();
-        formData.append("file", file);
+        formData.append("file", fileToUpload);
 
         const result = await uploadVideoRequest(formData);
         if (!result.ok || !result.url) {
@@ -3815,8 +6911,16 @@
           throw new Error(result.message || "No se pudo subir el video.");
         }
 
-        if (state) {
+        if (state?.id === currentState.id) {
           state.uploadedUrl = result.url;
+          state.statusText = "Listo";
+        }
+        if (currentState.removed && currentState.deleteOnRemove) {
+          try {
+            await deleteUploadedUrls([result.url]);
+          } catch (error) {
+            showDeleteWarning(error?.message || "No se pudo borrar el video descartado.");
+          }
         }
         render();
       });
@@ -3844,9 +6948,9 @@
       input?.click();
     });
 
-    clearButton?.addEventListener("click", event => {
+    clearButton?.addEventListener("click", async event => {
       event.preventDefault();
-      clearState();
+      await clearState();
     });
 
     input?.addEventListener("change", () => {
@@ -3913,7 +7017,8 @@
       offset: 0,
       hasMore: true,
       loading: false,
-      observer: null
+      observer: null,
+      usingExpandedRadius: false
     };
 
     const syncLoader = message => {
@@ -3924,7 +7029,7 @@
     const getConfig = () => {
       const mobile = isMobileGalleryAutoplayContext();
       if (mobile) {
-        const mobileBatch = Math.max(1, options.mobilePreloadItems || 20);
+        const mobileBatch = Math.max(1, options.mobilePreloadItems || MEDIA_PRELOAD_CONFIG.mobilePreloadAds);
         return {
           initialLimit: mobileBatch,
           appendLimit: mobileBatch,
@@ -3934,7 +7039,7 @@
 
       const columns = getGalleryColumnCount(rail);
       const visibleRows = Math.max(1, options.desktopVisibleRows || 3);
-      const preloadRows = Math.max(1, options.desktopPreloadRows || 3);
+      const preloadRows = Math.max(1, options.desktopPreloadRows || MEDIA_PRELOAD_CONFIG.desktopPreloadRows);
       return {
         initialLimit: columns * (visibleRows + preloadRows),
         appendLimit: columns * preloadRows,
@@ -3947,6 +7052,7 @@
 
       state.loading = true;
       syncLoader(state.offset === 0 ? "Cargando publicaciones..." : "Cargando mas publicaciones...");
+      const loadingTicket = state.offset === 0 ? beginSystemLoading() : null;
       const config = getConfig();
       const limit = state.offset === 0 ? config.initialLimit : config.appendLimit;
 
@@ -3965,12 +7071,24 @@
 
         const payload = await response.json();
         const items = Array.isArray(payload?.items) ? payload.items : [];
+        const usedExpandedRadius = Boolean(payload?.usedExpandedRadius);
+        const expandedRadiusKm = Number(payload?.expandedRadiusKm || 0);
+        const expandedRadiusTotalResults = Number(payload?.expandedRadiusTotalResults || 0);
+        if (state.offset === 0 && usedExpandedRadius && !state.usingExpandedRadius) {
+          rail.insertAdjacentHTML("beforeend", `
+            <section class="classified-toolbar">
+              <div class="classified-summary">Resultados fuera de ese radio</div>
+              <div class="classified-page-size">Hasta ${expandedRadiusKm} km${expandedRadiusTotalResults > 0 ? ` · ${expandedRadiusTotalResults} resultados` : ""}</div>
+            </section>
+          `);
+          state.usingExpandedRadius = true;
+        }
         rail.insertAdjacentHTML("beforeend", items.map((item, index) => buildGalleryCard(item, state.offset + index === 0)).join(""));
         state.offset = Number(payload?.nextOffset ?? (state.offset + items.length));
         state.hasMore = Boolean(payload?.hasMore);
 
         if (!items.length && state.offset === 0) {
-          syncLoader("No hay publicaciones para esta busqueda.");
+          syncLoader("No se encontraron resultados dentro del radio seleccionado.");
           sentinel.hidden = true;
         } else if (!items.length && !state.hasMore) {
           syncLoader("No hay mas publicaciones para mostrar.");
@@ -3984,10 +7102,14 @@
 
         wireGalleryCards();
         syncMobileGalleryVideoAutoplay(document);
+        mediaPreloadService.refreshFeedPreloads(feed);
       } catch (error) {
         console.error(error);
         syncLoader("No se pudieron cargar mas publicaciones.");
       } finally {
+        if (loadingTicket) {
+          endSystemLoading(loadingTicket);
+        }
         state.loading = false;
       }
     };
@@ -4008,8 +7130,37 @@
     };
 
     observeMore();
+    mediaPreloadService.bindFeed(feed, rail);
     await loadMore();
     window.addEventListener("resize", observeMore, { passive: true });
+  }
+
+  function initStaticGalleryFeeds(root = document) {
+    root.querySelectorAll("[data-static-gallery-feed='true']").forEach(feed => {
+      if (feed.dataset.bound === "true") return;
+
+      const rail = feed.querySelector(".gallery-rail");
+      const dataNodeId = String(feed.dataset.staticGalleryItemsId || "").trim();
+      const dataNode = dataNodeId ? document.getElementById(dataNodeId) : null;
+      if (!rail || !dataNode) return;
+
+      let items = [];
+      try {
+        const parsed = JSON.parse(dataNode.textContent || "[]");
+        items = Array.isArray(parsed) ? parsed : [];
+      } catch (error) {
+        console.error("No se pudo leer la galeria estatica.", error);
+        items = [];
+      }
+
+      rail.innerHTML = items.map((item, index) => buildGalleryCard(item, index === 0)).join("");
+      wireGalleryCards();
+      wireFavoriteActions(feed);
+      syncMobileGalleryVideoAutoplay(feed);
+      mediaPreloadService.bindFeed(feed, rail);
+      mediaPreloadService.refreshFeedPreloads(feed);
+      feed.dataset.bound = "true";
+    });
   }
 
   function getGalleryColumnCount(rail) {
@@ -4020,15 +7171,25 @@
     return Math.max(1, Math.floor((availableWidth + gap) / (minCardWidth + gap)));
   }
 
+  function getGalleryDescription(item) {
+    return String(item?.shortDescription || "").trim()
+      || String(item?.title || "").split(" - oportunidad")[0];
+  }
+
   function buildGalleryCard(item, isFirstCard, options = {}) {
     const title = escapeHtml(item?.title || "");
-    const galleryTitle = escapeHtml(item?.galleryTitle || item?.title || "");
+    const galleryTitle = escapeHtml(getGalleryDescription(item));
     const publicationId = escapeAttribute(item?.id || "");
     const publicationCode = escapeAttribute(item?.publicationCode || "");
     const detailsUrl = escapeAttribute(item?.detailsUrl || "#");
     const price = escapeHtml(item?.price || "");
+    const operationLabel = escapeHtml(item?.operationLabel || "");
+    const operationLetter = escapeHtml(String(item?.operationLabel || "").trim().charAt(0).toUpperCase());
+    const priceTooltipLabel = buildPriceTooltipLabel(item);
     const videoUrl = escapeAttribute(item?.videoUrl || "");
     const showReportButton = options.showReportButton !== false;
+    const showFavoriteButton = options.showFavoriteButton !== false;
+    const extraActionHtml = options.extraActionHtml || "";
     const images = Array.isArray(item?.images) && item.images.length
       ? item.images
       : ["/images/logo4.png"];
@@ -4039,38 +7200,78 @@
     const suggestedListName = escapeAttribute(item?.groupName || "Inmuebles");
     const navButtons = mediaCount > 1
       ? `
-          <button type="button" class="gallery-nav gallery-nav-prev" data-direction="-1" aria-label="Foto anterior">&#8249;</button>
-          <button type="button" class="gallery-nav gallery-nav-next" data-direction="1" aria-label="Foto siguiente">&#8250;</button>
+          <span class="gallery-nav gallery-nav-prev" data-direction="-1" data-gallery-nav="true" role="button" tabindex="0" aria-label="Foto anterior">&#8249;</span>
+          <span class="gallery-nav gallery-nav-next" data-direction="1" data-gallery-nav="true" role="button" tabindex="0" aria-label="Foto siguiente">&#8250;</span>
         `
       : "";
+    const priceCluster = `
+        <span class="gallery-price-cluster">
+          <span class="gallery-badge gallery-tooltip-trigger gallery-tooltip-bottom" data-tooltip-label="${priceTooltipLabel}">${operationLabel && operationLetter ? `<strong class="gallery-operation-letter">${operationLetter}</strong>` : ""}${price}</span>
+        </span>
+      `;
+    const cardContent = `
+      <a href="${detailsUrl}" class="card-image-wrap publication-preview-trigger" data-publication-id="${publicationId}" data-details-url="${buildPublicationApiDetailsUrl(publicationId)}" data-images="${escapedImages.join("|||")}" data-video-url="${videoUrl}" data-media-index="0">
+        ${videoUrl
+          ? `<video src="${videoUrl}" class="gallery-carousel-video" preload="metadata" muted playsinline></video><button type="button" class="gallery-play-toggle gallery-tooltip-trigger gallery-tooltip-top" data-gallery-play-toggle="true" aria-label="Reproducir video" data-tooltip-label="Reproducir video"></button><button type="button" class="gallery-audio-toggle gallery-tooltip-trigger gallery-tooltip-side" data-gallery-audio-toggle="true" aria-label="Activar audio" data-tooltip-label="Activar audio"><i class="fa-solid fa-volume-xmark" aria-hidden="true"></i></button>`
+          : `<img src="${firstImage}" alt="${title}" class="gallery-carousel-image" loading="lazy" decoding="async" />`}
+        ${priceCluster}
+        ${showReportButton ? `<button type="button" class="gallery-action-button gallery-report-overlay gallery-tooltip-trigger gallery-tooltip-side report-trigger" data-publication-id="${publicationId}" data-publication-code="${publicationCode}" data-publication-title="${title}" data-tooltip-label="Denunciar" aria-label="Denunciar ${title}"><span class="gallery-report-letter" aria-hidden="true">D</span></button>` : ""}
+        ${navButtons}
+        <span class="gallery-title-overlay">${galleryTitle}</span>
+        ${showFavoriteButton ? `<button type="button" class="favorite-toggle gallery-favorite-corner gallery-tooltip-trigger gallery-tooltip-side ${isFavorite ? "is-active" : ""}" data-favorite-toggle="true" data-publication-id="${publicationId}" data-publication-title="${title}" data-suggested-list-name="${suggestedListName}" data-tooltip-label="Añadir a favoritos" aria-label="Añadir a mi lista de favoritos">${renderFavoriteIcon(isFavorite)}</button>` : ""}
+      </a>
+      ${extraActionHtml}
+    `;
+
+    if (options.wrapCard === false) {
+      return cardContent;
+    }
 
     return `
-      <article class="listing-card listing-card-compact"${isFirstCard ? ' id="gallery-first"' : ""}>
-        <a href="${detailsUrl}" class="card-image-wrap publication-preview-trigger" data-publication-id="${publicationId}" data-details-url="/api/content/details/${publicationId}" data-images="${escapedImages.join("|||")}" data-video-url="${videoUrl}" data-media-index="0">
-          ${videoUrl
-            ? `<video src="${videoUrl}" class="gallery-carousel-video" preload="metadata" muted playsinline></video><button type="button" class="gallery-play-toggle" data-gallery-play-toggle="true" aria-label="Reproducir video"></button><button type="button" class="gallery-audio-toggle" data-gallery-audio-toggle="true" aria-label="Activar audio">Activar audio</button>`
-            : `<img src="${firstImage}" alt="${title}" class="gallery-carousel-image" loading="lazy" decoding="async" />`}
-          <span class="gallery-badge">${price}</span>
-          ${showReportButton ? `<button type="button" class="gallery-action-button gallery-report-overlay report-trigger" data-publication-id="${publicationId}" data-publication-code="${publicationCode}" data-publication-title="${title}" aria-label="Denunciar ${title}">Denunciar</button>` : ""}
-          ${navButtons}
-          <span class="gallery-title-overlay">${galleryTitle}</span>
-          <button type="button" class="favorite-toggle gallery-favorite-corner ${isFavorite ? "is-active" : ""}" data-favorite-toggle="true" data-publication-id="${publicationId}" data-publication-title="${title}" data-suggested-list-name="${suggestedListName}" title="Añadir a mi lista de favoritos" aria-label="Añadir a mi lista de favoritos">${renderFavoriteIcon(isFavorite)}</button>
-        </a>
+      <article class="listing-card listing-card-compact" data-publication-id="${publicationId}"${isFirstCard ? ' id="gallery-first"' : ""}>
+        ${cardContent}
       </article>
     `;
   }
+  window.__ventagramBuildGalleryCard = buildGalleryCard;
+  window.__ventagramWireGalleryCards = wireGalleryCards;
+  window.__ventagramWireFavoriteActions = wireFavoriteActions;
+  window.__ventagramWireReportForm = wireReportForm;
+  window.__ventagramSyncMobileGalleryVideoAutoplay = syncMobileGalleryVideoAutoplay;
+
   function wireGalleryCards() {
+    syncGalleryOverlayLayout();
+    syncLastClickedGalleryCard();
+
     document.querySelectorAll(".gallery-nav").forEach(button => {
       if (button.dataset.bound === "true") return;
 
       button.dataset.bound = "true";
-      button.addEventListener("click", event => {
+      const handleGalleryNavInteraction = event => {
         event.preventDefault();
         event.stopPropagation();
 
+        // Mobile browsers emit a synthetic click right after touchend.  Without
+        // this guard, a two-image gallery advances twice and appears unchanged.
+        if (event.type === "click" && Number(button.dataset.ignoreClickUntil || 0) > Date.now()) {
+          return;
+        }
+        if (event.type === "touchend") {
+          button.dataset.ignoreClickUntil = String(Date.now() + 700);
+        }
+
         const card = button.closest(".card-image-wrap");
+        if (!card) return;
+        card.dataset.suppressClickUntil = String(Date.now() + 450);
         const direction = Number(button.dataset.direction || 1);
         advanceGalleryMedia(card, direction);
+        syncGalleryOverlayLayout(card?.closest(".listing-card, .map-selection-card, .card-image-wrap") || document);
+      };
+      button.addEventListener("click", handleGalleryNavInteraction);
+      button.addEventListener("touchend", handleGalleryNavInteraction, { passive: false });
+      button.addEventListener("keydown", event => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        handleGalleryNavInteraction(event);
       });
     });
 
@@ -4107,6 +7308,18 @@
     });
   }
 
+  function syncGalleryOverlayLayout(root = document) {
+    const cards = root.matches?.(".card-image-wrap")
+      ? [root]
+      : Array.from(root.querySelectorAll?.(".card-image-wrap") || []);
+
+    cards.forEach(card => {
+      const reportButton = card.querySelector(".gallery-report-overlay");
+      if (!reportButton) return;
+      reportButton.classList.remove("is-compact");
+    });
+  }
+
   function wireDynamicGalleryCards() {
     if (document.body.dataset.dynamicGalleryBound === "true") return;
 
@@ -4120,11 +7333,57 @@
 
       event.preventDefault();
       event.stopPropagation();
+      if (Number(button.dataset.ignoreClickUntil || 0) > Date.now()) return;
 
       const card = button.closest(".card-image-wrap");
+      if (!card) return;
+      card.dataset.suppressClickUntil = String(Date.now() + 450);
       const direction = Number(button.dataset.direction || 1);
       advanceGalleryMedia(card, direction);
     });
+
+    document.addEventListener("touchend", event => {
+      const button = event.target.closest(".gallery-nav");
+      if (!button || !button.closest(".map-popup-card")) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const card = button.closest(".card-image-wrap");
+      if (!card) return;
+      button.dataset.ignoreClickUntil = String(Date.now() + 700);
+      card.dataset.suppressClickUntil = String(Date.now() + 450);
+      const direction = Number(button.dataset.direction || 1);
+      advanceGalleryMedia(card, direction);
+    }, { passive: false });
+
+    document.addEventListener("keydown", event => {
+      const button = event.target.closest(".gallery-nav");
+      if (!button || !button.closest(".map-popup-card")) return;
+      if (event.key !== "Enter" && event.key !== " ") return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const card = button.closest(".card-image-wrap");
+      card.dataset.suppressClickUntil = String(Date.now() + 450);
+      const direction = Number(button.dataset.direction || 1);
+      advanceGalleryMedia(card, direction);
+    });
+
+    document.addEventListener("click", event => {
+      const trigger = event.target.closest(".card-image-wrap.publication-preview-trigger");
+      if (!trigger) return;
+
+      rememberLastClickedGalleryPublication(trigger.dataset.publicationId);
+      syncLastClickedGalleryCard();
+
+      const suppressUntil = Number(trigger.dataset.suppressClickUntil || 0);
+      if (suppressUntil > Date.now()) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }, true);
 
     document.addEventListener("click", event => {
       const button = event.target.closest("[data-gallery-audio-toggle='true']");
@@ -4177,6 +7436,78 @@
       }, 160);
     }, { passive: true });
     window.addEventListener("resize", autoplayVisibleVideos);
+
+    document.addEventListener("touchstart", event => {
+      if (!isMobileGallerySwipeContext()) return;
+
+      const card = event.target.closest(".card-image-wrap");
+      if (!card || event.touches.length !== 1) return;
+
+      const touch = event.touches[0];
+      card.dataset.touchStartX = String(touch.clientX);
+      card.dataset.touchStartY = String(touch.clientY);
+      card.dataset.touchSwiping = "false";
+    }, { passive: true });
+
+    document.addEventListener("touchmove", event => {
+      if (!isMobileGallerySwipeContext()) return;
+
+      const card = event.target.closest(".card-image-wrap");
+      if (!card || event.touches.length !== 1) return;
+
+      const startX = Number(card.dataset.touchStartX || NaN);
+      const startY = Number(card.dataset.touchStartY || NaN);
+      if (!Number.isFinite(startX) || !Number.isFinite(startY)) return;
+
+      const touch = event.touches[0];
+      const deltaX = touch.clientX - startX;
+      const deltaY = touch.clientY - startY;
+
+      if (Math.abs(deltaX) > 18 && Math.abs(deltaX) > Math.abs(deltaY) * 1.15) {
+        card.dataset.touchSwiping = "true";
+        event.preventDefault();
+      }
+    }, { passive: false });
+
+    document.addEventListener("touchend", event => {
+      if (!isMobileGallerySwipeContext()) return;
+
+      const card = event.target.closest(".card-image-wrap");
+      if (!card) return;
+
+      const startX = Number(card.dataset.touchStartX || NaN);
+      const startY = Number(card.dataset.touchStartY || NaN);
+      const touch = event.changedTouches?.[0];
+      delete card.dataset.touchStartX;
+      delete card.dataset.touchStartY;
+
+      if (!touch || !Number.isFinite(startX) || !Number.isFinite(startY)) {
+        delete card.dataset.touchSwiping;
+        return;
+      }
+
+      const deltaX = touch.clientX - startX;
+      const deltaY = touch.clientY - startY;
+      const isSwipe = Math.abs(deltaX) >= 42 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
+
+      if (isSwipe) {
+        event.preventDefault();
+        advanceGalleryMedia(card, deltaX < 0 ? 1 : -1);
+        syncGalleryOverlayLayout(card?.closest(".listing-card, .map-selection-card, .card-image-wrap") || document);
+        card.dataset.suppressClickUntil = String(Date.now() + 450);
+      }
+
+      delete card.dataset.touchSwiping;
+    }, { passive: false });
+
+    document.addEventListener("touchcancel", event => {
+      const card = event.target.closest(".card-image-wrap");
+      if (!card) return;
+
+      delete card.dataset.touchStartX;
+      delete card.dataset.touchStartY;
+      delete card.dataset.touchSwiping;
+    }, { passive: true });
   }
 
   function advanceGalleryMedia(card, direction) {
@@ -4219,28 +7550,48 @@
       }
 
       video.src = videoUrl;
+      mediaPreloadService.prepareVideo(videoUrl, { preload: "auto" });
       tryAutoplayGalleryVideo(video);
+      card.dataset.mediaIndex = String(nextIndex);
+      syncGalleryVideoAudioButton(card);
+      syncGalleryVideoVisualState(card);
+      mediaPreloadService.primeCardNavigation(card);
+      return;
     } else {
+      const imageIndex = videoUrl ? nextIndex - 1 : nextIndex;
+      const nextImageUrl = images[imageIndex] || images[0] || "";
+      if (!nextImageUrl) return;
+
       if (currentVideo) {
         currentVideo.remove();
       }
 
-        let image = currentImage;
+      let image = currentImage;
       if (!image) {
         image = document.createElement("img");
         image.className = "gallery-carousel-image";
         image.alt = card.querySelector(".gallery-flag")?.dataset.publicationTitle || "";
+        image.loading = "eager";
+        image.decoding = "async";
         const anchor = playToggle || card.querySelector(".gallery-badge") || card.firstChild;
         card.insertBefore(image, anchor);
       }
 
-      const imageIndex = videoUrl ? nextIndex - 1 : nextIndex;
-      image.src = images[imageIndex] || images[0] || "";
+      // Change immediately.  Navigation must not wait for an Image promise;
+      // the images were already warmed when the card was rendered.
+      image.src = nextImageUrl;
+      card.dataset.mediaIndex = String(nextIndex);
+      syncGalleryVideoAudioButton(card);
+      syncGalleryVideoVisualState(card);
+      mediaPreloadService.primeCardNavigation(card);
+      return;
     }
+  }
 
-    card.dataset.mediaIndex = String(nextIndex);
-    syncGalleryVideoAudioButton(card);
-    syncGalleryVideoVisualState(card);
+  function isMobileGallerySwipeContext() {
+    return window.matchMedia?.("(max-width: 900px)")?.matches
+      || window.matchMedia?.("(pointer: coarse)")?.matches
+      || navigator.maxTouchPoints > 0;
   }
 
   function isMobileGalleryAutoplayContext() {
@@ -4251,8 +7602,7 @@
 
   function isMobileMapInteractionContext() {
     return window.matchMedia?.("(max-width: 780px)")?.matches
-      || window.matchMedia?.("(pointer: coarse)")?.matches
-      || navigator.maxTouchPoints > 0;
+      || window.matchMedia?.("(pointer: coarse)")?.matches;
   }
 
   function tryAutoplayGalleryVideo(video) {
@@ -4332,8 +7682,14 @@
     if (!showingVideo) return;
 
     const isMuted = video.muted;
-    button.textContent = isMuted ? "Activar audio" : "Silenciar";
-    button.setAttribute("aria-label", isMuted ? "Activar audio" : "Silenciar");
+    const label = isMuted ? "Activar audio" : "Silenciar";
+    button.dataset.tooltipLabel = label;
+    button.setAttribute("aria-label", label);
+    button.classList.toggle("is-muted", isMuted);
+    button.classList.toggle("is-unmuted", !isMuted);
+    button.innerHTML = isMuted
+      ? `<i class="fa-solid fa-volume-xmark" aria-hidden="true"></i>`
+      : `<i class="fa-solid fa-volume-high" aria-hidden="true"></i>`;
   }
 
   function bindGalleryVideoState(video) {
@@ -4353,15 +7709,13 @@
 
     const showingVideo = Boolean(video);
     playToggle.hidden = !showingVideo || !video.paused;
-    playToggle.setAttribute("aria-label", showingVideo && !video.paused ? "Pausar video" : "Reproducir video");
+    const label = showingVideo && !video.paused ? "Pausar video" : "Reproducir video";
+    playToggle.setAttribute("aria-label", label);
+    playToggle.dataset.tooltipLabel = label;
   }
 
   async function initRealtimeChat() {
-    if (document.body?.dataset.userAuthenticated !== "true") {
-      return;
-    }
-
-    await refreshChatUnreadCount();
+    return;
   }
 
   async function refreshChatUnreadCount() {
@@ -4390,7 +7744,7 @@
   function syncChatUnreadBadges(unreadCount) {
     const safeCount = Math.max(0, Number(unreadCount || 0));
     const unreadLabel = safeCount <= 0
-      ? "Mensajes"
+      ? "Mis mensajes"
       : safeCount === 1
         ? "1 mensaje sin leer"
         : `${safeCount} mensajes sin leer`;
@@ -4400,7 +7754,7 @@
       node.hidden = safeCount <= 0;
     });
 
-    document.querySelectorAll("[data-chat-mailbox-button]").forEach(button => {
+    document.querySelectorAll("[data-chat-menu-link]").forEach(button => {
       const state = safeCount <= 0
         ? "0"
         : safeCount <= 3
@@ -4416,6 +7770,20 @@
 
   function wireChatExperience(root = document) {
     wireStartChatButtons(root);
+    wireChatMenuRefresh();
+  }
+
+  function wireChatMenuRefresh() {
+    if (document.body.dataset.chatMenuRefreshBound === "true") return;
+    document.body.dataset.chatMenuRefreshBound = "true";
+
+    document.addEventListener("toggle", event => {
+      const menu = event.target;
+      if (!(menu instanceof HTMLDetailsElement)) return;
+      if (!menu.matches("[data-chat-menu]")) return;
+      if (!menu.open) return;
+      refreshChatUnreadCount().catch(console.warn);
+    }, true);
   }
 
   function wireStartChatButtons(root = document) {
@@ -4423,7 +7791,8 @@
 
     document.body.dataset.chatStartBound = "true";
     document.addEventListener("click", async event => {
-      const button = event.target.closest("[data-start-chat='true']");
+      const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+      const button = target?.closest?.("[data-start-chat='true']");
       if (!button) return;
 
       const publicationId = Number(button.dataset.publicationId || 0);
@@ -4431,8 +7800,9 @@
 
       event.preventDefault();
       button.disabled = true;
+      let url = "";
       try {
-        const url = buildChatServiceUrl("/api/chat/conversations");
+        url = buildChatServiceUrl("/api/chat/conversations");
         if (!url) {
           throw new Error("Configura la URL del servicio de chat.");
         }
@@ -4459,20 +7829,33 @@
       } finally {
         button.disabled = false;
       }
-    });
+    }, true);
+  }
+
+  // Keep chat actions independent from the main page bootstrap. Catalog cards are
+  // rendered dynamically and must remain clickable even if another initializer fails.
+  const ensureChatExperienceWired = () => wireChatExperience(document);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", ensureChatExperienceWired, { once: true });
+  } else {
+    ensureChatExperienceWired();
   }
 
   function buildChatServiceUrl(path) {
     const baseUrl = String(chatConfig.baseUrl || "").trim().replace(/\/+$/, "");
+    const normalizedPath = path
+      ? (path.startsWith("/") ? path : `/${path}`)
+      : "";
+
     if (!baseUrl) {
-      return "";
+      return normalizedPath;
     }
 
-    if (!path) {
+    if (!normalizedPath) {
       return baseUrl;
     }
 
-    return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+    return `${baseUrl}${normalizedPath}`;
   }
 
   function buildChatNetworkErrorMessage(url, error) {
@@ -4535,6 +7918,7 @@
       categoryId: Number(value("category") || 0),
       title: value("title"),
       price: Number(value("price") || 0),
+      operation: value("operation") || null,
       currency: value("currency") || "ARS",
       locality: noLocation ? "" : value("locality"),
       shortDescription: value("shortDescription"),
@@ -4550,7 +7934,6 @@
       address: noLocation ? null : value("address") || null,
       noLocation,
       propertyType: null,
-      operation: null,
       zone: null,
       totalAreaM2: null,
       coveredAreaM2: null,
@@ -4600,5 +7983,31 @@
     return value === "" ? null : Number(value);
   }
 })();
+
+document.addEventListener("click", event => {
+  const trigger = event.target.closest("[data-rating-popover-trigger]");
+  document.querySelectorAll("[data-rating-popover].is-open").forEach(popover => {
+    if (!trigger || !popover.contains(trigger)) {
+      popover.classList.remove("is-open");
+      popover.querySelector("[data-rating-popover-trigger]")?.setAttribute("aria-expanded", "false");
+    }
+  });
+
+  if (!trigger) return;
+  const popover = trigger.closest("[data-rating-popover]");
+  if (!popover) return;
+  const isOpen = popover.classList.toggle("is-open");
+  trigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
+});
+
+document.addEventListener("keydown", event => {
+  if (event.key !== "Escape") return;
+  document.querySelectorAll("[data-rating-popover].is-open").forEach(popover => {
+    popover.classList.remove("is-open");
+    const trigger = popover.querySelector("[data-rating-popover-trigger]");
+    trigger?.setAttribute("aria-expanded", "false");
+    trigger?.blur();
+  });
+});
 
 

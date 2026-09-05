@@ -29,7 +29,12 @@ public class ChatAppService(ChatDbContext db, VentagramLookupDbContext lookupDb,
             throw new InvalidOperationException("La publicacion no esta disponible.");
         }
 
-        if (publication.IsAnonymous || publication.UserId is not int sellerUserId)
+        if (publication.UserId is not int sellerUserId)
+        {
+            throw new InvalidOperationException("Esta publicacion no permite chat interno.");
+        }
+
+        if (publication.User?.AllowsSiteChat != true)
         {
             throw new InvalidOperationException("Esta publicacion no permite chat interno.");
         }

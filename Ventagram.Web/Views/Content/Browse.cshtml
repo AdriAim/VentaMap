@@ -1,16 +1,23 @@
 @model HomeContentViewModel
 @{
-    var currentMode = string.IsNullOrWhiteSpace(Model.Mode) ? "Galería" : Model.Mode;
+    var currentMode = string.IsNullOrWhiteSpace(Model.Mode) ? "Galeria" : Model.Mode;
     var currentGroup = string.IsNullOrWhiteSpace(Model.Group) ? "Inmuebles" : Model.Group;
     var previousPage = Math.Max(1, Model.Page - 1);
     var nextPage = Math.Min(Math.Max(1, Model.TotalPages), Model.Page + 1);
     var searchPath = "/Buscar";
     var selectedFilters = Model.SelectedFieldFilters ?? [];
-    var filterFields = Model.RequiredFilterFields ?? [];
+    var filterFields = (Model.RequiredFilterFields ?? [])
+        .Where(x => !string.Equals(x.InternalName, "operacion", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+    var operationField = (Model.RequiredFilterFields ?? [])
+        .FirstOrDefault(x => string.Equals(x.InternalName, "operacion", StringComparison.OrdinalIgnoreCase));
+    var operationOptions = SplitOptions(operationField?.OptionsCsv);
     var selectedFilterLookup = selectedFilters
         .Where(x => x.FieldId > 0)
         .GroupBy(x => x.FieldId)
         .ToDictionary(x => x.Key, x => x.First().Value ?? string.Empty);
+    var debugEnabled = string.Equals(Context?.Request.Query["debug"], "1", StringComparison.Ordinal);
+    var debugSuffix = debugEnabled ? "?debug=1" : string.Empty;
     var priceSliderMax = Math.Max(Model.PriceSliderMax, Math.Max(Model.PriceTo ?? 0m, 100000m));
     var priceFromValue = Math.Max(0m, Model.PriceFrom ?? 0m);
     var priceToValue = Math.Max(priceFromValue, Model.PriceTo ?? priceSliderMax);
@@ -20,6 +27,11 @@
         $"mode={Uri.EscapeDataString(currentMode)}",
         $"query={Uri.EscapeDataString(Model.Query ?? string.Empty)}"
     };
+
+    if (Model.SelectedCategoryId.HasValue)
+    {
+        baseQueryParts.Add($"categoryId={Model.SelectedCategoryId.Value}");
+    }
 
     if (Model.PriceFrom.HasValue)
     {
@@ -31,10 +43,25 @@
         baseQueryParts.Add($"priceTo={Uri.EscapeDataString(Model.PriceTo.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))}");
     }
 
+    if (Model.RadiusKm.HasValue)
+    {
+        baseQueryParts.Add($"radioKm={Model.RadiusKm.Value}");
+    }
+
+    if (!string.IsNullOrWhiteSpace(Model.Operation))
+    {
+        baseQueryParts.Add($"operation={Uri.EscapeDataString(Model.Operation)}");
+    }
+
     foreach (var filter in selectedFilters.Where(x => x.FieldId > 0 && !string.IsNullOrWhiteSpace(x.Value)))
     {
         baseQueryParts.Add($"filterFieldId={filter.FieldId}");
         baseQueryParts.Add($"filterValue={Uri.EscapeDataString(filter.Value ?? string.Empty)}");
+    }
+
+    if (debugEnabled)
+    {
+        baseQueryParts.Add("debug=1");
     }
 
     string BuildSearchUrl(int page, int pageSize, string? mode = null)
@@ -56,8 +83,11 @@
     {
         "Inmuebles" => "Ej. departamento, casa con patio, lote",
         "Rodados" => "Ej. Ford Fiesta, moto, camioneta",
-        "Embarcaciones" => "Ej. lancha, velero, semirrígido",
-        "Generales" => "Ej. iPhone, bicicleta, heladera",
+        "Embarcaciones" => "Ej. lancha, velero, semirrigido",
+        "Agro" => "Ej. tractor, sembradora, generador",
+        "Electronica" => "Ej. celular, notebook, playstation",
+        "Generales" => "Ej. muebles, bicicleta, herramientas",
+        "Moda" => "Ej. zapatillas, campera, cartera",
         "Todos" => "Ej. departamento, Ford Fiesta, iPhone",
         _ => "Ej. departamento, Ford Fiesta, iPhone"
     };
@@ -71,21 +101,66 @@
             : field.DataType.ToString().ToLowerInvariant(),
         options = SplitOptions(field.OptionsCsv)
     };
+
+    var resultsLayoutModel = new ResultsLayoutViewModel
+    {
+        Results = Model,
+        CurrentMode = currentMode,
+        CurrentGroup = currentGroup,
+        ViewLabel = currentMode == "Mapa"
+            ? "Vista mapa"
+            : currentMode == "Texto"
+                ? "Vista lista"
+                : "Vista galeria",
+        DebugSuffix = debugSuffix,
+        TextViewUrl = $"{BuildSearchUrl(1, Model.PageSize, "Texto")}#browse-results",
+        GalleryViewUrl = $"{BuildSearchUrl(1, Model.PageSize, "Galeria")}#search-panel",
+        MapViewUrl = $"{BuildSearchUrl(1, Model.PageSize, "Mapa")}#browse-results",
+        PageSize50Url = BuildSearchUrl(1, 50, "Texto"),
+        PageSize100Url = BuildSearchUrl(1, 100, "Texto"),
+        PageSize200Url = BuildSearchUrl(1, 200, "Texto"),
+        PreviousPageUrl = BuildSearchUrl(previousPage, Model.PageSize, "Texto"),
+        NextPageUrl = BuildSearchUrl(nextPage, Model.PageSize, "Texto"),
+        CanGoPreviousPage = Model.Page > 1,
+        CanGoNextPage = Model.Page < Model.TotalPages
+    };
+    var mapLayoutModel = new ResultsLayoutViewModel
+    {
+        Results = resultsLayoutModel.Results,
+        CurrentMode = resultsLayoutModel.CurrentMode,
+        CurrentGroup = resultsLayoutModel.CurrentGroup,
+        ViewLabel = resultsLayoutModel.ViewLabel,
+        DebugSuffix = resultsLayoutModel.DebugSuffix,
+        TextViewUrl = resultsLayoutModel.TextViewUrl,
+        GalleryViewUrl = resultsLayoutModel.GalleryViewUrl,
+        MapViewUrl = resultsLayoutModel.MapViewUrl,
+        PageSize50Url = resultsLayoutModel.PageSize50Url,
+        PageSize100Url = resultsLayoutModel.PageSize100Url,
+        PageSize200Url = resultsLayoutModel.PageSize200Url,
+        PreviousPageUrl = resultsLayoutModel.PreviousPageUrl,
+        NextPageUrl = resultsLayoutModel.NextPageUrl,
+        CanGoPreviousPage = resultsLayoutModel.CanGoPreviousPage,
+        CanGoNextPage = resultsLayoutModel.CanGoNextPage,
+        ShowMapSelectionDescription = false
+    };
 }
 
 <section class="search-panel" id="search-panel" data-browse-search-panel>
-    <form method="get" action="@searchPath" class="search-grid" data-browse-search-form data-group-aware-search-form="true" data-required-filter-form="true" data-required-filter-fields-endpoint="/api/content/required-filter-fields">
-        <label>
-            <span>Qué buscás</span>
+    <form method="get" action="@searchPath" class="search-grid search-grid-minimal" data-browse-search-form data-group-aware-search-form="true" data-required-filter-form="true" data-required-filter-fields-endpoint="/api/content/required-filter-fields">
+        <label class="search-control search-query-control">
+            <span class="search-control-label">Que buscas</span>
             <input name="query" value="@Model.Query" placeholder="@GetQueryPlaceholder(currentGroup)" data-group-aware-query-input="true" />
         </label>
-        <label>
-            <span>Grupo</span>
+        <label class="search-control">
+            <span class="search-control-label">Grupo</span>
             <select name="group"
                     data-placeholder-inmuebles="Ej. departamento, casa con patio, lote"
                     data-placeholder-rodados="Ej. Ford Fiesta, moto, camioneta"
-                    data-placeholder-embarcaciones="Ej. lancha, velero, semirrígido"
-                    data-placeholder-generales="Ej. iPhone, bicicleta, heladera"
+                    data-placeholder-embarcaciones="Ej. lancha, velero, semirrigido"
+                    data-placeholder-agro="Ej. tractor, sembradora, generador"
+                    data-placeholder-electronica="Ej. celular, notebook, playstation"
+                    data-placeholder-generales="Ej. muebles, bicicleta, herramientas"
+                    data-placeholder-moda="Ej. zapatillas, campera, cartera"
                     data-placeholder-todos="Ej. departamento, Ford Fiesta, iPhone">
                 @foreach (var group in Model.GroupOptions)
                 {
@@ -100,92 +175,136 @@
                 }
             </select>
         </label>
-        <label>
-            <span>Vista</span>
-            <select name="mode">
-                <option selected="@(currentMode == "Mapa")">Mapa</option>
-                <option selected="@(currentMode == "Texto")">Texto</option>
-                <option selected="@(currentMode == "Galería")">Galería</option>
+        <label class="search-control" data-group-category-wrapper>
+            <span class="search-control-label">Categoria</span>
+            <select name="categoryId"
+                    data-group-category-select="true"
+                    data-selected-category-id="@(Model.SelectedCategoryId?.ToString() ?? string.Empty)"
+                    data-categories-endpoint="/api/content/categories">
+                <option value="">Todas</option>
+                @foreach (var category in Model.CategoryOptions)
+                {
+                    if (Model.SelectedCategoryId == category.Id)
+                    {
+                        <option value="@category.Id" selected>@category.Name</option>
+                    }
+                    else
+                    {
+                        <option value="@category.Id">@category.Name</option>
+                    }
+                }
             </select>
         </label>
-        <div class="price-range-filter" data-price-range-filter data-price-max="@priceSliderMax.ToString(System.Globalization.CultureInfo.InvariantCulture)">
-            <div class="price-range-head">
-                <span>Precio</span>
-                <strong><span data-price-from-label>@priceFromValue.ToString("0")</span> - <span data-price-to-label>@priceToValue.ToString("0")</span></strong>
-            </div>
-            <input type="hidden" name="priceFrom" value="@priceFromValue.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-price-from-value />
-            <input type="hidden" name="priceTo" value="@priceToValue.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-price-to-value />
-            <div class="price-range-slider">
-                <div class="price-range-line"></div>
-                <div class="price-range-fill" data-price-range-fill></div>
-                <input type="range" min="0" max="@priceSliderMax.ToString(System.Globalization.CultureInfo.InvariantCulture)" step="1000" value="@priceFromValue.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-price-from-range aria-label="Precio desde" />
-                <input type="range" min="0" max="@priceSliderMax.ToString(System.Globalization.CultureInfo.InvariantCulture)" step="1000" value="@priceToValue.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-price-to-range aria-label="Precio hasta" />
-            </div>
-        </div>
-        @if (currentMode != "Texto")
-        {
-            <input type="hidden" name="pageSize" value="@Model.PageSize" />
-        }
-        <input type="hidden" name="page" value="1" />
-        <div class="required-filter-panel" data-required-filter-panel hidden="@(!filterFields.Any())">
-            <div class="required-filter-heading">
-                <strong>Más filtros</strong>
-            </div>
-            <div class="required-filter-list" data-required-filter-list>
-                @foreach (var field in filterFields)
+        <label class="search-control">
+            <span class="search-control-label">Tipo de operación</span>
+            <select name="operation" required data-group-operation-select="true" data-selected-operation="@(Model.Operation ?? string.Empty)">
+                <option value="">Tipo de operación</option>
+                @foreach (var option in operationOptions)
                 {
-                    var selectedValue = selectedFilterLookup.TryGetValue(field.Id, out var value) ? value : string.Empty;
-                    <label data-required-filter-row>
-                        <span>@field.Label</span>
-                        <input type="hidden" name="filterFieldId" value="@field.Id" />
-                        @if (SplitOptions(field.OptionsCsv).Any())
-                        {
-                            <select name="filterValue">
-                                <option value="">Todos</option>
-                                @foreach (var option in SplitOptions(field.OptionsCsv))
-                                {
-                                    <option value="@option" selected="@(string.Equals(option, selectedValue, StringComparison.OrdinalIgnoreCase))">@option</option>
-                                }
-                            </select>
-                        }
-                        else if (field.DataType == PublicationCategoryFieldDataType.Booleano)
-                        {
-                            <select name="filterValue">
-                                <option value="">Todos</option>
-                                <option value="true" selected="@(string.Equals(selectedValue, "true", StringComparison.OrdinalIgnoreCase))">Sí</option>
-                                <option value="false" selected="@(string.Equals(selectedValue, "false", StringComparison.OrdinalIgnoreCase))">No</option>
-                            </select>
-                        }
-                        else
-                        {
-                            <input name="filterValue" type="@(field.DataType == PublicationCategoryFieldDataType.Numero ? "number" : "text")" step="0.01" value="@selectedValue" placeholder="Todos" />
-                        }
-                    </label>
+                    <option value="@option" selected="@(string.Equals(Model.Operation, option, StringComparison.OrdinalIgnoreCase))">@option</option>
                 }
+            </select>
+        </label>
+        <input type="hidden" name="mode" value="@currentMode" />
+        <input type="hidden" name="page" value="1" />
+        <input type="hidden" name="pageSize" value="50" />
+        @if (debugEnabled)
+        {
+            <input type="hidden" name="debug" value="1" />
+        }
+        <details class="search-advanced-panel">
+            <summary class="search-advanced-summary">Mas filtros</summary>
+            <div class="search-advanced-body">
+                <div class="price-range-filter" data-price-range-filter data-price-max="@priceSliderMax.ToString(System.Globalization.CultureInfo.InvariantCulture)">
+                    <div class="price-range-head">
+                        <span>Precio</span>
+                        <strong><span data-price-from-label>@priceFromValue.ToString("0")</span> - <span data-price-to-label>@priceToValue.ToString("0")</span></strong>
+                    </div>
+                    <input type="hidden" name="priceFrom" value="@priceFromValue.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-price-from-value />
+                    <input type="hidden" name="priceTo" value="@priceToValue.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-price-to-value />
+                    <div class="price-range-slider">
+                        <div class="price-range-line"></div>
+                        <div class="price-range-fill" data-price-range-fill></div>
+                        <input type="range" min="0" max="@priceSliderMax.ToString(System.Globalization.CultureInfo.InvariantCulture)" step="1000" value="@priceFromValue.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-price-from-range aria-label="Precio desde" />
+                        <input type="range" min="0" max="@priceSliderMax.ToString(System.Globalization.CultureInfo.InvariantCulture)" step="1000" value="@priceToValue.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-price-to-range aria-label="Precio hasta" />
+                    </div>
+                </div>
+                <div class="price-range-filter radius-range-filter"
+                     data-radius-range-filter
+                     data-radius-max="200">
+                    <div class="price-range-head">
+                        <span>Radio</span>
+                        <strong data-radius-label>@((Model.RadiusKm ?? 60) > 0 ? $"{(Model.RadiusKm ?? 60)} km" : "Sin limite")</strong>
+                    </div>
+                    <input type="hidden" name="radioKm" value="@((Model.RadiusKm ?? 60).ToString())" data-radius-value />
+                    <div class="price-range-slider radius-range-slider">
+                        <div class="price-range-line"></div>
+                        <div class="price-range-fill" data-radius-range-fill></div>
+                        <input type="range"
+                               min="0"
+                               max="200"
+                               step="1"
+                               value="@((Model.RadiusKm ?? 60).ToString())"
+                               data-radius-range
+                               aria-label="Radio en kilometros" />
+                    </div>
+                </div>
+                <div class="required-filter-panel required-filter-panel-inline" data-required-filter-panel hidden="@(!filterFields.Any())">
+                    <div class="required-filter-list" data-required-filter-list>
+                        @foreach (var field in filterFields)
+                        {
+                            var selectedValue = selectedFilterLookup.TryGetValue(field.Id, out var value) ? value : string.Empty;
+                            <label data-required-filter-row>
+                                <span>@field.Label</span>
+                                <input type="hidden" name="filterFieldId" value="@field.Id" />
+                                @if (SplitOptions(field.OptionsCsv).Any())
+                                {
+                                    <select name="filterValue">
+                                        <option value="">Todos</option>
+                                        @foreach (var option in SplitOptions(field.OptionsCsv))
+                                        {
+                                            <option value="@option" selected="@(string.Equals(option, selectedValue, StringComparison.OrdinalIgnoreCase))">@option</option>
+                                        }
+                                    </select>
+                                }
+                                else if (field.DataType == PublicationCategoryFieldDataType.Booleano)
+                                {
+                                    <select name="filterValue">
+                                        <option value="">Todos</option>
+                                        <option value="true" selected="@(string.Equals(selectedValue, "true", StringComparison.OrdinalIgnoreCase))">Si</option>
+                                        <option value="false" selected="@(string.Equals(selectedValue, "false", StringComparison.OrdinalIgnoreCase))">No</option>
+                                    </select>
+                                }
+                                else
+                                {
+                                    <input name="filterValue" type="@(field.DataType == PublicationCategoryFieldDataType.Numero ? "number" : "text")" step="0.01" value="@selectedValue" placeholder="Todos" />
+                                }
+                            </label>
+                        }
+                    </div>
+                </div>
             </div>
             <script type="application/json" data-required-filter-fields-json>@Html.Raw(System.Text.Json.JsonSerializer.Serialize(filterFields.Select(MapRequiredFilterField)))</script>
-        </div>
-        @if (currentMode == "Texto")
-        {
-            <label>
-                <span>Resultados</span>
-                <select name="pageSize">
-                    <option value="50" selected="@(Model.PageSize == 50)">50</option>
-                    <option value="100" selected="@(Model.PageSize == 100)">100</option>
-                    <option value="200" selected="@(Model.PageSize == 200)">200</option>
-                </select>
-            </label>
-        }
-        <button type="submit" class="primary-pill large">Buscar</button>
+        </details>
+        <button type="submit" class="primary-pill large search-submit-control">Buscar</button>
     </form>
 </section>
+<hr class="search-panel-divider" />
 
 @if (!string.IsNullOrWhiteSpace(Model.FlashMessage))
 {
     <div class="status-banner">@Model.FlashMessage</div>
 }
 
-@if (false && Model.CanManageFavorites)
+@if (Model.RequireLocalitySelection)
+{
+    <div data-browse-locality-required="true" hidden></div>
+    <section class="empty-state" data-browse-scroll-target>
+        <h2>Elegi tu localidad para ver anuncios</h2>
+        <p>Necesitamos una localidad seleccionada para mostrar resultados cercanos y ordenar la busqueda.</p>
+    </section>
+}
+else if (false && Model.CanManageFavorites)
 {
     <section class="favorites-strip" data-favorites-summary>
         <div class="favorites-strip-copy">
@@ -204,126 +323,20 @@
             }
             else
             {
-                <span class="field-hint">Todavía no guardaste anuncios en tus listas.</span>
+                <span class="field-hint">Todavia no guardaste anuncios en tus listas.</span>
             }
         </div>
-    </section>
-}
-
-@if (currentMode != "Galería" && !Model.Publications.Any())
-{
-    <section class="empty-state" data-browse-scroll-target>
-        <h2>No hay resultados para esa búsqueda.</h2>
-        <p>Ajustá el grupo o la palabra clave para ver anuncios activos.</p>
     </section>
 }
 else if (currentMode == "Mapa")
 {
-    <section class="map-layout" data-browse-scroll-target data-map-layout>
-        <div class="map-canvas" id="map"
-             data-map-style-url="@Model.MapStyleUrl"
-             data-map-tiles-url="@Model.MapTilesUrlTemplate"
-             data-map-attribution="@Model.MapAttributionHtml"
-             data-map-initial-lat="@Model.UserLocalityLatitude"
-             data-map-initial-lng="@Model.UserLocalityLongitude"
-             data-markers='@Model.MarkersJson'>
-            @if (string.IsNullOrWhiteSpace(Model.MapStyleUrl) && string.IsNullOrWhiteSpace(Model.MapTilesUrlTemplate))
-            {
-                <div class="map-placeholder">
-                    <h2>Mapa listo para MapLibre</h2>
-                    <p>Cargá <code>Map:StyleUrl</code> o <code>Map:TilesUrlTemplate</code> en <code>appsettings.json</code> para activar el mapa interactivo.</p>
-                </div>
-            }
-        </div>
-        <div class="map-results" data-map-selection-panel>
-            <div class="map-results-copy">
-                <span class="gallery-kicker">Pin seleccionado</span>
-                @* <h2>@(string.IsNullOrWhiteSpace(Model.UserLocalityLabel) ? "Elegí una publicación en el mapa" : $"{currentGroup} cerca de {Model.UserLocalityLabel}")</h2>
-                <p>@(string.IsNullOrWhiteSpace(Model.UserLocalityLabel) ? "Al tocar un pin, acá se muestra la misma tarjeta visual de la galería." : $"El mapa arranca centrado en {Model.UserLocalityLabel} y prioriza los anuncios más cercanos.")</p> *@
-            </div>
-            <div class="map-selection-card" data-map-selection-card></div>
-        </div>
-    </section>
+    <partial name="~/Views/Content/Results/_ResultsMapLayout.cshtml" model="mapLayoutModel" />
 }
 else if (currentMode == "Texto")
 {
-    <section class="classified-toolbar">
-        <div class="classified-summary">
-            @if (!string.IsNullOrWhiteSpace(Model.UserLocalityLabel))
-            {
-                <strong>@currentGroup cerca de @Model.UserLocalityLabel</strong>
-            }
-            else
-            {
-                <strong>@currentGroup disponibles</strong>
-            }
-            <br />
-            Mostrando @(Model.TotalResults == 0 ? 0 : ((Model.Page - 1) * Model.PageSize) + 1)-@Math.Min(Model.Page * Model.PageSize, Model.TotalResults) de @Model.TotalResults resultados
-        </div>
-        <div class="classified-page-size">
-            Ver:
-            <a class="view-pill @(Model.PageSize == 50 ? "active" : "")" href="@BuildSearchUrl(1, 50, "Texto")">50</a>
-            <a class="view-pill @(Model.PageSize == 100 ? "active" : "")" href="@BuildSearchUrl(1, 100, "Texto")">100</a>
-            <a class="view-pill @(Model.PageSize == 200 ? "active" : "")" href="@BuildSearchUrl(1, 200, "Texto")">200</a>
-        </div>
-    </section>
-
-    <section class="classified-list" data-browse-scroll-target>
-        @foreach (var item in Model.Publications)
-        {
-            var publicationCode = item.ToAdCode();
-            <article class="classified-row">
-                <div>
-                    <span class="card-meta">@item.Group · @(item.Category?.Name ?? "Sin categoría") · @item.Locality</span>
-                    <h3><a href="/Publications/Details/@item.Id" class="publication-preview-trigger" data-publication-id="@item.Id" data-details-url="/api/content/details/@item.Id">@item.Title</a></h3>
-                    <p>@item.ShortDescription</p>
-                </div>
-                <div class="classified-side">
-                    <strong>@item.Currency @item.Price.ToString("0")</strong>
-                    <button type="button"
-                            class="favorite-toggle favorite-toggle-inline @(Model.FavoritePublicationIds.Contains(item.Id) ? "is-active" : "")"
-                            data-favorite-toggle="true"
-                            data-publication-id="@item.Id"
-                            data-publication-title="@item.Title"
-                            data-suggested-list-name="@item.Group.ToDisplayName()"
-                            title="Añadir a mi lista de favoritos"
-                            aria-label="Añadir a mi lista de favoritos">
-                        <i class="fa-@(Model.FavoritePublicationIds.Contains(item.Id) ? "solid" : "regular") fa-star" aria-hidden="true"></i>
-                    </button>
-                    <button type="button" class="report-float report-trigger" data-publication-id="@item.Id" data-publication-code="@publicationCode" data-publication-title="@item.Title">Denunciar</button>
-                </div>
-            </article>
-        }
-    </section>
-
-    @if (Model.TotalPages > 1)
-    {
-        <nav class="classified-pagination" aria-label="Paginación de clasificados">
-            <a class="ghost-pill compact @(Model.Page <= 1 ? "is-disabled" : "")" href="@BuildSearchUrl(previousPage, Model.PageSize, "Texto")" aria-disabled="@(Model.Page <= 1)">Anterior</a>
-            <span class="classified-page-indicator">Página @Model.Page de @Model.TotalPages</span>
-            <a class="ghost-pill compact @(Model.Page >= Model.TotalPages ? "is-disabled" : "")" href="@BuildSearchUrl(nextPage, Model.PageSize, "Texto")" aria-disabled="@(Model.Page >= Model.TotalPages)">Siguiente</a>
-        </nav>
-    }
+    <partial name="~/Views/Content/Results/_ResultsListLayout.cshtml" model="resultsLayoutModel" />
 }
 else
 {
-    <section class="gallery-shell" data-browse-scroll-target>
-        <div class="gallery-header">
-            <div>
-                <span class="gallery-kicker">Vista galería</span>
-                <h2>@(string.IsNullOrWhiteSpace(Model.UserLocalityLabel) ? $"{currentGroup} destacados" : $"{currentGroup} cerca de {Model.UserLocalityLabel}")</h2>
-            </div>
-        </div>
-
-        <div class="gallery-feed"
-             data-gallery-feed="true"
-             data-gallery-endpoint="@Model.GalleryApiEndpoint"
-             data-gallery-desktop-visible-rows="3"
-             data-gallery-desktop-preload-rows="3"
-             data-gallery-mobile-preload-items="20">
-            <div class="gallery-rail"></div>
-            <div class="gallery-loader" data-gallery-loader>Preparando anuncios...</div>
-            <div class="gallery-sentinel" data-gallery-sentinel aria-hidden="true"></div>
-        </div>
-    </section>
+    <partial name="~/Views/Content/Results/_ResultsGalleryLayout.cshtml" model="resultsLayoutModel" />
 }

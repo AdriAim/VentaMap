@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Ventagram.Models;
 
 public class PublicationCreateRequest
@@ -6,8 +8,9 @@ public class PublicationCreateRequest
     public int CategoryId { get; set; }
     public string Title { get; set; } = string.Empty;
     public decimal Price { get; set; }
-    public string Currency { get; set; } = "USD";
+    public string Currency { get; set; } = "U$D";
     public string Locality { get; set; } = string.Empty;
+    [StringLength(60, ErrorMessage = "La descripción corta debe tener como máximo 60 caracteres, incluidos los espacios.")]
     public string ShortDescription { get; set; } = string.Empty;
     public string? LongDescription { get; set; }
     public string ImagesCsv { get; set; } = string.Empty;

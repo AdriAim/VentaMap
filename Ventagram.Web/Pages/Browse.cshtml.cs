@@ -18,10 +18,19 @@ public class BrowseModel(IConfiguration configuration, VentagramDbContext db) : 
     public string? Query { get; set; }
 
     [BindProperty(SupportsGet = true)]
+    public string? Operation { get; set; }
+
+    [BindProperty(SupportsGet = true)]
     public decimal? PriceFrom { get; set; }
 
     [BindProperty(SupportsGet = true)]
+    public int? CategoryId { get; set; }
+
+    [BindProperty(SupportsGet = true)]
     public decimal? PriceTo { get; set; }
+
+    [BindProperty(SupportsGet = true, Name = "radioKm")]
+    public int? RadiusKm { get; set; }
 
     [BindProperty(SupportsGet = true)]
     public int CurrentPage { get; set; } = 1;

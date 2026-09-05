@@ -1,10 +1,18 @@
 .vs/
+/artifacts/
 bin/
 obj/
 _buildcheck*/
+build-verify-local/
+build-verify*/
+build-verify-*/
+ventagram-*.tar.gz
 artifacts/buildcheck*/
 artifacts/buildcheck-*/
 .codex-build/
+.codextemp/
+.env
+*.tar.gz
 
 *.user
 *.suo
@@ -14,3 +22,11 @@ appsettings.Development.json
 node_modules/
 dist/
 coverage/
+HOSTINGER_CREDENCIALES.local.md
+deploy-hostinger-db.local.ps1
+deploy-hostinger-db-seeds.local.ps1
+align-hostinger-ef-history.local.ps1
+/.codex-remote-attachments/01a040d6-ccfb-7cf0-a06f-a882213b50e8/da84c970-1535-4677-a2de-c779760376d4
+.codex-remote-attachments/
+artifacts/r2-seed-vertical/
+/logo-redes-180x180.jpg

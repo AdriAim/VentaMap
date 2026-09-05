@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Globalization;
 using System.Text;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Authentication;
@@ -40,7 +41,15 @@ public class AuthService(
         bool acceptsCalls,
         bool respondsWhatsApp,
         int? argentineLocalityId = null,
-        string provider = "Local")
+        string provider = "Local",
+        bool isCompany = false,
+        string? companyName = null,
+        string? companySlug = null,
+        string? companyLogoUrl = null,
+        string? companyHeroBackgroundUrl = null,
+        string? companyTagline = null,
+        string? companyIndustry = null,
+        string? headerPublicationGroupsCsv = null)
     {
         email = email.Trim().ToLowerInvariant();
         phone = NormalizePhone(phone, phoneCountry, provider);
@@ -50,9 +59,42 @@ public class AuthService(
             return (false, "Ya existe un usuario con ese email.", null);
         }
 
+        var normalizedCompanyName = string.IsNullOrWhiteSpace(companyName) ? null : companyName.Trim();
+        var normalizedCompanySlug = string.IsNullOrWhiteSpace(companySlug) ? null : NormalizeCompanySlug(companySlug);
+
+        if (isCompany)
+        {
+            if (string.IsNullOrWhiteSpace(normalizedCompanyName))
+            {
+                return (false, "Ingresa el nombre de la empresa.", null);
+            }
+
+            if (string.IsNullOrWhiteSpace(normalizedCompanySlug))
+            {
+                return (false, "No se pudo generar una dirección válida para la empresa.", null);
+            }
+
+            if (await db.Users.AnyAsync(x => x.CompanyName != null && x.CompanyName.ToLower() == normalizedCompanyName.ToLower()))
+            {
+                return (false, "Ya existe una empresa con ese nombre en el sitio.", null);
+            }
+
+            if (await db.Users.AnyAsync(x => x.CompanySlug == normalizedCompanySlug))
+            {
+                return (false, "La dirección pública de la empresa ya está en uso.", null);
+            }
+        }
+
         var user = new ApplicationUser
         {
             Name = name.Trim(),
+            IsCompany = isCompany,
+            CompanyName = normalizedCompanyName,
+            CompanySlug = normalizedCompanySlug,
+            CompanyLogoUrl = string.IsNullOrWhiteSpace(companyLogoUrl) ? null : companyLogoUrl.Trim(),
+            CompanyHeroBackgroundUrl = string.IsNullOrWhiteSpace(companyHeroBackgroundUrl) ? null : companyHeroBackgroundUrl.Trim(),
+            CompanyTagline = string.IsNullOrWhiteSpace(companyTagline) ? null : companyTagline.Trim(),
+            CompanyIndustry = string.IsNullOrWhiteSpace(companyIndustry) ? null : companyIndustry.Trim(),
             Email = email,
             Phone = phone.Trim(),
             AllowsSiteChat = allowsSiteChat,
@@ -60,6 +102,7 @@ public class AuthService(
             AcceptsCalls = acceptsCalls,
             RespondsWhatsApp = respondsWhatsApp,
             ArgentineLocalityId = argentineLocalityId,
+            HeaderPublicationGroupsCsv = string.IsNullOrWhiteSpace(headerPublicationGroupsCsv) ? null : headerPublicationGroupsCsv.Trim(),
             ContactPreference = BuildContactPreference(allowsSiteChat, respondsEmails, acceptsCalls, respondsWhatsApp),
             PasswordHash = provider == "Google" ? string.Empty : HashPassword(password),
             AuthProvider = provider
@@ -68,6 +111,42 @@ public class AuthService(
         db.Users.Add(user);
         await db.SaveChangesAsync();
         return (true, null, user);
+    }
+
+    public static string NormalizeCompanySlug(string? companyName)
+    {
+        if (string.IsNullOrWhiteSpace(companyName))
+        {
+            return string.Empty;
+        }
+
+        var normalized = companyName.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder();
+        var lastWasSeparator = false;
+
+        foreach (var character in normalized)
+        {
+            var category = CharUnicodeInfo.GetUnicodeCategory(character);
+            if (category == UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
+            if (char.IsLetterOrDigit(character))
+            {
+                builder.Append(character);
+                lastWasSeparator = false;
+                continue;
+            }
+
+            if (!lastWasSeparator)
+            {
+                builder.Append('-');
+                lastWasSeparator = true;
+            }
+        }
+
+        return builder.ToString().Trim('-');
     }
 
     public async Task<ApplicationUser?> ValidateUserAsync(string email, string password)
@@ -93,6 +172,7 @@ public class AuthService(
     public async Task SignInAsync(ApplicationUser user)
     {
         httpContextAccessor.HttpContext?.Response.Cookies.Delete(NavigationLocalityService.CookieName);
+        httpContextAccessor.HttpContext?.Response.Cookies.Delete(PublicationGroupPreferenceService.CookieName);
 
         var claims = new List<Claim>
         {
@@ -116,6 +196,7 @@ public class AuthService(
 
     public async Task SignOutAsync()
     {
+        httpContextAccessor.HttpContext?.Response.Cookies.Delete(PublicationGroupPreferenceService.CookieName);
         await httpContextAccessor.HttpContext!.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     }
 

@@ -81,7 +81,7 @@ public class ContactoModel(IEmailSender emailSender, IConfiguration configuratio
             return Page();
         }
 
-        SuccessMessage = "Mensaje enviado.";
+        SuccessMessage = "El mensaje se envió correctamente.";
         return RedirectToPage();
     }
 

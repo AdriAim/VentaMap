@@ -1,0 +1,56 @@
+@model ResultsShellViewModel
+
+<section class="gallery-shell" data-browse-scroll-target>
+    <div id="@Model.AnchorId" class="gallery-header">
+        <div>
+            <span class="gallery-kicker">@Model.Kicker</span>
+            <div class="shared-list-results-title">
+                @if (string.Equals(Model.TitleDataAttribute, "data-favorites-page-title", StringComparison.Ordinal))
+                {
+                    <h2 data-favorites-page-title>@Model.Title</h2>
+                }
+                else
+                {
+                    <h2>@Model.Title</h2>
+                }
+                @if (!string.IsNullOrWhiteSpace(Model.Subtitle))
+                {
+                    <span class="field-hint">@Model.Subtitle</span>
+                }
+            </div>
+        </div>
+        <div class="shared-list-results-actions">
+            @if (!string.IsNullOrWhiteSpace(Model.ActionUrl) && !string.IsNullOrWhiteSpace(Model.ActionLabel))
+            {
+                <a class="@Model.ActionCssClass" href="@Model.ActionUrl">@Model.ActionLabel</a>
+            }
+            @if (Model.ShowOpenModeSelector)
+            {
+                <label class="results-open-mode" aria-label="Abrir anuncios">
+                    <span class="results-open-mode-label">Abrir anuncios</span>
+                    <select class="results-open-mode-select" data-publication-open-mode>
+                        <option value="popup">Popup</option>
+                        <option value="page">Pestaña naveg.</option>
+                    </select>
+                </label>
+            }
+            @if (Model.ShowViewSwitch)
+            {
+                <div class="gallery-view-switch @(Model.CurrentMode == "Mapa" ? "map-view-switch" : string.Empty)" aria-label="Cambiar vista">
+                    @if (!string.IsNullOrWhiteSpace(Model.TextViewUrl))
+                    {
+                        <a class="view-pill @(Model.CurrentMode == "Lista" || Model.CurrentMode == "Texto" ? "active" : string.Empty)" href="@Model.TextViewUrl">Lista</a>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Model.GalleryViewUrl))
+                    {
+                        <a class="view-pill @(Model.CurrentMode == "Galeria" ? "active" : string.Empty)" href="@Model.GalleryViewUrl">Galeria</a>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Model.MapViewUrl))
+                    {
+                        <a class="view-pill @(Model.CurrentMode == "Mapa" ? "active" : string.Empty)" href="@Model.MapViewUrl">Mapa</a>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>

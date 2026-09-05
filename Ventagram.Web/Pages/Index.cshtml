@@ -4,6 +4,23 @@
     ViewData["Title"] = "Compra venta Argentina de inmuebles, rodados y anuncios";
     ViewData["MetaDescription"] = "Compra venta Argentina en Ventagram. Publica anuncios clasificados de inmuebles, rodados y mas con precios visibles, mapa, galeria y texto.";
     var endpoint = $"/api/content/home?group={Uri.EscapeDataString(Model.Group)}&mode={Uri.EscapeDataString(Model.Mode)}&query={Uri.EscapeDataString(Model.Query ?? string.Empty)}";
+    if (!string.IsNullOrWhiteSpace(Model.Operation))
+    {
+        endpoint += $"&operation={Uri.EscapeDataString(Model.Operation)}";
+    }
+    if (string.Equals(Request.Query["debug"], "1", StringComparison.Ordinal))
+    {
+        endpoint += "&debug=1";
+    }
+    if (Model.CategoryId.HasValue)
+    {
+        endpoint += $"&categoryId={Model.CategoryId.Value}";
+    }
+}
+
+@if (TempData["AccountCreatedMessage"] is string accountCreatedMessage)
+{
+    <div class="status-banner success-banner">@accountCreatedMessage</div>
 }
 
 <div id="api-page"

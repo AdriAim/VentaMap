@@ -2,21 +2,29 @@
 @using Microsoft.EntityFrameworkCore
 @inject Ventagram.Data.VentagramDbContext Db
 @inject NavigationLocalityService NavigationLocalityService
+@inject PublicationGroupPreferenceService PublicationGroupPreferenceService
+@inject VentagramParameterService Parameters
 @inject IConfiguration Configuration
 @{
     var pageTitle = string.IsNullOrWhiteSpace(ViewData["Title"]?.ToString())
         ? "Ventagram"
         : ViewData["Title"]!.ToString();
     var metaDescription = ViewData["MetaDescription"]?.ToString()
-        ?? "Ventagram es una plataforma de compra venta en Argentina para publicar anuncios clasificados de inmuebles, rodados y mas con precios visibles.";
+        ?? "Ventagram es una plataforma de compra venta en Argentina para publicar anuncios clasificados de inmuebles, rodados y mas con precios claros.";
     var canonicalUrl = $"{Context.Request.Scheme}://{Context.Request.Host}{Context.Request.PathBase}{Context.Request.Path}";
     var ogImageUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/images/logo5.png";
+    var hideSiteHeader = string.Equals(ViewData["HideSiteHeader"]?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
 }
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <meta name="supported-color-schemes" content="light" />
+    <meta name="theme-color" content="#f9f8f7" />
+    <meta name="theme-color" content="#f9f8f7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#f9f8f7" media="(prefers-color-scheme: dark)" />
     <title>@pageTitle - Ventagram</title>
     <meta name="description" content="@metaDescription" />
     <link rel="canonical" href="@canonicalUrl" />
@@ -30,6 +38,10 @@
     <meta name="twitter:title" content="@($"{pageTitle} - Ventagram")" />
     <meta name="twitter:description" content="@metaDescription" />
     <meta name="twitter:image" content="@ogImageUrl" />
+    <link rel="icon" type="image/svg+xml" href="~/favicon.svg" asp-append-version="true" />
+    <link rel="icon" type="image/png" href="~/images/logo5.png" asp-append-version="true" />
+    <link rel="shortcut icon" href="~/favicon.svg" asp-append-version="true" />
+    <link rel="apple-touch-icon" href="~/images/logo5.png" asp-append-version="true" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Cormorant+Garamond:wght@600;700&display=swap" rel="stylesheet">
@@ -43,6 +55,12 @@
     var reportBlockedMessage = string.Empty;
     var reportLoginUrl = $"/Account/Login?returnUrl={Uri.EscapeDataString(Context.Request.Path + Context.Request.QueryString)}";
     var currentUserIsAdmin = false;
+    var currentUserIsCompany = false;
+    var isGoogleLoginEnabled = !string.IsNullOrWhiteSpace(Configuration["Authentication:Google:ClientId"]);
+    var isPaidSiteEnabled = await Parameters.GetBoolAsync(VentagramParameterService.PaidSiteEnabled, fallback: false);
+    var defaultMapStyleUrl = Configuration["Map:StyleUrl"] ?? string.Empty;
+    var defaultMapTilesUrl = Configuration["Map:TilesUrlTemplate"] ?? string.Empty;
+    var defaultMapAttribution = Configuration["Map:AttributionHtml"] ?? string.Empty;
 
     if (isAuthenticated && int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var layoutUserId))
     {
@@ -50,6 +68,7 @@
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == layoutUserId);
         currentUserIsAdmin = layoutUser?.IsAdmin ?? false;
+        currentUserIsCompany = layoutUser?.IsCompany ?? false;
 
         if (layoutUser is null)
         {
@@ -76,23 +95,77 @@
 <body data-user-authenticated="@(isAuthenticated ? "true" : "false")"
       data-report-modal-allowed="@(reportModalAllowed ? "true" : "false")"
       data-report-block-message="@reportBlockedMessage"
-      data-report-login-url="@reportLoginUrl">
+      data-report-login-url="@reportLoginUrl"
+      data-map-default-style-url="@defaultMapStyleUrl"
+      data-map-default-tiles-url="@defaultMapTilesUrl"
+      data-map-default-attribution="@defaultMapAttribution">
     <div class="page-backdrop"></div>
     @{
         var headerGroup = Context.Request.Query["group"].ToString();
         var headerMode = Context.Request.Query["mode"].ToString();
+        var headerRadius = Context.Request.Query["radioKm"].ToString();
         var headerGroupActive = string.IsNullOrWhiteSpace(headerGroup) ? "Todos" : headerGroup;
         var headerModeActive = string.IsNullOrWhiteSpace(headerMode) ? string.Empty : headerMode;
+        string BuildHeaderSearchUrl(string group)
+        {
+            var parts = new List<string>
+            {
+                $"group={Uri.EscapeDataString(group)}"
+            };
+
+            if (!string.IsNullOrWhiteSpace(headerModeActive))
+            {
+                parts.Add($"mode={Uri.EscapeDataString(headerModeActive)}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(headerRadius))
+            {
+                parts.Add($"radioKm={Uri.EscapeDataString(headerRadius)}");
+            }
+
+            return $"/Buscar?{string.Join("&", parts)}#search-panel";
+        }
+        string GetHeaderGroupIcon(string group) => group switch
+        {
+            "Inmuebles" => "fa-house",
+            "Rodados" => "fa-car-side",
+            "Embarcaciones" => "fa-ship",
+            "Agro" => "fa-tractor",
+            "Electronica" => "fa-mobile-screen-button",
+            "Moda" => "fa-shirt",
+            "Generales" => "fa-box-open",
+            _ => "fa-tag"
+        };
         var navigationLocality = await NavigationLocalityService.GetEffectiveLocalityAsync(Context);
         var availableHeaderLocalities = await NavigationLocalityService.GetAvailableLocalitiesAsync();
+        var guestHeaderGroupOptions = await Db.PublicationGroupTypes.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.SortOrder).ThenBy(x => x.Name).ToListAsync();
+        var selectedHeaderGroupNames = await PublicationGroupPreferenceService.GetPreferredGroupNamesAsync(Context);
+        var headerGroups = await PublicationGroupPreferenceService.GetHeaderGroupsAsync(Context);
         var currentHeaderLocality = navigationLocality?.DisplayLabel ?? string.Empty;
-        var chatBaseUrl = (Configuration["Chat:BaseUrl"] ?? string.Empty).TrimEnd('/');
+        var shouldPromptGuestLocality = navigationLocality is null;
+        var chatBaseUrl = (Configuration["Chat:BaseUrl"] ?? string.Empty).Trim().TrimEnd('/');
         if (chatBaseUrl.Contains(".example.com", StringComparison.OrdinalIgnoreCase))
         {
             chatBaseUrl = string.Empty;
         }
-        var chatMailboxUrl = "/Mensajes";
+        else if (Uri.TryCreate(chatBaseUrl, UriKind.Absolute, out var configuredChatUri))
+        {
+            var configuredHost = configuredChatUri.Host;
+            var requestHost = Context.Request.Host.Host;
+            var configuredIsLocal = string.Equals(configuredHost, "localhost", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(configuredHost, "127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(configuredHost, "::1", StringComparison.OrdinalIgnoreCase);
+            var requestIsLocal = string.Equals(requestHost, "localhost", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(requestHost, "127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(requestHost, "::1", StringComparison.OrdinalIgnoreCase);
+            if (configuredIsLocal && !requestIsLocal)
+            {
+                chatBaseUrl = string.Empty;
+            }
+        }
     }
+    @if (!hideSiteHeader)
+    {
     <header class="site-header">
         <nav class="site-nav">
             <a class="brand-lockup" asp-page="/Index">
@@ -104,30 +177,17 @@
             </a>
             <div class="site-nav-center">
                 <div class="header-category-strip" aria-label="Categorias principales">
-                    <a class="category-chip @(headerGroupActive == "Inmuebles" ? "active" : "")" href="/Buscar?group=Inmuebles@(string.IsNullOrWhiteSpace(headerModeActive) ? string.Empty : $"&mode={headerModeActive}")#search-panel">
-                        <span class="category-icon" aria-hidden="true"><i class="fa-solid fa-house"></i></span>
-                        <span class="category-label">Inmuebles</span>
-                    </a>
-                    <a class="category-chip @(headerGroupActive == "Rodados" ? "active" : "")" href="/Buscar?group=Rodados@(string.IsNullOrWhiteSpace(headerModeActive) ? string.Empty : $"&mode={headerModeActive}")#search-panel">
-                        <span class="category-icon" aria-hidden="true"><i class="fa-solid fa-car-side"></i></span>
-                        <span class="category-label">Rodados</span>
-                    </a>
-                    <a class="category-chip @(headerGroupActive == "Embarcaciones" ? "active" : "")" href="/Buscar?group=Embarcaciones@(string.IsNullOrWhiteSpace(headerModeActive) ? string.Empty : $"&mode={headerModeActive}")#search-panel">
-                        <span class="category-icon" aria-hidden="true"><i class="fa-solid fa-ship"></i></span>
-                        <span class="category-label">Embarcaciones</span>
-                    </a>
-                    <a class="category-chip @(headerGroupActive == "Generales" ? "active" : "")" href="/Buscar?group=Generales@(string.IsNullOrWhiteSpace(headerModeActive) ? string.Empty : $"&mode={headerModeActive}")#search-panel">
-                        <span class="category-icon" aria-hidden="true"><i class="fa-solid fa-mobile-screen-button"></i></span>
-                        <span class="category-label">Electronica</span>
-                    </a>
-                    <a class="category-chip @(headerGroupActive == "Todos" ? "active" : "")" href="/Buscar?group=Todos@(string.IsNullOrWhiteSpace(headerModeActive) ? string.Empty : $"&mode={headerModeActive}")#search-panel">
-                        <span class="category-icon" aria-hidden="true"><i class="fa-solid fa-globe"></i></span>
-                        <span class="category-label">Todos</span>
-                    </a>
+                    @foreach (var group in headerGroups)
+                    {
+                        <a class="category-chip @(string.Equals(headerGroupActive, group.Name, StringComparison.OrdinalIgnoreCase) ? "active" : "")" href="@BuildHeaderSearchUrl(group.Name)">
+                            <span class="category-icon" aria-hidden="true"><i class="fa-solid @GetHeaderGroupIcon(group.Name)"></i></span>
+                            <span class="category-label">@group.Name</span>
+                        </a>
+                    }
                 </div>
                 <div class="site-nav-divider" aria-hidden="true"></div>
                 <div class="nav-links">
-                    <a class="nav-main-link" href="/Buscar?group=Todos#search-panel">
+                    <a class="nav-main-link" href="@BuildHeaderSearchUrl("Todos")">
                         <i class="fa-solid fa-compass fa-fw" aria-hidden="true"></i>
                         <span>Explorar</span>
                     </a>
@@ -141,6 +201,13 @@
                             <i class="fa-solid fa-rectangle-list fa-fw" aria-hidden="true"></i>
                             <span>Mis anuncios</span>
                         </a>
+                        @if (currentUserIsCompany)
+                        {
+                            <a class="nav-main-link" asp-page="/SharedLists/Manage">
+                                <i class="fa-solid fa-share-nodes fa-fw" aria-hidden="true"></i>
+                                <span>Lista de anuncios para compartir</span>
+                            </a>
+                        }
                     }
                     <a class="nav-main-link" asp-page="/Favorites" data-auth-required-favorites="@((User.Identity?.IsAuthenticated ?? false) ? "false" : "true")">
                         <i class="fa-solid fa-star fa-fw" aria-hidden="true"></i>
@@ -155,16 +222,7 @@
                         <i class="fa-solid fa-lightbulb" aria-hidden="true"></i>
                         <span>Sugerencias</span>
                     </button>
-                    <a class="mailbox-button"
-                       href="@chatMailboxUrl"
-                       data-chat-mailbox-button
-                       data-chat-unread-state="0"
-                       aria-label="Mensajes"
-                       title="Mensajes">
-                        <i class="fa-solid fa-envelope" aria-hidden="true"></i>
-                        <span class="mailbox-count" data-chat-unread-count hidden>0</span>
-                    </a>
-                    <details class="user-menu">
+                    <details class="user-menu" data-chat-menu>
                         <summary class="user-menu-toggle" title="Hace click para ver configuración del usuario y sus anuncios">
                             <span class="user-badge">@User.Identity!.Name</span>
                             <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
@@ -174,14 +232,37 @@
                                 <i class="fa-solid fa-rectangle-list" aria-hidden="true"></i>
                                 <span>Mis anuncios</span>
                             </a>
+                            @if (currentUserIsCompany)
+                            {
+                                <a asp-page="/SharedLists/Manage">
+                                    <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
+                                    <span>Lista de anuncios para compartir</span>
+                                </a>
+                            }
+                            <a asp-page="/Messages/Index" data-chat-menu-link data-chat-unread-state="0" aria-label="Mis mensajes" title="Mis mensajes">
+                                <i class="fa-solid fa-envelope" aria-hidden="true"></i>
+                                <span>Mis mensajes</span>
+                                <span class="mailbox-count user-menu-mailbox-count" data-chat-unread-count hidden>0</span>
+                            </a>
                             <a asp-page="/Favorites">
                                 <i class="fa-solid fa-star" aria-hidden="true"></i>
-                                <span>Favoritos</span>
+                                <span>Mis favoritos</span>
+                            </a>
+                            <a asp-page="/Reviews/Index">
+                                <i class="fa-solid fa-ranking-star" aria-hidden="true"></i>
+                                <span>Mis operaciones y reseñas</span>
                             </a>
                             <a asp-page="/Reglas">
                                 <i class="fa-solid fa-book-open" aria-hidden="true"></i>
                                 <span>Reglas de funcionamiento</span>
                             </a>
+                            @if (isPaidSiteEnabled)
+                            {
+                                <a asp-page="/Precios">
+                                    <i class="fa-solid fa-tags" aria-hidden="true"></i>
+                                    <span>Precios vigentes</span>
+                                </a>
+                            }
                             @if (currentUserIsAdmin)
                             {
                                 <a asp-page="/Trash">
@@ -212,62 +293,60 @@
                 }
                 else
                 {
-                    <a class="ghost-pill compact" asp-page="/Account/Login">Ingresar</a>
-                    <a class="primary-pill compact" asp-page="/Account/Register">Crear cuenta</a>
+                    <a class="ghost-pill compact" asp-page="/Account/Login" data-auth-required-login-trigger="true">Ingresar</a>
+                    <a class="primary-pill compact header-register-button" asp-page="/Account/Register">Crear usuario</a>
                 }
-            </div>
-            <div class="header-locality-bar" data-header-locality-form>
-                <div class="header-locality-main">
-                    <span class="header-locality-selected">
-                        <i class="fa-solid fa-location-dot"></i>
-                        <span data-header-locality-current>
-                            @(string.IsNullOrWhiteSpace(currentHeaderLocality) ? "Sin localidad" : $"Anuncios cerca de {currentHeaderLocality}")
-                        </span>
-                    </span>
-                    <input type="text"
-                           class="header-locality-input"
-                           list="header-locality-options"
-                           value=""
-                           placeholder="Buscar/cambiar localidad"
-                           aria-label="Buscar o cambiar localidad"
-                           data-header-locality-input />
-                    <button type="button" class="header-locality-action" data-header-locality-detect>Detectar</button>
-                </div>
-                <datalist id="header-locality-options">
-                    @foreach (var locality in availableHeaderLocalities)
-                    {
-                        var optionLabel = $"{locality.Locality}, {locality.Province}";
-                        <option value="@optionLabel"
-                                data-locality-id="@locality.Id"
-                                data-locality="@locality.Locality"
-                                data-province="@locality.Province"
-                                data-latitude="@locality.Latitude"
-                                data-longitude="@locality.Longitude"></option>
-                    }
-                </datalist>
-                <span class="header-locality-status" data-header-locality-status></span>
             </div>
         </nav>
     </header>
+    }
     <main class="page-shell">
         @RenderBody()
     </main>
-    <div class="preview-overlay" id="authRequiredModal" hidden>
+        <div class="preview-overlay" id="authRequiredModal" hidden>
         <div class="preview-backdrop" data-auth-required-close="true"></div>
-        <div class="preview-dialog preview-dialog-compact">
+        <div class="preview-dialog preview-dialog-compact auth-required-dialog">
             <div class="modal-content ventagram-modal preview-modal-shell report-modal-shell">
                 <div class="modal-header">
                     <div class="preview-modal-title">
                         <img class="preview-modal-logo" src="~/images/logo5.png" alt="Ventagram" />
-                        <h5 class="modal-title" data-auth-required-title>Acción no disponible</h5>
+                        <h5 class="modal-title" data-auth-required-title>Acci&oacute;n no disponible</h5>
                     </div>
                     <button type="button" class="btn-close" data-auth-required-close="true" aria-label="Cerrar"></button>
                 </div>
                 <div class="preview-modal-body auth-required-body">
-                    <p data-auth-required-message>Puedes crear listas de anuncios favoritos para hacerle seguimiento, funcionalidad solo disponible para usuarios registrados.</p>
-                    <div class="report-actions" data-auth-required-actions>
-                        <a class="ghost-pill" data-auth-required-login asp-page="/Account/Login">Ingresar</a>
-                        <a class="primary-pill" data-auth-required-register asp-page="/Account/Register">Crear usuario</a>
+                    <div class="auth-required-login-shell">
+                        <div class="section-heading auth-required-heading">
+                            <p data-auth-required-message>Puedes crear listas de anuncios favoritos para hacerle seguimiento, funcionalidad solo disponible para usuarios registrados.</p>
+                        </div>
+                        <section class="form-shell narrow auth-required-input-shell">
+                            <form method="post" asp-page="/Account/Login" class="stack-form" data-auth-required-login-form>
+                                <input type="hidden" name="ReturnUrl" value="@(Context.Request.Path + Context.Request.QueryString)" data-auth-required-return-url />
+                                <div class="register-row">
+                                    <label>
+                                        <span>Email</span>
+                                        <input type="email" name="Input.Email" autocomplete="email" placeholder="tu@email.com" required />
+                                    </label>
+                                </div>
+                                <div class="register-row">
+                                    <label>
+                                        <span>Contrase&ntilde;a</span>
+                                        <input type="password" name="Input.Password" autocomplete="current-password" placeholder="Tu contrase&ntilde;a" required />
+                                    </label>
+                                </div>
+                                <a class="field-hint auth-required-forgot-link" asp-page="/Account/ForgotPassword">&iquest;Olvidaste tu contrase&ntilde;a?</a>
+                                <div class="hero-actions auth-required-login-actions">
+                                    <button type="submit" class="primary-pill">Ingresar</button>
+                                    @if (isGoogleLoginEnabled)
+                                    {
+                                        <button type="submit" formaction="@Url.Page("/Account/Login", pageHandler: "Google")" class="ghost-pill">Continuar con Google</button>
+                                    }
+                                </div>
+                            </form>
+                        </section>
+                        <div class="report-actions" data-auth-required-actions>
+                            <a class="primary-pill" data-auth-required-register asp-page="/Account/Register">Crear usuario</a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -285,10 +364,11 @@
                     <button type="button" class="btn-close" data-suggestion-close="true" aria-label="Cerrar"></button>
                 </div>
                 <form id="suggestionForm" class="preview-modal-body report-modal-body" data-suggestion-form action="/api/content/suggestions">
-                    <p>A Ventagram lo mejoramos entre todos.</p>
+                    <input type="hidden" name="prefix" value="" data-suggestion-prefix />
+                    <p data-suggestion-intro>A Ventagram lo mejoramos entre todos.</p>
                     <label class="report-note wide">
-                        <span>Tu sugerencia</span>
-                        <textarea name="message" rows="5" maxlength="2000" placeholder="Escribe aquí tu sugerencia para el sitio."></textarea>
+                        <span data-suggestion-label>Tu sugerencia</span>
+                        <textarea name="message" rows="5" maxlength="2000" placeholder="Escribe aquí tu sugerencia para el sitio." data-suggestion-textarea></textarea>
                     </label>
                     <div class="status-banner" data-suggestion-feedback hidden></div>
                     <div class="report-actions">
@@ -299,6 +379,83 @@
             </div>
         </div>
     </div>
+    <div class="preview-overlay" id="guestLocalityModal"
+         hidden
+         data-guest-locality-required="@(shouldPromptGuestLocality ? "true" : "false")"
+        data-current-locality-label="@currentHeaderLocality">
+        <div class="preview-backdrop" data-guest-locality-close="true"></div>
+        <div class="preview-dialog preview-dialog-compact auth-required-dialog guest-locality-dialog">
+            <div class="modal-content ventagram-modal preview-modal-shell report-modal-shell">
+                <div class="modal-header">
+                    <div class="preview-modal-title">
+                        <img class="preview-modal-logo" src="~/images/logo5.png" alt="Ventagram" />
+                        <h5 class="modal-title">Elige tu localidad</h5>
+                    </div>
+                    <button type="button" class="btn-close" data-guest-locality-close="true" aria-label="Cerrar"></button>
+                </div>
+                <div class="preview-modal-body auth-required-body guest-locality-body" data-guest-locality-form>
+                    <div class="auth-required-login-shell guest-locality-login-shell">
+                        <div class="section-heading auth-required-heading guest-locality-heading">
+                            <p>La usamos para mostrar anuncios cercanos y ordenar mejor los resultados desde el inicio.</p>
+                        </div>
+                        <section class="form-shell narrow auth-required-input-shell guest-locality-shell">
+                            <div class="register-row">
+                                <label class="guest-locality-field" data-hybrid-locality-root>
+                                    <span>Localidad</span>
+                                    <input type="hidden" data-locality-id />
+                                    <input type="hidden" data-locality-external-id />
+                                    <input type="text"
+                                           placeholder="Buscar tu localidad"
+                                           aria-label="Buscar tu localidad"
+                                           autocomplete="off"
+                                           data-locality-input
+                                           data-guest-locality-input />
+                                    <datalist id="guest-locality-options" data-locality-suggestions hidden></datalist>
+                                    <div class="guest-locality-suggestions" data-locality-suggestions-list hidden></div>
+                                </label>
+                            </div>
+                            <div class="header-group-preferences" data-header-group-preferences data-max-groups="5">
+                                <span>Accesos rápidos de la cabecera</span>
+                                <span class="field-hint">Elige hasta 5 tipos de publicación. Si no eliges ninguno, usaremos la cabecera actual.</span>
+                                <div class="inline-checks header-group-options">
+                                    @foreach (var group in guestHeaderGroupOptions)
+                                    {
+                                        var selected = selectedHeaderGroupNames.Contains(group.Name, StringComparer.OrdinalIgnoreCase);
+                                        <label class="checkline compact-check">
+                                            <input type="checkbox"
+                                                   value="@group.Name"
+                                                   checked="@selected"
+                                                   data-header-group-option
+                                                   data-guest-header-group-option />
+                                            <span>@group.Name</span>
+                                        </label>
+                                    }
+                                </div>
+                                <span class="field-hint" data-header-group-status></span>
+                            </div>
+                            <div class="hero-actions auth-required-login-actions guest-locality-actions">
+                                <button type="button" class="ghost-pill" data-guest-locality-detect>Detectar</button>
+                                <button type="button" class="primary-pill" data-guest-locality-confirm>Seleccionar</button>
+                            </div>
+                        </section>
+                        <span class="header-locality-status" data-guest-locality-status></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <datalist id="header-locality-options">
+        @foreach (var locality in availableHeaderLocalities)
+        {
+            var optionLabel = $"{locality.Locality}, {locality.Province}";
+            <option value="@optionLabel"
+                    data-locality-id="@locality.Id"
+                    data-locality="@locality.Locality"
+                    data-province="@locality.Province"
+                    data-latitude="@locality.Latitude"
+                    data-longitude="@locality.Longitude"></option>
+        }
+    </datalist>
     <footer class="site-footer">
         <div class="footer-brand">
             <img class="footer-mark" src="~/images/logo5.png" alt="Ventagram" />
@@ -310,10 +467,37 @@
         <div class="footer-links">
             <a asp-page="/Contacto">Contacto</a>
             <a asp-page="/Reglas">Reglas de funcionamiento</a>
+            @if (isPaidSiteEnabled)
+            {
+                <a asp-page="/Precios">Precios vigentes</a>
+            }
             <a asp-page="/Legales">Legales</a>
             <a asp-page="/Privacy">Privacidad</a>
         </div>
     </footer>
+    <div class="system-loading-overlay" id="systemLoadingOverlay" hidden aria-live="polite" aria-busy="true">
+        <div class="system-loading-shell">
+            <img class="system-loading-pin" src="~/images/logo5.png" alt="Ventagram cargando" />
+        </div>
+    </div>
+    <script>
+        (function () {
+            try {
+                if (sessionStorage.getItem("ventagram:system-loading") !== "1") {
+                    return;
+                }
+
+                var overlay = document.getElementById("systemLoadingOverlay");
+                if (!overlay) {
+                    return;
+                }
+
+                overlay.removeAttribute("hidden");
+                document.body.classList.add("system-loading-active");
+            } catch {
+            }
+        })();
+    </script>
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>

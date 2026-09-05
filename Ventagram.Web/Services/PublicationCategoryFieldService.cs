@@ -6,6 +6,11 @@ namespace Ventagram.Services;
 
 public class PublicationCategoryFieldService(VentagramDbContext db)
 {
+    private static readonly string[] OperationOptionOrder = Enum.GetValues<PublicationOperationType>()
+        .OrderBy(x => (byte)x)
+        .Select(x => x.ToDisplayName())
+        .ToArray();
+
     public async Task<List<PublicationCategoryField>> GetRequiredActiveByGroupAsync(PublicationGroup group)
     {
         var groupId = (byte)group;
@@ -21,6 +26,51 @@ public class PublicationCategoryFieldService(VentagramDbContext db)
             .ThenBy(x => x.SortOrder)
             .ThenBy(x => x.Label)
             .ToListAsync();
+    }
+
+    public async Task<PublicationCategoryField?> GetOperationFilterForAllGroupsAsync()
+    {
+        var operationFields = await db.PublicationCategoryFields
+            .AsNoTracking()
+            .Where(x => x.IsActive
+                && x.Required
+                && x.InternalName.ToLower() == "operacion")
+            .ToListAsync();
+
+        if (operationFields.Count == 0)
+        {
+            return new PublicationCategoryField
+            {
+                InternalName = "operacion",
+                Label = "Tipo de operacion",
+                DataType = PublicationCategoryFieldDataType.Lista,
+                Required = true,
+                SortOrder = 1,
+                OptionsCsv = string.Join(",", OperationOptionOrder)
+            };
+        }
+
+        var configuredOptions = operationFields
+            .SelectMany(x => SplitOptions(x.OptionsCsv))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var orderedOptions = OperationOptionOrder
+            .Where(configuredOptions.Contains)
+            .Concat(configuredOptions
+                .Where(x => !OperationOptionOrder.Contains(x, StringComparer.OrdinalIgnoreCase))
+                .OrderBy(x => x))
+            .ToArray();
+
+        return new PublicationCategoryField
+        {
+            Id = operationFields.OrderBy(x => x.SortOrder).ThenBy(x => x.Id).First().Id,
+            InternalName = "operacion",
+            Label = operationFields.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x.Label))?.Label ?? "Tipo de operacion",
+            DataType = PublicationCategoryFieldDataType.Lista,
+            Required = true,
+            SortOrder = 1,
+            OptionsCsv = string.Join(",", orderedOptions)
+        };
     }
 
     public async Task<List<PublicationCategoryField>> GetActiveByCategoryIdAsync(int categoryId)
@@ -43,4 +93,8 @@ public class PublicationCategoryFieldService(VentagramDbContext db)
     {
         return GetActiveByCategoryIdAsync(categoryId);
     }
+
+    private static string[] SplitOptions(string? optionsCsv) => string.IsNullOrWhiteSpace(optionsCsv)
+        ? []
+        : optionsCsv.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }

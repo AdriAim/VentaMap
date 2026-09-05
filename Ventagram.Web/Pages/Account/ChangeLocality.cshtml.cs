@@ -10,54 +10,76 @@ using Ventagram.Services;
 namespace Ventagram.Pages.Account;
 
 [Authorize]
-public class ChangeLocalityModel(VentagramDbContext db, CurrentUserAccessor currentUserAccessor) : PageModel
+public class ChangeLocalityModel(
+    VentagramDbContext db,
+    CurrentUserAccessor currentUserAccessor,
+    ArgentineLocalityLookupService localityLookupService,
+    PublicationGroupPreferenceService publicationGroupPreferenceService,
+    PublicationGroupTypeService publicationGroupTypeService) : PageModel
 {
     private const string LocalityField = $"{nameof(Input)}.{nameof(InputModel.ArgentineLocalityId)}";
 
     [BindProperty]
     public InputModel Input { get; set; } = new();
 
-    public List<ArgentineLocality> AvailableLocalities { get; private set; } = [];
-
     [TempData]
     public string? SuccessMessage { get; set; }
 
+    public string SelectedLocalityLabel { get; private set; } = string.Empty;
+
+    public IReadOnlyList<PublicationGroupType> HeaderGroupOptions { get; private set; } = [];
+
     public async Task<IActionResult> OnGetAsync()
     {
+        await LoadHeaderGroupOptionsAsync();
+
         if (currentUserAccessor.UserId is not int userId)
         {
             return RedirectToPage("/Account/Login", new { returnUrl = Url.Page("/Account/ChangeLocality") });
         }
 
-        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId);
+        var user = await db.Users
+            .AsNoTracking()
+            .Where(x => x.Id == userId)
+            .Select(x => new
+            {
+                x.ArgentineLocalityId,
+                x.HeaderPublicationGroupsCsv,
+                LocalityLabel = x.ArgentineLocality == null
+                    ? string.Empty
+                    : (x.ArgentineLocality.Locality + ", " + x.ArgentineLocality.Province)
+            })
+            .FirstOrDefaultAsync();
         if (user is null)
         {
             return RedirectToPage("/Account/Login", new { returnUrl = Url.Page("/Account/ChangeLocality") });
         }
 
         Input.ArgentineLocalityId = user.ArgentineLocalityId;
-        await LoadLocalitiesAsync();
+        Input.ArgentineLocalityLabel = user.LocalityLabel;
+        Input.HeaderPublicationGroups = PublicationGroupPreferenceService.NormalizeGroupNames(user.HeaderPublicationGroupsCsv);
+        SyncSelectedLocalityLabel();
         return Page();
     }
 
     public async Task<IActionResult> OnPostAsync()
     {
+        await LoadHeaderGroupOptionsAsync();
+
         if (currentUserAccessor.UserId is not int userId)
         {
             return RedirectToPage("/Account/Login", new { returnUrl = Url.Page("/Account/ChangeLocality") });
         }
 
-        await LoadLocalitiesAsync();
-        if (!ModelState.IsValid)
+        if (!await TryResolveLocalityAsync())
         {
+            SyncSelectedLocalityLabel();
             return Page();
         }
 
-        var localityExists = await db.ArgentineLocalities
-            .AnyAsync(x => x.Id == Input.ArgentineLocalityId && x.IsActive);
-        if (!localityExists)
+        SyncSelectedLocalityLabel();
+        if (!ModelState.IsValid)
         {
-            ModelState.AddModelError(LocalityField, "Selecciona una localidad valida.");
             return Page();
         }
 
@@ -68,25 +90,54 @@ public class ChangeLocalityModel(VentagramDbContext db, CurrentUserAccessor curr
         }
 
         user.ArgentineLocalityId = Input.ArgentineLocalityId;
+        user.HeaderPublicationGroupsCsv = await publicationGroupPreferenceService.NormalizeGroupNamesCsvAsync(Input.HeaderPublicationGroups);
         await db.SaveChangesAsync();
 
-        SuccessMessage = "Localidad actualizada.";
+        SuccessMessage = "Localidad y accesos rápidos actualizados.";
         return RedirectToPage();
     }
 
-    private async Task LoadLocalitiesAsync()
+    private async Task<bool> TryResolveLocalityAsync()
     {
-        AvailableLocalities = await db.ArgentineLocalities
-            .Where(x => x.IsActive)
-            .OrderBy(x => x.Province)
-            .ThenBy(x => x.SortOrder)
-            .ThenBy(x => x.Locality)
-            .ToListAsync();
+        try
+        {
+            var locality = await localityLookupService.EnsureLocalityAsync(
+                Input.ArgentineLocalityId,
+                Input.SelectedExternalLocalityId,
+                HttpContext.RequestAborted);
+
+            Input.ArgentineLocalityId = locality.Id;
+            Input.ArgentineLocalityLabel = $"{locality.Locality}, {locality.Province}";
+            Input.SelectedExternalLocalityId = string.Empty;
+            return true;
+        }
+        catch (InvalidOperationException ex)
+        {
+            ModelState.AddModelError(LocalityField, ex.Message);
+            return false;
+        }
+    }
+
+    private void SyncSelectedLocalityLabel()
+    {
+        SelectedLocalityLabel = !string.IsNullOrWhiteSpace(Input.ArgentineLocalityLabel)
+            ? Input.ArgentineLocalityLabel
+            : string.Empty;
+    }
+
+    private async Task LoadHeaderGroupOptionsAsync()
+    {
+        HeaderGroupOptions = await publicationGroupTypeService.GetActiveAsync();
     }
 
     public class InputModel
     {
-        [Required(ErrorMessage = "Selecciona tu localidad.")]
         public int? ArgentineLocalityId { get; set; }
+
+        public string ArgentineLocalityLabel { get; set; } = string.Empty;
+
+        public string SelectedExternalLocalityId { get; set; } = string.Empty;
+
+        public List<string> HeaderPublicationGroups { get; set; } = [];
     }
 }

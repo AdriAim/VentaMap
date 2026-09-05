@@ -19,11 +19,17 @@
     "Container (Dockerfile)": {
       "commandName": "Docker",
       "launchUrl": "{Scheme}://{ServiceHost}:{ServicePort}",
+      "httpPort": 5071,
+      "sslPort": 7065,
       "environmentVariables": {
         "ASPNETCORE_HTTPS_PORTS": "8081",
-        "ASPNETCORE_HTTP_PORTS": "8080"
+        "ASPNETCORE_HTTP_PORTS": "8080",
+        "DataProtection__KeysPath": "/keys/dataprotection",
+        "Authentication__CookieName": ".Ventagram.Auth",
+        "Authentication__SharedApplicationName": "Ventagram"
       },
-      "publishAllPorts": true,
+      "containerRunArguments": "-v \"E:/Proyectos/ventagram/.keys/dataprotection:/keys/dataprotection\"",
+      "publishAllPorts": false,
       "useSSL": true
     }
   },

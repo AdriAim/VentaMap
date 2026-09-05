@@ -1,9 +1,32 @@
 @page
 @model Ventagram.Pages.Account.LoginModel
 @{
-    ViewData["Title"] = "Ingresar";
+    var isAuthenticated = User.Identity?.IsAuthenticated == true;
+    ViewData["Title"] = isAuthenticated ? "Bienvenido" : "Ingresar";
 }
 
+@if (isAuthenticated)
+{
+    <section class="form-shell login-welcome">
+        <div class="section-heading">
+            <span class="eyebrow">Ventagram</span>
+            <h1>Bienvenido, @(User.Identity?.Name ?? "Usuario")</h1>
+            <p>¿Qué querés hacer hoy?</p>
+        </div>
+        <div class="login-welcome-actions">
+            <a class="primary-pill login-welcome-explore" asp-page="/Browse">
+                <i class="fa-solid fa-compass" aria-hidden="true"></i>
+                <span>Explorar</span>
+            </a>
+            <a class="primary-pill" asp-page="/Publications/Create">
+                <i class="fa-solid fa-circle-plus" aria-hidden="true"></i>
+                <span>Publicar</span>
+            </a>
+        </div>
+    </section>
+}
+else
+{
 <section class="form-shell narrow">
     <div class="section-heading">
         <span class="eyebrow">Acceso</span>
@@ -38,6 +61,7 @@
         </div>
     </form>
 </section>
+}
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />

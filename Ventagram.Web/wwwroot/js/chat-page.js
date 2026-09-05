@@ -39,7 +39,7 @@
     }
 
     chatHubConnection = new window.signalR.HubConnectionBuilder()
-      .withUrl(buildChatServiceUrl("/hubs/chat"), {
+      .withUrl(buildChatHubUrl(), {
         withCredentials: true
       })
       .withAutomaticReconnect()
@@ -110,7 +110,10 @@
         const conversationId = Number(link.dataset.conversationId || 0);
         if (conversationId <= 0) return;
 
-        await selectChatConversation(conversationId, { pushState: true });
+        await selectChatConversation(conversationId, {
+          pushState: true,
+          revealThreadOnStackedLayout: true
+        });
       });
     }
 
@@ -204,7 +207,27 @@
       window.history.pushState({}, "", nextUrl);
     }
 
+    if (options.revealThreadOnStackedLayout) {
+      revealChatThreadOnStackedLayout();
+    }
+
     await openActiveConversation();
+  }
+
+  function revealChatThreadOnStackedLayout() {
+    if (!window.matchMedia("(max-width: 1100px)").matches) {
+      return;
+    }
+
+    const thread = document.querySelector(".chat-thread");
+    if (!thread) {
+      return;
+    }
+
+    thread.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
   }
 
   async function markActiveConversationRead() {
@@ -301,6 +324,7 @@
         <a class="chat-inbox-item ${isActive ? "is-active" : ""}"
            href="/Mensajes/${escapeAttribute(item?.conversationId)}"
            data-chat-inbox-item
+           data-skip-system-loading="true"
            data-conversation-id="${escapeAttribute(item?.conversationId)}">
           <div class="chat-inbox-copy">
             <div class="chat-inbox-topline">
@@ -452,12 +476,26 @@
 
   function buildChatServiceUrl(path) {
     const root = getChatRoot();
-    const baseUrl = String(root?.dataset.chatBaseUrl || "").trim().replace(/\/+$/, "");
+    const baseUrl = String(root?.dataset.chatApiBaseUrl || root?.dataset.chatBaseUrl || "").trim().replace(/\/+$/, "");
+    const normalizedPath = path
+      ? (path.startsWith("/") ? path : `/${path}`)
+      : "";
+
     if (!baseUrl) {
-      return "";
+      return normalizedPath;
     }
 
-    return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+    return `${baseUrl}${normalizedPath}`;
+  }
+
+  function buildChatHubUrl() {
+    const root = getChatRoot();
+    const hubUrl = String(root?.dataset.chatHubUrl || "").trim();
+    if (hubUrl) {
+      return hubUrl;
+    }
+
+    return buildChatServiceUrl("/hubs/chat");
   }
 
   function redirectToLogin() {

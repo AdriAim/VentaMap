@@ -1,0 +1,103 @@
+@model ResultsLayoutViewModel
+@{
+    var results = Model.Results;
+}
+
+<partial name="~/Views/Content/Results/_ResultsLayoutHeader.cshtml" model="Model" />
+
+@if (results.Publications.Any())
+{
+    <section class="classified-toolbar">
+        <div class="classified-summary">
+            Mostrando @(((results.Page - 1) * results.PageSize) + 1)-@Math.Min(results.Page * results.PageSize, results.TotalResults) de @results.TotalResults resultados
+        </div>
+        @if (!string.IsNullOrWhiteSpace(Model.PageSize50Url) && !string.IsNullOrWhiteSpace(Model.PageSize100Url) && !string.IsNullOrWhiteSpace(Model.PageSize200Url))
+        {
+            <div class="classified-page-size">
+                Ver:
+                <a class="view-pill @(results.PageSize == 50 ? "active" : "")" href="@Model.PageSize50Url">50</a>
+                <a class="view-pill @(results.PageSize == 100 ? "active" : "")" href="@Model.PageSize100Url">100</a>
+                <a class="view-pill @(results.PageSize == 200 ? "active" : "")" href="@Model.PageSize200Url">200</a>
+            </div>
+        }
+    </section>
+}
+
+<section class="classified-list" data-browse-scroll-target>
+    @if (!results.Publications.Any())
+    {
+        <div class="gallery-loader browse-empty-message">No se encontraron resultados dentro del radio seleccionado.</div>
+        @if (results.HasExpandedRadiusFallback)
+        {
+            <partial name="~/Views/Content/Results/_ExpandedRadiusResults.cshtml" model="results" />
+        }
+    }
+    else
+    {
+        @foreach (var item in results.Publications)
+        {
+            var publicationCode = item.ToAdCode();
+            var operationLabel = item.OperationType?.ToDisplayName();
+            var operationLetter = operationLabel?[0].ToString().ToUpperInvariant();
+            var pricePeriod = operationLabel switch
+            {
+                "Alquiler" => " / mes",
+                "Temporario" => " / día",
+                _ => string.Empty
+            };
+            var categoryLabel = item.Category?.Name ?? "Sin categoria";
+            var formattedPrice = $"{item.Currency} {item.Price.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-AR"))}{pricePeriod}";
+            var priceTooltipLabel = string.Join(" · ", new[] { operationLabel, categoryLabel, formattedPrice }.Where(x => !string.IsNullOrWhiteSpace(x)));
+            <article class="classified-row">
+                <div>
+                    <span class="card-meta">@item.Group · @categoryLabel · @item.Locality</span>
+                    <h3><a href="/Publications/Details/@item.Id@Model.DebugSuffix" class="publication-preview-trigger" data-publication-id="@item.Id" data-details-url="/api/content/details/@item.Id@Model.DebugSuffix">@(string.IsNullOrWhiteSpace(item.ShortDescription) ? item.Title : item.ShortDescription)</a></h3>
+                </div>
+                <div class="classified-side">
+                    <div class="classified-side-top">
+                        <span class="classified-price-cluster">
+                            @if (!string.IsNullOrWhiteSpace(operationLetter))
+                            {
+                                <span class="gallery-badge gallery-tooltip-trigger gallery-tooltip-bottom" data-tooltip-label="@priceTooltipLabel">
+                                    <strong class="gallery-operation-letter">@operationLetter</strong>@formattedPrice
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="gallery-badge gallery-tooltip-trigger gallery-tooltip-bottom" data-tooltip-label="@priceTooltipLabel">@formattedPrice</span>
+                            }
+                        </span>
+                        <button type="button"
+                                class="report-trigger gallery-action-button gallery-report-overlay classified-report-button gallery-tooltip-trigger gallery-tooltip-side"
+                                data-publication-id="@item.Id"
+                                data-publication-code="@publicationCode"
+                                data-publication-title="@item.Title"
+                                data-tooltip-label="Denunciar"
+                                aria-label="Denunciar @item.Title">
+                            <span class="gallery-report-letter" aria-hidden="true">D</span>
+                        </button>
+                    <button type="button"
+                            class="favorite-toggle favorite-toggle-inline @(results.FavoritePublicationIds.Contains(item.Id) ? "is-active" : "")"
+                            data-favorite-toggle="true"
+                            data-publication-id="@item.Id"
+                            data-publication-title="@item.Title"
+                            data-suggested-list-name="@item.Group.ToDisplayName()"
+                            title="Anadir a mi lista de favoritos"
+                            aria-label="Anadir a mi lista de favoritos">
+                        <i class="fa-@(results.FavoritePublicationIds.Contains(item.Id) ? "solid" : "regular") fa-star" aria-hidden="true"></i>
+                    </button>
+                    </div>
+                </div>
+            </article>
+        }
+    }
+</section>
+
+@if (results.TotalPages > 1 && !string.IsNullOrWhiteSpace(Model.PreviousPageUrl) && !string.IsNullOrWhiteSpace(Model.NextPageUrl))
+{
+    <nav class="classified-pagination" aria-label="Paginacion de clasificados">
+        <a class="ghost-pill compact @(!Model.CanGoPreviousPage ? "is-disabled" : "")" href="@Model.PreviousPageUrl" aria-disabled="@(!Model.CanGoPreviousPage)">Anterior</a>
+        <span class="classified-page-indicator">Pagina @results.Page de @results.TotalPages</span>
+        <a class="ghost-pill compact @(!Model.CanGoNextPage ? "is-disabled" : "")" href="@Model.NextPageUrl" aria-disabled="@(!Model.CanGoNextPage)">Siguiente</a>
+    </nav>
+}

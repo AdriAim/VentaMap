@@ -17,6 +17,12 @@ public class IndexModel(IConfiguration configuration, VentagramDbContext db) : P
     [BindProperty(SupportsGet = true)]
     public string? Query { get; set; }
 
+    [BindProperty(SupportsGet = true)]
+    public string? Operation { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public int? CategoryId { get; set; }
+
     public List<PublicationReportReason> ReportReasons { get; private set; } = [];
 
     public async Task OnGetAsync()

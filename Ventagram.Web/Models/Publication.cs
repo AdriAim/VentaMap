@@ -16,13 +16,15 @@ public class Publication
 
     public decimal Price { get; set; }
 
+    public PublicationOperationType? OperationType { get; set; }
+
     [StringLength(10)]
-    public string Currency { get; set; } = "USD";
+    public string Currency { get; set; } = "U$D";
 
     [StringLength(120)]
     public string Locality { get; set; } = string.Empty;
 
-    [StringLength(260)]
+    [StringLength(60)]
     public string ShortDescription { get; set; } = string.Empty;
 
     public string? LongDescription { get; set; }
@@ -49,6 +51,8 @@ public class Publication
     public string? InternalNotes { get; set; }
     public bool IsAnonymous { get; set; }
     public bool IsActive { get; set; } = true;
+    public int UniqueViewCount { get; set; }
+    public int UniqueFavoriteCount { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? ExpiresAtUtc { get; set; }
     public DateTime? ExpirationNoticeSentAtUtc { get; set; }
@@ -68,11 +72,16 @@ public class Publication
 
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
+    public bool HideFromMap { get; set; }
 
     public List<PublicationFieldValue> FieldValues { get; set; } = [];
     public List<PublicationMedia> MediaItems { get; set; } = [];
     public List<PublicationReport> Reports { get; set; } = [];
     public List<FavoriteListItem> FavoriteListItems { get; set; } = [];
+    public List<SharedPublicationListItem> SharedPublicationListItems { get; set; } = [];
+    public List<PublicationFavorite> Favorites { get; set; } = [];
+    public List<PublicationView> Views { get; set; } = [];
+    public List<VerifiedOperation> VerifiedOperations { get; set; } = [];
 
     public IReadOnlyList<string> ImageList
     {

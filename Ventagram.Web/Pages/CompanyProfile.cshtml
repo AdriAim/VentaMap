@@ -1,0 +1,860 @@
+@page "/{companySlug}"
+@model Ventagram.Pages.CompanyProfileModel
+@using Ventagram.Models
+@{
+    ViewData["Title"] = Model.Company?.CompanyName ?? "Empresa";
+    ViewData["HideSiteHeader"] = "true";
+}
+
+@if (Model.Company is null)
+{
+    <section class="empty-state">
+        <h1>Empresa no encontrada</h1>
+        <p>La direccion solicitada no corresponde a una empresa publica activa en Ventagram.</p>
+    </section>
+}
+else
+{
+    var company = Model.Company;
+    var debugSuffix = Model.DebugEnabled ? "?debug=1" : string.Empty;
+    var isAuthenticated = User.Identity?.IsAuthenticated == true;
+    int? currentViewerUserId = null;
+    if (isAuthenticated && int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var signedInUserId))
+    {
+        currentViewerUserId = signedInUserId;
+    }
+    var companyCatalogReturnUrl = Uri.EscapeDataString($"/{company.CompanySlug}{debugSuffix}");
+    string FormatMapPrice(Ventagram.Models.Publication publication)
+    {
+        var period = publication.OperationType?.ToDisplayName() switch
+        {
+            "Alquiler" => " / mes",
+            "Temporario" => " / día",
+            _ => string.Empty
+        };
+
+        return $"{publication.Currency} {publication.Price.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-AR"))}{period}";
+    }
+    var companyHeaderBackgroundStyle = !string.IsNullOrWhiteSpace(company.CompanyHeroBackgroundUrl)
+        ? $"--company-profile-cover-image: url('{company.CompanyHeroBackgroundUrl}');"
+        : string.Empty;
+    var companyPhoneDigits = string.IsNullOrWhiteSpace(company.Phone)
+        ? string.Empty
+        : new string(company.Phone.Where(char.IsDigit).ToArray());
+    var companyWhatsAppUrl = string.IsNullOrWhiteSpace(companyPhoneDigits)
+        ? string.Empty
+        : $"https://wa.me/{companyPhoneDigits}";
+    var galleryItems = Model.Publications
+        .Select(publication => new
+        {
+            id = publication.Id,
+            title = publication.Title,
+            shortDescription = publication.ShortDescription,
+            publicationCode = $"VTG-{publication.Id:000000}",
+            price = FormatMapPrice(publication),
+            priceTooltip = FormatMapPrice(publication),
+            operationLabel = publication.OperationType?.ToDisplayName(),
+            categoryLabel = publication.Category?.Name,
+            detailsUrl = $"/Publications/Details/{publication.Id}{debugSuffix}",
+            videoUrl = publication.PrimaryVideoUrl,
+            images = publication.ImageList.Take(11).ToList(),
+            groupName = publication.Group.ToDisplayName(),
+            isFavorite = Model.FavoritePublicationIds.Contains(publication.Id),
+            locality = publication.Locality,
+            category = publication.Category?.Name ?? "Sin categoria",
+            description = publication.ShortDescription,
+            chatMode = company.AllowsSiteChat && publication.UserId.HasValue && publication.UserId.Value != currentViewerUserId
+                ? (isAuthenticated ? "button" : "login")
+                : string.Empty,
+            chatLoginUrl = isAuthenticated
+                ? string.Empty
+                : $"/Account/Login?returnUrl={companyCatalogReturnUrl}"
+        })
+        .ToList();
+    var serializedMarkers = Model.Publications
+        .Select(publication => new
+        {
+            id = publication.Id,
+            title = publication.Title,
+            locality = publication.Locality,
+            latitude = publication.Latitude,
+            shortDescription = publication.ShortDescription,
+            longitude = publication.Longitude,
+            price = FormatMapPrice(publication),
+            priceTooltip = FormatMapPrice(publication),
+            url = $"/Publications/Details/{publication.Id}{debugSuffix}",
+            image = publication.ImageList.FirstOrDefault(),
+            images = publication.ImageList.Take(11).ToList(),
+            code = $"VTG-{publication.Id:000000}",
+            videoUrl = publication.PrimaryVideoUrl,
+            groupName = publication.Group.ToDisplayName(),
+            operationLabel = publication.OperationType?.ToDisplayName(),
+            category = publication.Category?.Name ?? "Sin categoria",
+            categoryLabel = publication.Category?.Name,
+            description = publication.ShortDescription,
+            chatMode = company.AllowsSiteChat && publication.UserId.HasValue && publication.UserId.Value != currentViewerUserId
+                ? (isAuthenticated ? "button" : "login")
+                : string.Empty,
+            chatLoginUrl = isAuthenticated
+                ? string.Empty
+                : $"/Account/Login?returnUrl={companyCatalogReturnUrl}"
+        })
+        .ToList();
+
+    <section class="company-hero">
+        <div class="company-hero-card" style="@companyHeaderBackgroundStyle">
+            <div class="company-hero-brand">
+                @if (!string.IsNullOrWhiteSpace(company.CompanyLogoUrl))
+                {
+                    <img src="@company.CompanyLogoUrl" alt="@company.CompanyName" class="company-hero-logo" />
+                }
+                <div class="company-hero-copy">
+                    <a class="company-hero-platform" href="/">
+                        <img src="~/images/logo5.png" alt="Ventagram" class="company-hero-platform-logo" />
+                        <span>Ventagram</span>
+                    </a>
+                    <h1>@company.CompanyName</h1>
+                    @if (!string.IsNullOrWhiteSpace(company.CompanyIndustry))
+                    {
+                        <strong class="company-hero-industry">@company.CompanyIndustry</strong>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(company.CompanyTagline))
+                    {
+                        <p>@company.CompanyTagline</p>
+                    }
+                </div>
+            </div>
+
+            <div class="company-hero-contact">
+                @if (!string.IsNullOrWhiteSpace(company.Email))
+                {
+                    <a class="company-contact-pill is-email" href="mailto:@company.Email">
+                        <i class="fa-solid fa-envelope" aria-hidden="true"></i>
+                        <span>Mail a: @company.Email</span>
+                    </a>
+                }
+                @if (!string.IsNullOrWhiteSpace(company.Phone))
+                {
+                    <a class="company-contact-pill is-phone" href="tel:@company.Phone">
+                        <i class="fa-solid fa-phone-volume" aria-hidden="true"></i>
+                        <span>Llamar: @company.Phone</span>
+                    </a>
+                }
+                @if (!string.IsNullOrWhiteSpace(companyWhatsAppUrl))
+                {
+                    <a class="company-contact-pill is-whatsapp" href="@companyWhatsAppUrl" target="_blank" rel="noopener noreferrer">
+                        <i class="fa-brands fa-whatsapp" aria-hidden="true"></i>
+                        <span>Whatsapp: @company.Phone</span>
+                    </a>
+                }
+            </div>
+        </div>
+    </section>
+
+    <section class="favorites-strip favorites-page-strip company-publications-strip"
+             data-company-catalog-anchor="true"
+             data-company-catalog-toolbar="true"
+             style="@companyHeaderBackgroundStyle">
+        <div class="favorites-strip-copy">
+            <span class="eyebrow">Catalogo</span>
+            <h2>Anuncios publicados</h2>
+        </div>
+        <div class="company-catalog-toolbar-controls">
+            <label class="company-catalog-search">
+                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                <input type="search"
+                       placeholder="Buscar por titulo, categoria o localidad"
+                       autocomplete="off"
+                       data-company-catalog-search />
+            </label>
+            <div class="company-catalog-view-switch" role="tablist" aria-label="Modo de visualizacion">
+                <button type="button" class="is-active" data-company-catalog-view="list" aria-pressed="true">Lista</button>
+                <button type="button" data-company-catalog-view="gallery" aria-pressed="false">Galeria</button>
+                <button type="button" data-company-catalog-view="map" aria-pressed="false">Mapa</button>
+            </div>
+        </div>
+        <div class="favorites-strip-actions">
+            <label class="results-open-mode" aria-label="Abrir anuncios">
+                <span class="results-open-mode-label">Abrir anuncios</span>
+                <select class="results-open-mode-select" data-publication-open-mode>
+                    <option value="popup">Popup</option>
+                    <option value="page">Pestaña naveg.</option>
+                </select>
+            </label>
+            <span class="field-hint" data-company-catalog-count>@Model.Publications.Count anuncio(s) visibles</span>
+        </div>
+    </section>
+
+    @if (!Model.Publications.Any())
+    {
+        <section class="empty-state">
+            <h2>Esta empresa todavia no publico anuncios activos.</h2>
+            <p>Cuando publique nuevos avisos, apareceran listados aqui.</p>
+        </section>
+    }
+    else
+    {
+        <section class="map-layout company-catalog-map" data-company-catalog-map-panel="true" hidden>
+            <div class="map-canvas company-catalog-map-canvas"
+                 data-company-catalog-map="true"
+                 data-map-style-url="@Model.MapStyleUrl"
+                 data-map-tiles-url="@Model.MapTilesUrlTemplate"
+                 data-map-attribution="@Model.MapAttributionHtml"></div>
+            <div class="map-results">
+                <div class="map-results-copy">
+                    <span class="gallery-kicker">Pin seleccionado</span>
+                    <h2>Vista mapa de @company.CompanyName</h2>
+                    <p>Selecciona un anuncio en el mapa para ver la misma tarjeta visual de la galeria.</p>
+                </div>
+                <div class="map-selection-card" data-company-map-selection-card="true"></div>
+            </div>
+        </section>
+
+        <section class="gallery-shell company-catalog-gallery-panel" data-company-catalog-gallery-panel="true" hidden>
+            <div class="gallery-header">
+                <div>
+                    <span class="gallery-kicker">Vista galeria</span>
+                    <h2>Catalogo de @company.CompanyName</h2>
+                </div>
+            </div>
+            <div class="gallery-rail company-catalog-gallery-rail" data-company-catalog-gallery-rail="true"></div>
+        </section>
+
+        <section class="publication-admin-list company-catalog-list" data-company-catalog-results="true" data-company-catalog-view="list">
+            @foreach (var publication in Model.Publications)
+            {
+                var detailUrl = $"/Publications/Details/{publication.Id}{debugSuffix}";
+                var imageUrl = publication.ImageList.FirstOrDefault();
+                <article class="publication-admin-card"
+                         data-company-publication-item="true"
+                         data-company-title="@publication.Title"
+                         data-company-locality="@publication.Locality"
+                         data-company-category="@(publication.Category?.Name ?? string.Empty)"
+                         data-company-price="@($"{publication.Currency} {publication.Price:0}")"
+                         data-company-description="@publication.ShortDescription"
+                         data-company-latitude="@(publication.Latitude?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty)"
+                         data-company-longitude="@(publication.Longitude?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty)"
+                         data-company-detail-url="@detailUrl"
+                         data-company-image-url="@imageUrl">
+                    <a class="publication-admin-media publication-preview-trigger"
+                       href="@detailUrl"
+                       data-publication-id="@publication.Id"
+                       data-details-url="/api/content/details/@publication.Id@debugSuffix">
+                        @if (!string.IsNullOrWhiteSpace(imageUrl))
+                        {
+                            <img src="@imageUrl" alt="@publication.Title" />
+                        }
+                        else
+                        {
+                            <div class="publication-admin-placeholder">Sin imagen</div>
+                        }
+                    </a>
+                    <div class="publication-admin-body">
+                        <div class="publication-admin-head">
+                            <div>
+                                <span class="gallery-kicker">@(publication.Category?.Name ?? "Sin categoria")</span>
+                                <h3>
+                                    <a href="@detailUrl"
+                                       class="publication-preview-trigger"
+                                       data-publication-id="@publication.Id"
+                                       data-details-url="/api/content/details/@publication.Id@debugSuffix">
+                                        @publication.Title
+                                    </a>
+                                </h3>
+                            </div>
+                            <button type="button"
+                                    class="favorite-toggle favorite-toggle-inline publication-admin-favorite @(Model.FavoritePublicationIds.Contains(publication.Id) ? "is-active" : "")"
+                                    data-favorite-toggle="true"
+                                    data-publication-id="@publication.Id"
+                                    data-publication-title="@publication.Title"
+                                    data-suggested-list-name="@publication.Group.ToDisplayName()"
+                                    title="Anadir a mi lista de favoritos"
+                                    aria-label="Anadir a mi lista de favoritos">
+                                <i class="fa-@(Model.FavoritePublicationIds.Contains(publication.Id) ? "solid" : "regular") fa-star" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                        <p class="publication-admin-price">@publication.Currency @publication.Price.ToString("0")</p>
+                        <p>@publication.ShortDescription</p>
+                        <div class="publication-admin-meta">
+                            <span>@(string.IsNullOrWhiteSpace(publication.Locality) ? "Sin ubicacion publica" : publication.Locality)</span>
+                            <span>Publicado: @publication.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy")</span>
+                        </div>
+                        <div class="publication-admin-actions">
+                            @if (company.AllowsSiteChat && publication.UserId.HasValue && publication.UserId.Value != currentViewerUserId)
+                            {
+                                if (isAuthenticated)
+                                {
+                                    <button type="button"
+                                            class="primary-pill"
+                                            data-start-chat="true"
+                                            data-publication-id="@publication.Id">
+                                        Chatear en ventagram
+                                    </button>
+                                }
+                                else
+                                {
+                                    <a class="primary-pill" href="/Account/Login?returnUrl=@companyCatalogReturnUrl">
+                                        Chatear en ventagram
+                                    </a>
+                                }
+                            }
+                            <a class="primary-pill publication-preview-trigger"
+                               href="@detailUrl"
+                               data-publication-id="@publication.Id"
+                               data-details-url="/api/content/details/@publication.Id@debugSuffix">
+                                Ver anuncio
+                            </a>
+                        </div>
+                    </div>
+                </article>
+            }
+        </section>
+    }
+
+    <partial name="_GlobalModals" model="Model" />
+
+    @section Scripts {
+        <script>
+            (() => {
+                const toolbar = document.querySelector("[data-company-catalog-toolbar='true']");
+                if (!toolbar) return;
+
+                const searchInput = toolbar.querySelector("[data-company-catalog-search]");
+                const countNode = toolbar.querySelector("[data-company-catalog-count]");
+                const results = document.querySelector("[data-company-catalog-results='true']");
+                const items = Array.from(document.querySelectorAll("[data-company-publication-item='true']"));
+                const galleryPanel = document.querySelector("[data-company-catalog-gallery-panel='true']");
+                const galleryRail = document.querySelector("[data-company-catalog-gallery-rail='true']");
+                const mapPanel = document.querySelector("[data-company-catalog-map-panel='true']");
+                const mapCanvas = document.querySelector("[data-company-catalog-map='true']");
+                const selectionPanel = document.querySelector("[data-company-map-selection-card='true']");
+                const catalogAnchor = document.querySelector("[data-company-catalog-anchor='true']");
+                const viewButtons = Array.from(toolbar.querySelectorAll("[data-company-catalog-view]"));
+                const galleryItems = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(galleryItems));
+                const markerData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(serializedMarkers));
+                const mapStyleUrl = mapCanvas?.dataset.mapStyleUrl || "";
+                const mapTilesUrl = mapCanvas?.dataset.mapTilesUrl || "";
+                const mapAttribution = mapCanvas?.dataset.mapAttribution || "";
+
+                let currentView = "list";
+                let map = null;
+                let popup = null;
+                let markers = [];
+                let hoverPopup = null;
+                let mobileTapPopup = null;
+                let selectedMarker = null;
+                let refreshButton = null;
+                let hasInitializedMapViewport = false;
+                let isInitializingMap = false;
+                const companyCatalogMapPadding = 60;
+                const companyCatalogMapSingleZoom = 12.8;
+                const companyCatalogMapMaxZoom = 12.8;
+
+                const normalized = value => String(value || "").toLowerCase().trim();
+                const escapeHtml = value => String(value ?? "")
+                    .replaceAll("&", "&amp;")
+                    .replaceAll("<", "&lt;")
+                    .replaceAll(">", "&gt;")
+                    .replaceAll('"', "&quot;")
+                    .replaceAll("'", "&#39;");
+
+                function buildCompanyCatalogChatAction(item) {
+                    const chatMode = String(item?.chatMode || "").trim().toLowerCase();
+                    if (!chatMode) {
+                        return "";
+                    }
+
+                    if (chatMode === "button") {
+                        return `<button type="button" class="primary-pill compact" data-start-chat="true" data-publication-id="${escapeHtml(item?.id || "")}">Chatear en ventagram</button>`;
+                    }
+
+                    if (chatMode === "login") {
+                        return `<a class="primary-pill compact" href="${escapeHtml(item?.chatLoginUrl || "/Account/Login")}">Chatear en ventagram</a>`;
+                    }
+
+                    return "";
+                }
+
+                function getVisibleItems() {
+                    return items.filter(item => !item.hidden);
+                }
+
+                function updateCount() {
+                    const visible = getVisibleItems().length;
+                    if (countNode) {
+                        countNode.textContent = `${visible} anuncio(s) visibles`;
+                    }
+                }
+
+                function getFilteredCatalogMarkers() {
+                    const visibleByUrl = new Set(getVisibleItems().map(item => item.dataset.companyDetailUrl));
+                    return markerData.filter(item => {
+                        if (!visibleByUrl.has(item.url) || item.latitude === null || item.longitude === null) {
+                            return false;
+                        }
+
+                        const latitude = Number(item.latitude);
+                        const longitude = Number(item.longitude);
+                        return Number.isFinite(latitude) &&
+                            Number.isFinite(longitude) &&
+                            latitude >= -90 &&
+                            latitude <= 90 &&
+                            longitude >= -180 &&
+                            longitude <= 180;
+                    });
+                }
+
+                function getMarkersInsideCurrentBounds(sourceMarkers) {
+                    if (!map?.getBounds) {
+                        return sourceMarkers;
+                    }
+
+                    const bounds = map.getBounds();
+                    if (!bounds) {
+                        return sourceMarkers;
+                    }
+
+                    return sourceMarkers.filter(item =>
+                        bounds.contains([Number(item.longitude), Number(item.latitude)]));
+                }
+
+                function renderGallery() {
+                    if (!galleryRail || !window.__ventagramBuildGalleryCard) {
+                        return;
+                    }
+
+                    const visibleByUrl = new Set(getVisibleItems().map(item => item.dataset.companyDetailUrl));
+                    const visibleGalleryItems = galleryItems.filter(item => visibleByUrl.has(item.detailsUrl));
+                    galleryRail.innerHTML = visibleGalleryItems.map((item, index) =>
+                        window.__ventagramBuildGalleryCard(item, index === 0, {
+                            showReportButton: false,
+                            extraActionHtml: buildCompanyCatalogChatAction(item)
+                        })
+                    ).join("");
+
+                    window.__ventagramWireGalleryCards?.();
+                    window.__ventagramWireFavoriteActions?.(galleryRail);
+                    window.__ventagramWireReportForm?.();
+                    window.__ventagramSyncMobileGalleryVideoAutoplay?.(galleryRail);
+                }
+
+                function renderSelectedMarker() {
+                    if (!selectionPanel || !selectedMarker || !window.__ventagramBuildGalleryCard) {
+                        return;
+                    }
+
+                    selectionPanel.innerHTML = window.__ventagramBuildGalleryCard({
+                        id: selectedMarker.id,
+                        title: selectedMarker.title,
+                        shortDescription: selectedMarker.shortDescription,
+                        publicationCode: selectedMarker.code,
+                        price: selectedMarker.price,
+                        priceTooltip: selectedMarker.priceTooltip,
+                        operationLabel: selectedMarker.operationLabel,
+                        categoryLabel: selectedMarker.categoryLabel,
+                        detailsUrl: selectedMarker.url,
+                        videoUrl: selectedMarker.videoUrl,
+                        images: Array.isArray(selectedMarker.images) && selectedMarker.images.length
+                            ? selectedMarker.images
+                            : [selectedMarker.image || "/images/logo4.png"],
+                        isFavorite: Boolean(selectedMarker.isFavorite),
+                        groupName: selectedMarker.groupName || "Inmuebles",
+                        chatMode: selectedMarker.chatMode || "",
+                        chatLoginUrl: selectedMarker.chatLoginUrl || ""
+                    }, false, {
+                        wrapCard: false,
+                        extraActionHtml: buildCompanyCatalogChatAction(selectedMarker)
+                    });
+
+                    window.__ventagramWireGalleryCards?.();
+                    window.__ventagramWireFavoriteActions?.(selectionPanel);
+                    window.__ventagramWireReportForm?.();
+                    window.__ventagramSyncMobileGalleryVideoAutoplay?.(selectionPanel);
+                }
+
+                function setSelectedMarker(marker) {
+                    if (!marker) {
+                        return;
+                    }
+
+                    selectedMarker = marker;
+                    renderSelectedMarker();
+                }
+
+                function applyFilter() {
+                    const query = normalized(searchInput?.value);
+                    items.forEach(item => {
+                        const haystack = normalized([
+                            item.dataset.companyTitle,
+                            item.dataset.companyLocality,
+                            item.dataset.companyCategory,
+                            item.dataset.companyDescription,
+                            item.dataset.companyPrice
+                        ].join(" "));
+                        item.hidden = query.length > 0 && !haystack.includes(query);
+                    });
+
+                    updateCount();
+                    if (currentView === "gallery") {
+                        renderGallery();
+                    }
+                    if (currentView === "map") {
+                        renderAndFitCompanyMap({ preserveSelection: true });
+                    }
+                }
+
+                function syncCatalogMapViewportWhenReady(callback) {
+                    if (!map || !mapCanvas) return;
+
+                    let attempts = 0;
+                    const trySync = () => {
+                        const width = mapCanvas.clientWidth || 0;
+                        const height = mapCanvas.clientHeight || 0;
+                        if (width > 120 && height > 120) {
+                            map.resize();
+                            callback?.();
+                            return;
+                        }
+
+                        attempts += 1;
+                        if (attempts < 20) {
+                            window.requestAnimationFrame(trySync);
+                        }
+                    };
+
+                    window.requestAnimationFrame(trySync);
+                }
+
+                function applyCompanyCatalogViewport(bounds, visibleMarkers) {
+                    if (!map || !window.maplibregl || !bounds || !visibleMarkers.length) {
+                        return;
+                    }
+
+                    if (visibleMarkers.length === 1) {
+                        map.jumpTo({
+                            center: [Number(visibleMarkers[0].longitude), Number(visibleMarkers[0].latitude)],
+                            zoom: companyCatalogMapSingleZoom
+                        });
+                        return;
+                    }
+
+                    map.fitBounds(bounds, {
+                        padding: companyCatalogMapPadding,
+                        maxZoom: companyCatalogMapMaxZoom,
+                        duration: 0
+                    });
+                }
+
+                function renderAndFitCompanyMap(options = {}) {
+                    const bounds = syncMapMarkers(options);
+                    const visibleMarkers = Array.isArray(options.sourceMarkers)
+                        ? options.sourceMarkers
+                        : getFilteredCatalogMarkers();
+
+                    if (bounds && visibleMarkers.length) {
+                        applyCompanyCatalogViewport(bounds, visibleMarkers);
+                        hasInitializedMapViewport = true;
+                    }
+                }
+
+                function setView(nextView, options = {}) {
+                    const shouldScroll = options.scroll === true;
+                    currentView = nextView;
+                    if (results) {
+                        results.dataset.companyCatalogView = nextView;
+                        results.hidden = nextView !== "list";
+                    }
+                    if (galleryPanel) {
+                        galleryPanel.hidden = nextView !== "gallery";
+                    }
+                    if (mapPanel) {
+                        mapPanel.hidden = nextView !== "map";
+                    }
+
+                    viewButtons.forEach(button => {
+                        const active = button.dataset.companyCatalogView === nextView;
+                        button.classList.toggle("is-active", active);
+                        button.setAttribute("aria-pressed", active ? "true" : "false");
+                    });
+
+                    if (nextView === "gallery") {
+                        renderGallery();
+                    }
+                    if (nextView === "map") {
+                        ensureMap();
+                    }
+
+                    if (shouldScroll && catalogAnchor) {
+                        window.requestAnimationFrame(() => {
+                            catalogAnchor.scrollIntoView({
+                                behavior: "smooth",
+                                block: "start"
+                            });
+                        });
+                    }
+                }
+
+                function syncMapMarkers(options = {}) {
+                    if (!map || !window.maplibregl) return;
+
+                    markers.forEach(marker => marker.remove());
+                    markers = [];
+                    const preserveSelection = options.preserveSelection === true;
+                    const visibleMarkers = Array.isArray(options.sourceMarkers)
+                        ? options.sourceMarkers
+                        : getFilteredCatalogMarkers();
+                    const nextSelectedMarker = preserveSelection && selectedMarker
+                        ? visibleMarkers.find(item => String(item.id) === String(selectedMarker.id)) || null
+                        : null;
+                    const selectedOrFirstMarker = nextSelectedMarker || visibleMarkers[0] || null;
+
+                    if (!visibleMarkers.length) {
+                        if (popup) {
+                            popup.remove();
+                            popup = null;
+                        }
+                        if (selectionPanel) {
+                            selectionPanel.innerHTML = "";
+                        }
+                        selectedMarker = null;
+                        return null;
+                    }
+
+                    const bounds = new window.maplibregl.LngLatBounds();
+                    visibleMarkers.forEach(item => {
+                        const marker = new window.maplibregl.Marker({ color: "#ff5a5f" })
+                            .setLngLat([Number(item.longitude), Number(item.latitude)])
+                            .addTo(map);
+                        bounds.extend([Number(item.longitude), Number(item.latitude)]);
+
+                        const markerElement = marker.getElement();
+                        let lastTouchSelectionAt = 0;
+
+                        const handleMarkerSelection = event => {
+                            event?.preventDefault?.();
+                            event?.stopPropagation?.();
+
+                            if (window.matchMedia("(max-width: 900px)").matches) {
+                                hoverPopup?.remove();
+                                mobileTapPopup
+                                    ?.setLngLat([Number(item.longitude), Number(item.latitude)])
+                                    .setHTML(`
+                                        <div class="map-tap-card">
+                                            <strong>${escapeHtml(String(item.shortDescription || "").trim() || item.title || "Publicación")}</strong>
+                                            <span>${item.price || "Precio sin informar"}</span>
+                                            <a class="primary-pill compact" href="${item.url}">Ver anuncio</a>
+                                    </div>
+                                    `)
+                                    .addTo(map);
+                                return;
+                            }
+
+                            hoverPopup?.remove();
+                            setSelectedMarker(item);
+                        };
+
+                        markerElement.addEventListener("click", event => {
+                            if (Date.now() - lastTouchSelectionAt < 500) {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                return;
+                            }
+
+                            handleMarkerSelection(event);
+                        });
+
+                        markerElement.addEventListener("touchend", event => {
+                            lastTouchSelectionAt = Date.now();
+                            handleMarkerSelection(event);
+                        }, { passive: false });
+
+                        markerElement.addEventListener("pointerup", event => {
+                            if (event.pointerType !== "touch") return;
+                            lastTouchSelectionAt = Date.now();
+                            handleMarkerSelection(event);
+                        });
+
+                        markerElement.addEventListener("mouseenter", () => {
+                            if (window.matchMedia("(max-width: 900px)").matches) return;
+                            hoverPopup
+                                ?.setLngLat([Number(item.longitude), Number(item.latitude)])
+                                .setHTML(`
+                                    <div class="map-hover-card">
+                                        <strong>${escapeHtml(String(item.shortDescription || "").trim() || item.title || "Publicación")}</strong>
+                                        <span>${item.price || "Precio sin informar"}</span>
+                                    </div>
+                                `)
+                                .addTo(map);
+                        });
+
+                        markerElement.addEventListener("mouseleave", () => {
+                            hoverPopup?.remove();
+                        });
+
+                        markers.push(marker);
+                    });
+
+                    if (!window.matchMedia("(max-width: 900px)").matches) {
+                        setSelectedMarker(selectedOrFirstMarker);
+                    }
+                    map.resize?.();
+                    return bounds;
+                }
+
+                function ensureRefreshButton() {
+                    if (!mapCanvas) return null;
+                    if (refreshButton) return refreshButton;
+
+                    refreshButton = document.createElement("button");
+                    refreshButton.type = "button";
+                    refreshButton.className = "map-refresh-button";
+                    refreshButton.dataset.mapRefresh = "true";
+                    refreshButton.innerHTML = `<i class="fa-solid fa-rotate-right" aria-hidden="true"></i><span>Actualizar</span>`;
+                    refreshButton.setAttribute("aria-label", "Actualizar anuncios en esta zona");
+                    refreshButton.addEventListener("click", async event => {
+                        event.preventDefault();
+                        if (!map) return;
+
+                        refreshButton.classList.add("is-loading");
+                        refreshButton.disabled = true;
+                        try {
+                            const scopedMarkers = getMarkersInsideCurrentBounds(getFilteredCatalogMarkers());
+                            syncMapMarkers({
+                                preserveSelection: true,
+                                sourceMarkers: scopedMarkers
+                            });
+                        } finally {
+                            refreshButton.classList.remove("is-loading");
+                            refreshButton.disabled = false;
+                        }
+                    });
+                    mapCanvas.appendChild(refreshButton);
+                    return refreshButton;
+                }
+
+                function loadMapLibreSdk() {
+                    return new Promise((resolve, reject) => {
+                        if (!document.querySelector('link[data-maplibre-css="company"]')) {
+                            const link = document.createElement("link");
+                            link.rel = "stylesheet";
+                            link.href = "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css";
+                            link.dataset.maplibreCss = "company";
+                            document.head.appendChild(link);
+                        }
+
+                        if (window.maplibregl) {
+                            resolve(window.maplibregl);
+                            return;
+                        }
+
+                        const existingScript = document.querySelector('script[data-maplibre-sdk="company"]');
+                        if (existingScript) {
+                            existingScript.addEventListener("load", () => resolve(window.maplibregl), { once: true });
+                            existingScript.addEventListener("error", () => reject(new Error("No se pudo cargar MapLibre.")), { once: true });
+                            return;
+                        }
+
+                        const script = document.createElement("script");
+                        script.src = "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js";
+                        script.dataset.maplibreSdk = "company";
+                        script.onload = () => resolve(window.maplibregl);
+                        script.onerror = () => reject(new Error("No se pudo cargar MapLibre."));
+                        document.body.appendChild(script);
+                    });
+                }
+
+                async function ensureMap() {
+                    if (!mapCanvas) return;
+
+                    if (map) {
+                        syncCatalogMapViewportWhenReady(() => {
+                            if (hasInitializedMapViewport) {
+                                syncMapMarkers({ preserveSelection: true });
+                            } else {
+                                renderAndFitCompanyMap({ preserveSelection: true });
+                            }
+                        });
+                        return;
+                    }
+
+                    if (isInitializingMap) return;
+                    isInitializingMap = true;
+
+                    try {
+                        await loadMapLibreSdk();
+                    } catch {
+                        isInitializingMap = false;
+                        if (mapPanel) {
+                            mapPanel.innerHTML = '<section class="empty-state"><h2>No se pudo cargar el mapa</h2><p>Prueba nuevamente en unos segundos.</p></section>';
+                        }
+                        return;
+                    }
+
+                    const initialMarkers = getFilteredCatalogMarkers();
+                    const initialCenter = initialMarkers.length
+                        ? [
+                            Number(initialMarkers[0].longitude),
+                            Number(initialMarkers[0].latitude)
+                        ]
+                        : [-60.6505, -32.9442];
+
+                    map = new window.maplibregl.Map({
+                        container: mapCanvas,
+                        style: mapStyleUrl || {
+                            version: 8,
+                            sources: {
+                                openmaptiles: {
+                                    type: "raster",
+                                    tiles: mapTilesUrl ? [mapTilesUrl] : ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+                                    tileSize: 256,
+                                    attribution: mapAttribution || "&copy; OpenStreetMap contributors"
+                                }
+                            },
+                            layers: [
+                                {
+                                    id: "osm",
+                                    type: "raster",
+                                    source: "openmaptiles"
+                                }
+                            ]
+                        },
+                        attributionControl: false,
+                        center: initialCenter,
+                        zoom: 10
+                    });
+                    isInitializingMap = false;
+
+                    hoverPopup = new window.maplibregl.Popup({
+                        closeButton: false,
+                        closeOnClick: false,
+                        offset: 18,
+                        className: "map-hover-popup"
+                    });
+                    mobileTapPopup = new window.maplibregl.Popup({
+                        closeButton: false,
+                        closeOnClick: true,
+                        offset: 20,
+                        className: "map-tap-popup"
+                    });
+
+                    map.addControl(new window.maplibregl.NavigationControl(), "top-right");
+                    map.addControl(new window.maplibregl.AttributionControl({ compact: true }), "bottom-right");
+                    ensureRefreshButton();
+                    map.on("load", () => {
+                        syncCatalogMapViewportWhenReady(() => {
+                            renderAndFitCompanyMap();
+                        });
+                    });
+                }
+
+                searchInput?.addEventListener("input", applyFilter);
+                viewButtons.forEach(button => {
+                    button.addEventListener("click", () => setView(button.dataset.companyCatalogView || "list", { scroll: true }));
+                });
+
+                applyFilter();
+                setView("list");
+            })();
+        </script>
+    }
+}

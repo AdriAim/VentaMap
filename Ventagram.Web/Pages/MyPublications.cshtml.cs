@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Ventagram.Models;
 using Ventagram.Services;
 using Ventagram.Data;
+using Ventagram.ViewModels;
 
 namespace Ventagram.Pages;
 
@@ -12,22 +13,26 @@ namespace Ventagram.Pages;
 public class MyPublicationsModel(
     PublicationService publicationService,
     CurrentUserAccessor currentUserAccessor,
-    VentagramDbContext db) : PageModel
+    VentagramDbContext db,
+    ReviewService reviewService) : PageModel
 {
     public static readonly IReadOnlyList<string> DeactivationReasons =
     [
-        "Ya se vendio",
-        "Ya no esta disponible",
-        "Quiero corregir el anuncio",
-        "Publique por error",
+        "Operacion concretada",
+        "Reservado",
         "Otro motivo"
     ];
 
-    public List<Publication> Publications { get; private set; } = [];
+    public List<MyPublicationAdminItemViewModel> Publications { get; private set; } = [];
     public List<PublicationReportReason> ReportReasons { get; private set; } = [];
     public bool PublishingBlocked { get; private set; }
     public bool ReportingBlocked { get; private set; }
     public bool IsAdmin { get; private set; }
+    public bool IsCompany { get; private set; }
+    public string? CompanyName { get; private set; }
+    public string? CompanyPublicUrl { get; private set; }
+    public string? CompanyHeroBackgroundUrl { get; private set; }
+    public bool ReviewsEnabled { get; private set; }
 
     [TempData]
     public string? SuccessMessage { get; set; }
@@ -51,6 +56,13 @@ public class MyPublicationsModel(
         PublishingBlocked = !user.CanPublish;
         ReportingBlocked = !user.CanReport;
         IsAdmin = user.IsAdmin;
+        IsCompany = user.IsCompany;
+        CompanyName = user.CompanyName;
+        CompanyHeroBackgroundUrl = user.CompanyHeroBackgroundUrl;
+        CompanyPublicUrl = user.IsCompany && !string.IsNullOrWhiteSpace(user.CompanySlug)
+            ? $"/{user.CompanySlug}"
+            : null;
+        ReviewsEnabled = await reviewService.IsEnabledAsync();
         Publications = await publicationService.GetOwnedPublicationsAsync(userId);
         ReportReasons = await db.PublicationReportReasons
             .Where(x => x.IsActive)
@@ -60,42 +72,84 @@ public class MyPublicationsModel(
         return Page();
     }
 
-    public async Task<IActionResult> OnPostDeactivateAsync(int id, string reason, string? comment)
+    public async Task<IActionResult> OnPostDeactivateAsync(
+        int id,
+        string reason,
+        string? comment,
+        string? counterpartyKind,
+        string? counterpartyEmail)
     {
         if (currentUserAccessor.UserId is not int userId)
         {
             return RedirectToPage("/Account/Login", new { returnUrl = Url.Page("/MyPublications") });
         }
 
-        if (string.IsNullOrWhiteSpace(reason))
+        var normalizedReason = reason?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedReason) || !DeactivationReasons.Contains(normalizedReason, StringComparer.Ordinal))
         {
             ErrorMessage = "Selecciona un motivo para dar de baja el anuncio.";
             return RedirectToPage();
         }
 
-        var success = await publicationService.DeactivateOwnedAsync(id, userId, reason, comment);
-        SuccessMessage = success
-            ? "El anuncio fue dado de baja."
-            : "No se pudo dar de baja el anuncio indicado.";
+        if (string.Equals(normalizedReason, "Otro motivo", StringComparison.Ordinal)
+            && string.IsNullOrWhiteSpace(comment))
+        {
+            ErrorMessage = "Escribe el motivo antes de dar de baja el anuncio.";
+            return RedirectToPage();
+        }
+
+        if (string.Equals(normalizedReason, "Operacion concretada", StringComparison.Ordinal)
+            && await reviewService.IsEnabledAsync())
+        {
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
+            var result = await reviewService.CreateOperationAsync(
+                id,
+                userId,
+                counterpartyKind ?? CounterpartyKinds.External,
+                counterpartyEmail ?? string.Empty,
+                baseUrl);
+            if (!result.Success)
+            {
+                ErrorMessage = result.Error;
+                return RedirectToPage();
+            }
+
+            SuccessMessage = "El anuncio fue dado de baja y enviamos un email a la otra persona para confirmar la operacion.";
+            return RedirectToPage();
+        }
+
+        var success = await publicationService.DeactivateOwnedAsync(id, userId, normalizedReason, comment);
+        if (success)
+        {
+            SuccessMessage = "El anuncio fue dado de baja.";
+        }
+        else
+        {
+            ErrorMessage = "No se pudo dar de baja el anuncio indicado.";
+        }
 
         return RedirectToPage();
     }
 
     public async Task<IActionResult> OnPostRepublishAsync(int id)
     {
+        var isAjax = string.Equals(Request.Headers["X-Requested-With"], "XMLHttpRequest", StringComparison.Ordinal);
         if (currentUserAccessor.UserId is not int userId)
         {
+            if (isAjax) return StatusCode(401, new { message = "Tu sesión venció. Ingresá nuevamente para republicar." });
             return RedirectToPage("/Account/Login", new { returnUrl = Url.Page("/MyPublications") });
         }
 
         var user = await db.Users.FirstOrDefaultAsync(x => x.Id == userId);
         if (user is null)
         {
+            if (isAjax) return StatusCode(401, new { message = "No se encontró tu usuario." });
             return RedirectToPage("/Account/Login", new { returnUrl = Url.Page("/MyPublications") });
         }
 
         if (!user.CanPublish)
         {
+            if (isAjax) return StatusCode(403, new { message = "No puedes republicar anuncios hasta que un administrador revise tu cuenta." });
             ErrorMessage = "No puedes republicar anuncios hasta que un administrador revise tu cuenta.";
             return RedirectToPage();
         }
@@ -103,10 +157,16 @@ public class MyPublicationsModel(
         var success = await publicationService.RepublishOwnedAsync(id, userId);
         if (success)
         {
+            if (isAjax) return new JsonResult(new
+            {
+                message = "El anuncio fue republicado por 30 días más.",
+                detailsUrl = Url.Page("/Publications/Details", new { id })
+            });
             SuccessMessage = "El anuncio fue republicado por 30 dias mas.";
         }
         else
         {
+            if (isAjax) return BadRequest(new { message = "No se pudo republicar el anuncio indicado." });
             ErrorMessage = "No se pudo republicar el anuncio indicado.";
         }
 
@@ -123,11 +183,11 @@ public class MyPublicationsModel(
         var success = await publicationService.DeleteOwnedPermanentlyAsync(id, userId);
         if (success)
         {
-            SuccessMessage = "El anuncio fue eliminado definitivamente junto con sus archivos.";
+            SuccessMessage = "El anuncio fue eliminado de Mis anuncios y sus archivos multimedia fueron borrados.";
         }
         else
         {
-            ErrorMessage = "No se pudo eliminar definitivamente el anuncio indicado.";
+            ErrorMessage = "No se pudo eliminar el anuncio indicado.";
         }
 
         return RedirectToPage();

@@ -98,10 +98,11 @@ public class FavoriteService(VentagramDbContext db)
         });
         list.UpdatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync();
+        await EnsureUniqueFavoriteMarkerAsync(userId, publicationId);
         return (list, true);
     }
 
-    public async Task<(FavoriteListSummaryViewModel Summary, List<Publication> Publications)?> GetListContentAsync(int userId, int listId)
+    public async Task<(FavoriteListSummaryViewModel Summary, List<Publication> Publications)?> GetListContentAsync(int userId, int listId, bool includeDebug = false)
     {
         var list = await db.FavoriteLists
             .AsNoTracking()
@@ -120,7 +121,9 @@ public class FavoriteService(VentagramDbContext db)
 
         var favoriteItems = await db.FavoriteListItems
             .AsNoTracking()
-            .Where(x => x.FavoriteListId == listId && x.Publication.IsActive)
+            .Where(x => x.FavoriteListId == listId
+                && x.Publication.IsActive
+                && (includeDebug || x.Publication.UserId == null || x.Publication.User == null || !x.Publication.User.IsDebugUser))
             .OrderByDescending(x => x.CreatedAtUtc)
             .Include(x => x.Publication)
                 .ThenInclude(x => x.Category)
@@ -131,10 +134,78 @@ public class FavoriteService(VentagramDbContext db)
         return (list, favoriteItems.Select(x => x.Publication).ToList());
     }
 
+    public async Task RenameListAsync(int userId, int listId, string? name)
+    {
+        var normalizedName = NormalizeListName(name);
+        if (string.IsNullOrWhiteSpace(normalizedName))
+        {
+            throw new InvalidOperationException("Escribí un nombre para la lista.");
+        }
+
+        var list = await db.FavoriteLists.FirstOrDefaultAsync(x => x.Id == listId && x.UserId == userId);
+        if (list is null)
+        {
+            throw new InvalidOperationException("La lista no existe.");
+        }
+
+        var duplicated = await db.FavoriteLists.AnyAsync(x =>
+            x.UserId == userId &&
+            x.Id != listId &&
+            x.Name == normalizedName);
+        if (duplicated)
+        {
+            throw new InvalidOperationException("Ya existe una lista con ese nombre.");
+        }
+
+        list.Name = normalizedName;
+        list.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+    }
+
+    public async Task<bool> DeleteListAsync(int userId, int listId)
+    {
+        var list = await db.FavoriteLists
+            .Include(x => x.Items)
+            .FirstOrDefaultAsync(x => x.Id == listId && x.UserId == userId);
+        if (list is null)
+        {
+            return false;
+        }
+
+        db.FavoriteLists.Remove(list);
+        await db.SaveChangesAsync();
+        return true;
+    }
+
     private static string NormalizeListName(string? input)
     {
         return string.IsNullOrWhiteSpace(input)
             ? string.Empty
             : input.Trim()[..Math.Min(input.Trim().Length, 120)];
+    }
+
+    private async Task EnsureUniqueFavoriteMarkerAsync(int userId, int publicationId)
+    {
+        db.PublicationFavorites.Add(new PublicationFavorite
+        {
+            PublicationId = publicationId,
+            UserId = userId,
+            CreatedAtUtc = DateTime.UtcNow
+        });
+
+        try
+        {
+            await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE `Publications` SET `UniqueFavoriteCount` = `UniqueFavoriteCount` + 1 WHERE `Id` = {publicationId}");
+        }
+        catch (DbUpdateException)
+        {
+            foreach (var entry in db.ChangeTracker.Entries()
+                .Where(x => x.Entity is PublicationFavorite && x.State == EntityState.Added))
+            {
+                entry.State = EntityState.Detached;
+            }
+        }
     }
 }

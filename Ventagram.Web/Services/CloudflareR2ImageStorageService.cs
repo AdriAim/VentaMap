@@ -8,11 +8,34 @@ using Microsoft.Extensions.Logging;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Webp;
 using SixLabors.ImageSharp.Processing;
+using System.Diagnostics;
+using System.Globalization;
+using System.Text.Json;
 
 namespace Ventagram.Services;
 
 public sealed class CloudflareR2ImageStorageService
 {
+    private static readonly HashSet<string> AllowedImageContentTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif",
+        "image/bmp"
+    };
+
+    private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg",
+        ".jpeg",
+        ".jfif",
+        ".png",
+        ".webp",
+        ".gif",
+        ".bmp"
+    };
+
     private static readonly HashSet<string> AllowedVideoContentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "video/mp4",
@@ -46,13 +69,136 @@ public sealed class CloudflareR2ImageStorageService
         ValidateConfiguration(options);
 
         var urls = new List<string>();
+        var rejectedMessages = new List<string>();
         foreach (var file in files.Where(x => x.Length > 0).Take(11))
         {
-            var url = await ProcessAndUploadAsync(file, options, cancellationToken);
-            urls.Add(url);
+            if (!TryValidateImageFile(file, out var rejectionMessage))
+            {
+                _logger.LogWarning("Skipped unsupported publication image {FileName}. Reason: {Reason}", file.FileName, rejectionMessage);
+                rejectedMessages.Add(rejectionMessage);
+                continue;
+            }
+
+            try
+            {
+                var url = await ProcessAndUploadAsync(file, options, cancellationToken);
+                urls.Add(url);
+            }
+            catch (UnknownImageFormatException)
+            {
+                var message = BuildUnsupportedImageMessage(file);
+                _logger.LogWarning("Skipped undecodable publication image {FileName}.", file.FileName);
+                rejectedMessages.Add(message);
+            }
+        }
+
+        if (urls.Count == 0 && rejectedMessages.Count > 0)
+        {
+            throw new InvalidOperationException(rejectedMessages[0]);
         }
 
         return urls;
+    }
+
+    public async Task<string> UploadCompanyLogoAsync(IFormFile file, CancellationToken cancellationToken = default)
+    {
+        if (file.Length <= 0)
+        {
+            throw new InvalidOperationException("El logo está vacío.");
+        }
+
+        var options = GetOptions();
+        ValidateConfiguration(options);
+
+        await using var inputStream = file.OpenReadStream();
+        using var image = await Image.LoadAsync(inputStream, cancellationToken);
+        if (image.Width != image.Height)
+        {
+            throw new InvalidOperationException("El logo de la empresa debe ser cuadrado.");
+        }
+
+        if (image.Width > 900 || image.Height > 900)
+        {
+            image.Mutate(x => x.Resize(new ResizeOptions
+            {
+                Mode = ResizeMode.Max,
+                Size = new Size(900, 900),
+                Sampler = KnownResamplers.Lanczos3
+            }));
+        }
+
+        await using var output = new MemoryStream();
+        await image.SaveAsWebpAsync(output, new WebpEncoder
+        {
+            Quality = 90
+        }, cancellationToken);
+
+        output.Position = 0;
+        var key = BuildObjectKey(options with { Prefix = "companies/logos" }, ".webp");
+        var request = new PutObjectRequest
+        {
+            BucketName = options.Bucket,
+            Key = key,
+            InputStream = output,
+            ContentType = "image/webp",
+            DisablePayloadSigning = true,
+            DisableDefaultChecksumValidation = true
+        };
+        request.Headers.CacheControl = "public, max-age=31536000, immutable";
+
+        await _client.Value.PutObjectAsync(request, cancellationToken);
+        return BuildPublicUrl(options.PublicBaseUrl, key);
+    }
+
+    public async Task<string> UploadCompanyHeroBackgroundAsync(IFormFile file, CancellationToken cancellationToken = default)
+    {
+        if (file.Length <= 0)
+        {
+            throw new InvalidOperationException("El fondo está vacío.");
+        }
+
+        var options = GetOptions();
+        ValidateConfiguration(options);
+
+        await using var inputStream = file.OpenReadStream();
+        using var image = await Image.LoadAsync(inputStream, cancellationToken);
+
+        if (image.Width < 960 || image.Height < 320)
+        {
+            throw new InvalidOperationException("El fondo debe tener al menos 960x320 pixeles.");
+        }
+
+        if (image.Width > 2200 || image.Height > 1200)
+        {
+            image.Mutate(x => x.Resize(new ResizeOptions
+            {
+                Mode = ResizeMode.Max,
+                Size = new Size(2200, 1200),
+                Sampler = KnownResamplers.Lanczos3
+            }));
+        }
+
+        await using var output = new MemoryStream();
+        await image.SaveAsWebpAsync(output, new WebpEncoder
+        {
+            Quality = 88
+        }, cancellationToken);
+
+        output.Position = 0;
+        var key = BuildObjectKey(options with { Prefix = "companies/backgrounds" }, ".webp");
+        var request = new PutObjectRequest
+        {
+            BucketName = options.Bucket,
+            Key = key,
+            InputStream = output,
+            ContentType = "image/webp",
+            DisablePayloadSigning = true,
+            DisableDefaultChecksumValidation = true
+        };
+        request.Headers.CacheControl = "public, max-age=31536000, immutable";
+
+        await _client.Value.PutObjectAsync(request, cancellationToken);
+        return BuildPublicUrl(options.PublicBaseUrl, key);
     }
 
     public async Task<string> UploadPublicationVideoAsync(IFormFile file, CancellationToken cancellationToken = default)
@@ -76,23 +222,89 @@ public sealed class CloudflareR2ImageStorageService
             throw new InvalidOperationException($"El video supera el limite de {options.MaxVideoBytes / (1024 * 1024)} MB.");
         }
 
-        await using var inputStream = file.OpenReadStream();
-        var extension = ResolveVideoExtension(file.FileName, contentType);
-        var key = BuildObjectKey(options, extension);
-        var request = new PutObjectRequest
+        var inputExtension = ResolveVideoExtension(file.FileName, contentType);
+        var inputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}{inputExtension}");
+        var outputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.mp4");
+        var fallbackOutputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}-fallback.mp4");
+
+        try
         {
-            BucketName = options.Bucket,
-            Key = key,
-            InputStream = inputStream,
-            ContentType = contentType,
-            DisablePayloadSigning = true,
-            DisableDefaultChecksumValidation = true
-        };
-        request.Headers.CacheControl = "public, max-age=31536000, immutable";
+            await using (var inputStream = file.OpenReadStream())
+            await using (var tempFileStream = File.Create(inputPath))
+            {
+                await inputStream.CopyToAsync(tempFileStream, cancellationToken);
+            }
 
-        await _client.Value.PutObjectAsync(request, cancellationToken);
+            var metadata = await ReadVideoMetadataAsync(inputPath, cancellationToken);
+            if (metadata.Width <= 0 || metadata.Height <= 0)
+            {
+                throw new InvalidOperationException("No pudimos leer el tamaño del video.");
+            }
 
-        return BuildPublicUrl(options.PublicBaseUrl, key);
+            if (metadata.Width >= metadata.Height)
+            {
+                throw new InvalidOperationException("Ventagram solo permite videos Verticales.");
+            }
+
+            if (metadata.DurationSeconds is > 60.5d)
+            {
+                throw new InvalidOperationException("El video no puede durar mas de 1 minuto.");
+            }
+
+            await TranscodeVideoAsync(
+                inputPath,
+                outputPath,
+                targetWidth: 1080,
+                targetHeight: 1920,
+                crf: 23,
+                maxRateKbps: 8000,
+                audioBitrateKbps: 128,
+                cancellationToken);
+
+            var chosenOutputPath = outputPath;
+            var processedVideoLength = new FileInfo(outputPath).Length;
+            if (processedVideoLength > options.MaxProcessedVideoBytes)
+            {
+                await TranscodeVideoAsync(
+                    inputPath,
+                    fallbackOutputPath,
+                    targetWidth: 720,
+                    targetHeight: 1280,
+                    crf: 26,
+                    maxRateKbps: 4500,
+                    audioBitrateKbps: 128,
+                    cancellationToken);
+                chosenOutputPath = fallbackOutputPath;
+                processedVideoLength = new FileInfo(fallbackOutputPath).Length;
+            }
+
+            if (processedVideoLength > options.MaxProcessedVideoBytes)
+            {
+                throw new InvalidOperationException($"El video final supera el limite de {options.MaxProcessedVideoBytes / (1024 * 1024)} MB.");
+            }
+
+            await using var outputStream = File.OpenRead(chosenOutputPath);
+            var key = BuildObjectKey(options, ".mp4");
+            var request = new PutObjectRequest
+            {
+                BucketName = options.Bucket,
+                Key = key,
+                InputStream = outputStream,
+                ContentType = "video/mp4",
+                DisablePayloadSigning = true,
+                DisableDefaultChecksumValidation = true
+            };
+            request.Headers.CacheControl = "public, max-age=31536000, immutable";
+
+            await _client.Value.PutObjectAsync(request, cancellationToken);
+            return BuildPublicUrl(options.PublicBaseUrl, key);
+        }
+        finally
+        {
+            TryDeleteTempFile(inputPath);
+            TryDeleteTempFile(outputPath);
+            TryDeleteTempFile(fallbackOutputPath);
+        }
     }
 
     public async Task DeletePublicObjectsAsync(IEnumerable<string> urls, CancellationToken cancellationToken = default)
@@ -212,13 +424,13 @@ public sealed class CloudflareR2ImageStorageService
 
     private byte[] LoadWatermarkBytes()
     {
-        var watermarkPath = Path.Combine(_environment.WebRootPath, "images", "marcaagua.png");
+        var watermarkPath = Path.Combine(_environment.WebRootPath, "images", "logo5.png");
         if (File.Exists(watermarkPath))
         {
             return File.ReadAllBytes(watermarkPath);
         }
 
-        throw new FileNotFoundException("No se encontró wwwroot/images/marcaagua.png para la marca de agua.");
+        throw new FileNotFoundException("No se encontro wwwroot/images/logo5.png para la marca de agua.");
     }
 
     private R2Options GetOptions()
@@ -240,11 +452,12 @@ public sealed class CloudflareR2ImageStorageService
             ServiceUrl = serviceUrl,
             Prefix = section["Prefix"] ?? "publications",
             Region = section["Region"] ?? "auto",
-            MaxImageSide = section.GetValue("MaxImageSide", 1600),
-            WebpQuality = section.GetValue("WebpQuality", 82),
+            MaxImageSide = section.GetValue("MaxImageSide", 2000),
+            WebpQuality = section.GetValue("WebpQuality", 90),
             WatermarkScale = section.GetValue("WatermarkScale", 0.14f),
             WatermarkOpacity = section.GetValue("WatermarkOpacity", 0.45f),
-            MaxVideoBytes = section.GetValue("MaxVideoBytes", 80 * 1024 * 1024)
+            MaxVideoBytes = section.GetValue("MaxVideoBytes", 100 * 1024 * 1024),
+            MaxProcessedVideoBytes = section.GetValue("MaxProcessedVideoBytes", 45 * 1024 * 1024)
         };
     }
 
@@ -259,12 +472,17 @@ public sealed class CloudflareR2ImageStorageService
 
         if (missing.Count > 0)
         {
-            throw new InvalidOperationException($"Faltan configurar Cloudflare:R2: {string.Join(", ", missing)}. No se puede continuar con la subida.");
+            throw new InvalidOperationException(
+                $"Faltan configurar Cloudflare:R2: {string.Join(", ", missing)}. " +
+                "Configura las variables Cloudflare__R2__AccountId o Cloudflare__R2__ServiceUrl, " +
+                "Cloudflare__R2__AccessKeyId, Cloudflare__R2__SecretAccessKey, Cloudflare__R2__Bucket y Cloudflare__R2__PublicBaseUrl. " +
+                "No se puede continuar con la subida.");
         }
     }
 
     private static string BuildObjectKey(R2Options options, string extension)
     {
+        // Edge Cache TTL is 1 year, so every replacement must get a brand-new URL.
         return $"{options.Prefix.Trim('/')}/{DateTime.UtcNow:yyyy/MM}/{Guid.NewGuid():N}{extension}";
     }
 
@@ -293,32 +511,30 @@ public sealed class CloudflareR2ImageStorageService
 
     private static int ResolveWebpQuality(long originalBytes, R2Options options)
     {
-        if (originalBytes <= 0)
+        return Math.Clamp(options.WebpQuality, 80, 100);
+    }
+
+    private static bool TryValidateImageFile(IFormFile file, out string rejectionMessage)
+    {
+        var extension = Path.GetExtension(file.FileName ?? string.Empty);
+        var contentType = file.ContentType?.Trim() ?? string.Empty;
+        var isAllowedContentType = !string.IsNullOrWhiteSpace(contentType) && AllowedImageContentTypes.Contains(contentType);
+        var isAllowedExtension = !string.IsNullOrWhiteSpace(extension) && AllowedImageExtensions.Contains(extension);
+
+        if (isAllowedContentType || isAllowedExtension)
         {
-            return options.WebpQuality;
+            rejectionMessage = string.Empty;
+            return true;
         }
 
-        if (originalBytes <= 400_000)
-        {
-            return Math.Clamp(options.WebpQuality + 6, 70, 92);
-        }
+        rejectionMessage = BuildUnsupportedImageMessage(file);
+        return false;
+    }
 
-        if (originalBytes <= 1_200_000)
-        {
-            return Math.Clamp(options.WebpQuality + 2, 65, 90);
-        }
-
-        if (originalBytes <= 3_000_000)
-        {
-            return Math.Clamp(options.WebpQuality, 62, 88);
-        }
-
-        if (originalBytes <= 7_000_000)
-        {
-            return Math.Clamp(options.WebpQuality - 6, 58, 84);
-        }
-
-        return Math.Clamp(options.WebpQuality - 12, 52, 80);
+    private static string BuildUnsupportedImageMessage(IFormFile file)
+    {
+        var fileName = string.IsNullOrWhiteSpace(file.FileName) ? "La imagen seleccionada" : $"La imagen \"{file.FileName}\"";
+        return $"{fileName} no tiene un formato compatible. Usa JPG, PNG o WEBP.";
     }
 
     private static string NormalizeVideoContentType(IFormFile file)
@@ -350,7 +566,112 @@ public sealed class CloudflareR2ImageStorageService
         };
     }
 
-    private sealed class R2Options
+    private async Task<VideoMetadata> ReadVideoMetadataAsync(string inputPath, CancellationToken cancellationToken)
+    {
+        var output = await RunExternalToolAsync(
+            "ffprobe",
+            $"-v error -print_format json -show_entries stream=width,height:format=duration \"{inputPath}\"",
+            cancellationToken);
+
+        using var document = JsonDocument.Parse(output);
+        var width = 0;
+        var height = 0;
+        double? durationSeconds = null;
+
+        if (document.RootElement.TryGetProperty("streams", out var streamsElement)
+            && streamsElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var stream in streamsElement.EnumerateArray())
+            {
+                if (stream.TryGetProperty("width", out var widthElement)
+                    && stream.TryGetProperty("height", out var heightElement)
+                    && widthElement.TryGetInt32(out width)
+                    && heightElement.TryGetInt32(out height))
+                {
+                    break;
+                }
+            }
+        }
+
+        if (document.RootElement.TryGetProperty("format", out var formatElement)
+            && formatElement.TryGetProperty("duration", out var durationElement)
+            && double.TryParse(durationElement.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedDuration))
+        {
+            durationSeconds = parsedDuration;
+        }
+
+        return new VideoMetadata(width, height, durationSeconds);
+    }
+
+    private async Task TranscodeVideoAsync(
+        string inputPath,
+        string outputPath,
+        int targetWidth,
+        int targetHeight,
+        int crf,
+        int maxRateKbps,
+        int audioBitrateKbps,
+        CancellationToken cancellationToken)
+    {
+        var vf = $"scale=w='trunc(min({targetWidth},iw)/2)*2':h='trunc(min({targetHeight},ih)/2)*2':force_original_aspect_ratio=decrease";
+        var arguments =
+            $"-y -i \"{inputPath}\" -vf \"{vf}\" -r 30 -c:v libx264 -preset veryfast -pix_fmt yuv420p " +
+            $"-profile:v high -level 4.1 -crf {crf} -maxrate {maxRateKbps}k -bufsize {maxRateKbps * 2}k " +
+            $"-movflags +faststart -c:a aac -b:a {audioBitrateKbps}k -ac 2 \"{outputPath}\"";
+
+        await RunExternalToolAsync("ffmpeg", arguments, cancellationToken);
+    }
+
+    private async Task<string> RunExternalToolAsync(string fileName, string arguments, CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            Arguments = arguments,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = new Process { StartInfo = startInfo };
+        if (!process.Start())
+        {
+            throw new InvalidOperationException($"No se pudo iniciar {fileName} para procesar el video.");
+        }
+
+        var standardOutputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var standardErrorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+
+        var standardOutput = await standardOutputTask;
+        var standardError = await standardErrorTask;
+        if (process.ExitCode != 0)
+        {
+            _logger.LogWarning("{Tool} fallo al procesar video. ExitCode={ExitCode}. Error={Error}", fileName, process.ExitCode, standardError);
+            throw new InvalidOperationException("No se pudo procesar el video seleccionado.");
+        }
+
+        return standardOutput;
+    }
+
+    private static void TryDeleteTempFile(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return;
+        }
+
+        try
+        {
+            File.Delete(path);
+        }
+        catch
+        {
+        }
+    }
+
+    private sealed record R2Options
     {
         public string AccountId { get; set; } = string.Empty;
         public string AccessKeyId { get; set; } = string.Empty;
@@ -360,10 +681,13 @@ public sealed class CloudflareR2ImageStorageService
         public string ServiceUrl { get; set; } = string.Empty;
         public string Prefix { get; set; } = "publications";
         public string Region { get; set; } = "auto";
-        public int MaxImageSide { get; set; } = 1600;
-        public int WebpQuality { get; set; } = 82;
+        public int MaxImageSide { get; set; } = 2000;
+        public int WebpQuality { get; set; } = 90;
         public float WatermarkScale { get; set; } = 0.14f;
         public float WatermarkOpacity { get; set; } = 0.45f;
-        public int MaxVideoBytes { get; set; } = 80 * 1024 * 1024;
+        public int MaxVideoBytes { get; set; } = 100 * 1024 * 1024;
+        public int MaxProcessedVideoBytes { get; set; } = 45 * 1024 * 1024;
     }
+
+    private sealed record VideoMetadata(int Width, int Height, double? DurationSeconds);
 }

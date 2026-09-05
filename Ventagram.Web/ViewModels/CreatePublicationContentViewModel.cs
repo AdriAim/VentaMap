@@ -14,6 +14,8 @@ public class CreatePublicationContentViewModel
     public string? CurrentUserEmail { get; set; }
     public string? CurrentUserPhone { get; set; }
     public string? SuggestedLocalityLabel { get; set; }
+    public double? SuggestedMapLatitude { get; set; }
+    public double? SuggestedMapLongitude { get; set; }
     public string MapTilesUrlTemplate { get; set; } = string.Empty;
     public string MapAttributionHtml { get; set; } = string.Empty;
     public string MapGeocodingSearchUrlTemplate { get; set; } = string.Empty;
@@ -28,7 +30,9 @@ public class CreatePublicationContentViewModel
     public bool ShowTechnicalSection { get; set; }
     public bool PublishingBlocked { get; set; }
     public string? PublishingBlockedMessage { get; set; }
+    public bool IsPaidSiteEnabled { get; set; }
     public List<CreatePublicationDynamicFieldValueSeed> InitialDynamicFieldValues { get; set; } = [];
+    public List<string> OperationOptions { get; set; } = [];
 }
 
 public class CreatePublicationDynamicFieldValueSeed

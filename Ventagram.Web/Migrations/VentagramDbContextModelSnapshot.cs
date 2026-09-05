@@ -54,6 +54,30 @@ namespace Ventagram.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasDefaultValue(true);
 
+                    b.Property<string>("CompanyHeroBackgroundUrl")
+                        .HasMaxLength(260)
+                        .HasColumnType("varchar(260)");
+
+                    b.Property<string>("CompanyIndustry")
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<string>("CompanyLogoUrl")
+                        .HasMaxLength(260)
+                        .HasColumnType("varchar(260)");
+
+                    b.Property<string>("CompanyName")
+                        .HasMaxLength(160)
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("CompanySlug")
+                        .HasMaxLength(180)
+                        .HasColumnType("varchar(180)");
+
+                    b.Property<string>("CompanyTagline")
+                        .HasMaxLength(180)
+                        .HasColumnType("varchar(180)");
+
                     b.Property<string>("ContactPreference")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -67,7 +91,21 @@ namespace Ventagram.Migrations
                         .HasMaxLength(160)
                         .HasColumnType("varchar(160)");
 
+                    b.Property<string>("HeaderPublicationGroupsCsv")
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
                     b.Property<bool>("IsAdmin")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsCompany")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsDebugUser")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("tinyint(1)")
                         .HasDefaultValue(false);
@@ -96,6 +134,12 @@ namespace Ventagram.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ArgentineLocalityId");
+
+                    b.HasIndex("CompanyName")
+                        .IsUnique();
+
+                    b.HasIndex("CompanySlug")
+                        .IsUnique();
 
                     b.HasIndex("Email")
                         .IsUnique();
@@ -198,6 +242,61 @@ namespace Ventagram.Migrations
                     b.ToTable("FavoriteListItems");
                 });
 
+            modelBuilder.Entity("Ventagram.Models.OperationReview", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<bool>("DeclinedToRate")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("ModerationStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<DateTime?>("PublishAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ReviewedRole")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<int>("ReviewedUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ReviewerUserId")
+                        .HasColumnType("int");
+
+                    b.Property<byte?>("Stars")
+                        .HasColumnType("tinyint unsigned");
+
+                    b.Property<DateTime>("SubmittedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("VerifiedOperationId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReviewerUserId");
+
+                    b.HasIndex("VerifiedOperationId", "ReviewerUserId")
+                        .IsUnique();
+
+                    b.HasIndex("ReviewedUserId", "ReviewedRole", "SubmittedAtUtc");
+
+                    b.ToTable("OperationReviews");
+                });
+
             modelBuilder.Entity("Ventagram.Models.Publication", b =>
                 {
                     b.Property<int>("Id")
@@ -258,6 +357,9 @@ namespace Ventagram.Migrations
                     b.Property<byte>("Group")
                         .HasColumnType("tinyint unsigned");
 
+                    b.Property<bool>("HideFromMap")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<string>("InternalNotes")
                         .HasColumnType("longtext");
 
@@ -286,6 +388,9 @@ namespace Ventagram.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("varchar(40)");
 
+                    b.Property<byte?>("OperationType")
+                        .HasColumnType("tinyint unsigned");
+
                     b.Property<decimal>("Price")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -298,8 +403,8 @@ namespace Ventagram.Migrations
 
                     b.Property<string>("ShortDescription")
                         .IsRequired()
-                        .HasMaxLength(260)
-                        .HasColumnType("varchar(260)");
+                        .HasMaxLength(60)
+                        .HasColumnType("varchar(60)");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -313,6 +418,16 @@ namespace Ventagram.Migrations
 
                     b.Property<DateTime?>("TrashedAtUtc")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<int>("UniqueFavoriteCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("UniqueViewCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<int?>("UserId")
                         .HasColumnType("int");
@@ -417,6 +532,35 @@ namespace Ventagram.Migrations
                     b.HasIndex("GroupId", "CategoryId", "IsActive", "SortOrder");
 
                     b.ToTable("PublicationCategoryFields");
+                });
+
+            modelBuilder.Entity("Ventagram.Models.PublicationFavorite", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("PublicationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("PublicationId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("PublicationFavorites");
                 });
 
             modelBuilder.Entity("Ventagram.Models.PublicationFieldValue", b =>
@@ -597,6 +741,264 @@ namespace Ventagram.Migrations
                     b.ToTable("PublicationReportReasons");
                 });
 
+            modelBuilder.Entity("Ventagram.Models.PublicationView", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AnonymousFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("PublicationId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ViewerUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("ViewerUserId");
+
+                    b.HasIndex("PublicationId", "AnonymousFingerprint")
+                        .IsUnique();
+
+                    b.HasIndex("PublicationId", "ViewerUserId")
+                        .IsUnique();
+
+                    b.ToTable("PublicationViews");
+                });
+
+            modelBuilder.Entity("Ventagram.Models.SharedPublicationList", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("DefaultMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("Galeria");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "Name");
+
+                    b.ToTable("SharedPublicationLists");
+                });
+
+            modelBuilder.Entity("Ventagram.Models.SharedPublicationListItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("PublicationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SharedPublicationListId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PublicationId");
+
+                    b.HasIndex("SharedPublicationListId", "PublicationId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_SharedListItems_List_Publication");
+
+                    b.ToTable("SharedPublicationListItems");
+                });
+
+            modelBuilder.Entity("Ventagram.Models.SiteSuggestion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<string>("SenderEmail")
+                        .HasMaxLength(160)
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("SenderName")
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("SiteSuggestions");
+                });
+
+            modelBuilder.Entity("Ventagram.Models.VentagramParameter", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("DataType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(300)
+                        .HasColumnType("varchar(300)");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("VentagramParameters");
+                });
+
+            modelBuilder.Entity("Ventagram.Models.VerifiedOperation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AdvertiserUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ConfirmedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("CounterpartyEmail")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("CounterpartyKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<bool>("CounterpartyReportedProblem")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime?>("CounterpartyRespondedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("CounterpartyUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<byte?>("OperationType")
+                        .HasColumnType("tinyint unsigned");
+
+                    b.Property<int>("PublicationId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("ResponseTokenExpiresAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ResponseTokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("varchar(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdvertiserUserId");
+
+                    b.HasIndex("CounterpartyUserId");
+
+                    b.HasIndex("ResponseTokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("CounterpartyEmail", "Status");
+
+                    b.HasIndex("PublicationId", "Status");
+
+                    b.ToTable("VerifiedOperations");
+                });
+
             modelBuilder.Entity("Ventagram.Models.ApplicationUser", b =>
                 {
                     b.HasOne("Ventagram.Models.ArgentineLocality", "ArgentineLocality")
@@ -636,6 +1038,33 @@ namespace Ventagram.Migrations
                     b.Navigation("Publication");
                 });
 
+            modelBuilder.Entity("Ventagram.Models.OperationReview", b =>
+                {
+                    b.HasOne("Ventagram.Models.ApplicationUser", "ReviewedUser")
+                        .WithMany("ReviewsReceived")
+                        .HasForeignKey("ReviewedUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Ventagram.Models.ApplicationUser", "ReviewerUser")
+                        .WithMany("ReviewsWritten")
+                        .HasForeignKey("ReviewerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Ventagram.Models.VerifiedOperation", "VerifiedOperation")
+                        .WithMany("Reviews")
+                        .HasForeignKey("VerifiedOperationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ReviewedUser");
+
+                    b.Navigation("ReviewerUser");
+
+                    b.Navigation("VerifiedOperation");
+                });
+
             modelBuilder.Entity("Ventagram.Models.Publication", b =>
                 {
                     b.HasOne("Ventagram.Models.PublicationCategory", "Category")
@@ -660,6 +1089,25 @@ namespace Ventagram.Migrations
                         .HasForeignKey("CategoryId");
 
                     b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("Ventagram.Models.PublicationFavorite", b =>
+                {
+                    b.HasOne("Ventagram.Models.Publication", "Publication")
+                        .WithMany("Favorites")
+                        .HasForeignKey("PublicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ventagram.Models.ApplicationUser", "User")
+                        .WithMany("PublicationFavorites")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Publication");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Ventagram.Models.PublicationFieldValue", b =>
@@ -726,13 +1174,124 @@ namespace Ventagram.Migrations
                     b.Navigation("ReviewedByUser");
                 });
 
+            modelBuilder.Entity("Ventagram.Models.PublicationView", b =>
+                {
+                    b.HasOne("Ventagram.Models.Publication", "Publication")
+                        .WithMany("Views")
+                        .HasForeignKey("PublicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ventagram.Models.ApplicationUser", "ViewerUser")
+                        .WithMany("PublicationViews")
+                        .HasForeignKey("ViewerUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Publication");
+
+                    b.Navigation("ViewerUser");
+                });
+
+            modelBuilder.Entity("Ventagram.Models.SharedPublicationList", b =>
+                {
+                    b.HasOne("Ventagram.Models.ApplicationUser", "User")
+                        .WithMany("SharedPublicationLists")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Ventagram.Models.SharedPublicationListItem", b =>
+                {
+                    b.HasOne("Ventagram.Models.Publication", "Publication")
+                        .WithMany("SharedPublicationListItems")
+                        .HasForeignKey("PublicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ventagram.Models.SharedPublicationList", "SharedPublicationList")
+                        .WithMany("Items")
+                        .HasForeignKey("SharedPublicationListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SharedListItems_List");
+
+                    b.Navigation("Publication");
+
+                    b.Navigation("SharedPublicationList");
+                });
+
+            modelBuilder.Entity("Ventagram.Models.SiteSuggestion", b =>
+                {
+                    b.HasOne("Ventagram.Models.ApplicationUser", "User")
+                        .WithMany("SiteSuggestions")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Ventagram.Models.VentagramParameter", b =>
+                {
+                    b.HasOne("Ventagram.Models.ApplicationUser", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("Ventagram.Models.VerifiedOperation", b =>
+                {
+                    b.HasOne("Ventagram.Models.ApplicationUser", "AdvertiserUser")
+                        .WithMany("OperationsAsAdvertiser")
+                        .HasForeignKey("AdvertiserUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Ventagram.Models.ApplicationUser", "CounterpartyUser")
+                        .WithMany("OperationsAsCounterparty")
+                        .HasForeignKey("CounterpartyUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ventagram.Models.Publication", "Publication")
+                        .WithMany("VerifiedOperations")
+                        .HasForeignKey("PublicationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AdvertiserUser");
+
+                    b.Navigation("CounterpartyUser");
+
+                    b.Navigation("Publication");
+                });
+
             modelBuilder.Entity("Ventagram.Models.ApplicationUser", b =>
                 {
                     b.Navigation("FavoriteLists");
 
+                    b.Navigation("OperationsAsAdvertiser");
+
+                    b.Navigation("OperationsAsCounterparty");
+
+                    b.Navigation("PublicationFavorites");
+
+                    b.Navigation("PublicationViews");
+
                     b.Navigation("Publications");
 
                     b.Navigation("Reports");
+
+                    b.Navigation("ReviewsReceived");
+
+                    b.Navigation("ReviewsWritten");
+
+                    b.Navigation("SharedPublicationLists");
+
+                    b.Navigation("SiteSuggestions");
                 });
 
             modelBuilder.Entity("Ventagram.Models.FavoriteList", b =>
@@ -744,11 +1303,19 @@ namespace Ventagram.Migrations
                 {
                     b.Navigation("FavoriteListItems");
 
+                    b.Navigation("Favorites");
+
                     b.Navigation("FieldValues");
 
                     b.Navigation("MediaItems");
 
                     b.Navigation("Reports");
+
+                    b.Navigation("SharedPublicationListItems");
+
+                    b.Navigation("VerifiedOperations");
+
+                    b.Navigation("Views");
                 });
 
             modelBuilder.Entity("Ventagram.Models.PublicationCategory", b =>
@@ -764,6 +1331,16 @@ namespace Ventagram.Migrations
             modelBuilder.Entity("Ventagram.Models.PublicationReportReason", b =>
                 {
                     b.Navigation("Reports");
+                });
+
+            modelBuilder.Entity("Ventagram.Models.SharedPublicationList", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Ventagram.Models.VerifiedOperation", b =>
+                {
+                    b.Navigation("Reviews");
                 });
 #pragma warning restore 612, 618
         }

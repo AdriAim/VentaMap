@@ -75,7 +75,7 @@ public class ChatEmailReminderWorker(
             cancellationToken.ThrowIfCancellationRequested();
 
             var recipient = ResolveRecipient(message, users);
-            if (recipient is null || !recipient.RespondsEmails || string.IsNullOrWhiteSpace(recipient.Email))
+            if (recipient is null || string.IsNullOrWhiteSpace(recipient.Email))
             {
                 message.EmailReminderSentAtUtc = DateTime.UtcNow;
                 continue;

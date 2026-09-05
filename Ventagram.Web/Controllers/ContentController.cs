@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
@@ -13,8 +14,9 @@ namespace Ventagram.Controllers;
 
 [ApiController]
 [Route("api/content")]
-public class ContentController(
+public partial class ContentController(
     PublicationService publicationService,
+    PublicationAnalyticsService publicationAnalyticsService,
     PublicationGroupTypeService publicationGroupTypeService,
     PublicationCategoryService publicationCategoryService,
     PublicationCategoryFieldService publicationCategoryFieldService,
@@ -24,22 +26,30 @@ public class ContentController(
     CloudflareR2ImageStorageService imageStorageService,
     CurrentUserAccessor currentUserAccessor,
     NavigationLocalityService navigationLocalityService,
+    ReviewService reviewService,
+    VentagramParameterService parameters,
     VentagramDbContext db,
     ILogger<ContentController> logger,
     IConfiguration configuration) : Controller
 {
     private const int MaxMapPublications = 250;
+    private const int DefaultSearchRadiusKm = 60;
+    private const int ExpandedSearchRadiusKm = 600;
+    private const string AnonymousViewerCookieName = "ventagram.viewer";
 
     [HttpGet("home")]
-    public async Task<IActionResult> Home([FromQuery] string? group = "Inmuebles", [FromQuery] string? mode = "Galeria", [FromQuery] string? query = null, [FromQuery] string? flash = null, [FromQuery] decimal? priceFrom = null, [FromQuery] decimal? priceTo = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+    public async Task<IActionResult> Home([FromQuery] string? group = "Inmuebles", [FromQuery] string? mode = "Galeria", [FromQuery] string? query = null, [FromQuery] string? flash = null, [FromQuery] int? categoryId = null, [FromQuery] decimal? priceFrom = null, [FromQuery] decimal? priceTo = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
+        var includeDebug = IsDebugModeEnabled();
         var selectedGroup = ParseGroupFilter(group);
         var selectedGroupName = selectedGroup?.ToDisplayName() ?? "Todos";
         var selectedMode = NormalizeBrowseMode(mode);
         var safePageSize = NormalizeTextPageSize(pageSize);
         var safePage = Math.Max(1, page);
         var publications = new List<Publication>();
+        var expandedRadiusPublications = new List<Publication>();
         var totalResults = 0;
+        var expandedRadiusTotalResults = 0;
         var effectiveLocality = await navigationLocalityService.GetEffectiveLocalityAsync(HttpContext);
         var userLocalityLabel = effectiveLocality?.DisplayLabel;
         var userLocalityLatitude = effectiveLocality?.Latitude;
@@ -47,14 +57,22 @@ public class ContentController(
         var favoritePublicationIds = new HashSet<int>();
         var favoriteLists = new List<FavoriteListSummaryViewModel>();
         var filters = BuildSearchFilters(priceFrom, priceTo, Request.Query);
-        var priceSliderMax = NormalizePriceSliderMax(await publicationService.GetActiveMaxPriceAsync(selectedGroup), filters);
-        List<PublicationCategoryField> requiredFields = selectedGroup is null
+        var priceSliderMax = NormalizePriceSliderMax(await publicationService.GetActiveMaxPriceAsync(selectedGroup, includeDebug), filters);
+        var requireLocalitySelection = effectiveLocality is null;
+        var requiredFields = await GetRequiredFieldsForSearchGroupAsync(selectedGroup);
+        var categoryOptions = selectedGroup is null
             ? []
-            : await publicationCategoryFieldService.GetRequiredActiveByGroupAsync(selectedGroup.Value);
+            : await publicationCategoryService.GetActiveByGroupAsync(selectedGroup.Value);
 
-        if (selectedMode == "Texto")
+        if (!requireLocalitySelection && selectedMode == "Texto")
         {
-            totalResults = await publicationService.CountActivePublicationsAsync(selectedGroup, query, filters);
+            totalResults = await publicationService.CountActivePublicationsAsync(
+                selectedGroup,
+                query,
+                userLocalityLatitude,
+                userLocalityLongitude,
+                filters,
+                includeDebug);
             var totalPages = Math.Max(1, (int)Math.Ceiling(totalResults / (double)safePageSize));
             safePage = Math.Min(safePage, totalPages);
             publications = await publicationService.SearchActivePublicationsPageAsync(
@@ -64,23 +82,85 @@ public class ContentController(
                 safePageSize,
                 userLocalityLatitude,
                 userLocalityLongitude,
-                filters);
+                filters,
+                includeDebug);
+
+            if (ShouldLoadExpandedRadiusFallback(filters, totalResults))
+            {
+                var expandedFilters = CloneFiltersWithRadius(filters, ExpandedSearchRadiusKm);
+                expandedRadiusTotalResults = await publicationService.CountActivePublicationsAsync(
+                    selectedGroup,
+                    query,
+                    userLocalityLatitude,
+                    userLocalityLongitude,
+                    expandedFilters,
+                    includeDebug);
+                if (expandedRadiusTotalResults > 0)
+                {
+                    expandedRadiusPublications = await publicationService.SearchActivePublicationsPageAsync(
+                        selectedGroup,
+                        query,
+                        0,
+                        safePageSize,
+                        userLocalityLatitude,
+                        userLocalityLongitude,
+                        expandedFilters,
+                        includeDebug);
+                }
+            }
         }
-        else if (selectedMode == "Mapa")
+        else if (!requireLocalitySelection && selectedMode == "Mapa")
         {
-            publications = await publicationService.SearchActivePublicationsAsync(
+            totalResults = await publicationService.CountActivePublicationsAsync(
                 selectedGroup,
                 query,
                 userLocalityLatitude,
                 userLocalityLongitude,
-                filters);
-            totalResults = publications.Count;
-            publications = LimitMapPublications(publications, MaxMapPublications);
+                filters,
+                includeDebug);
+            if (totalResults > 0)
+            {
+                publications = await publicationService.SearchActivePublicationsPageAsync(
+                    selectedGroup,
+                    query,
+                    0,
+                    MaxMapPublications,
+                    userLocalityLatitude,
+                    userLocalityLongitude,
+                    filters,
+                    includeDebug);
+            }
+            else if (ShouldLoadExpandedRadiusFallback(filters, totalResults))
+            {
+                var expandedFilters = CloneFiltersWithRadius(filters, ExpandedSearchRadiusKm);
+                expandedRadiusTotalResults = await publicationService.CountActivePublicationsAsync(
+                    selectedGroup,
+                    query,
+                    userLocalityLatitude,
+                    userLocalityLongitude,
+                    expandedFilters,
+                    includeDebug);
+                if (expandedRadiusTotalResults > 0)
+                {
+                    expandedRadiusPublications = await publicationService.SearchActivePublicationsPageAsync(
+                        selectedGroup,
+                        query,
+                        0,
+                        safePageSize,
+                        userLocalityLatitude,
+                        userLocalityLongitude,
+                        expandedFilters,
+                        includeDebug);
+                }
+            }
         }
 
         if (currentUserAccessor.UserId is int currentUserId)
         {
-            favoritePublicationIds = await favoriteService.GetFavoritePublicationIdsAsync(currentUserId, publications.Select(x => x.Id));
+            favoritePublicationIds = await favoriteService.GetFavoritePublicationIdsAsync(currentUserId, publications
+                .Select(x => x.Id)
+                .Concat(expandedRadiusPublications.Select(x => x.Id))
+                .Distinct());
             favoriteLists = await favoriteService.GetListSummariesAsync(currentUserId);
         }
 
@@ -91,22 +171,31 @@ public class ContentController(
         {
             Group = selectedGroupName,
             GroupOptions = await GetBrowseGroupOptionsAsync(),
+            CategoryOptions = categoryOptions,
+            SelectedCategoryId = filters.CategoryId,
             Mode = selectedMode,
             Query = query,
+            Operation = filters.Operation,
             PriceFrom = filters.PriceFrom,
             PriceTo = filters.PriceTo,
+            RadiusKm = filters.RadiusKm,
             PriceSliderMax = priceSliderMax,
             RequiredFilterFields = requiredFields,
             SelectedFieldFilters = filters.FieldFilters,
             Publications = publications,
+            ExpandedRadiusPublications = expandedRadiusPublications,
             Page = safePage,
             PageSize = safePageSize,
             TotalResults = totalResults,
             TotalPages = computedTotalPages,
+            ExpandedRadiusTotalResults = expandedRadiusTotalResults,
+            ExpandedRadiusKm = expandedRadiusPublications.Count > 0 ? ExpandedSearchRadiusKm : null,
             UserLocalityLabel = userLocalityLabel,
             UserLocalityLatitude = userLocalityLatitude,
             UserLocalityLongitude = userLocalityLongitude,
+            RequireLocalitySelection = requireLocalitySelection,
             CanManageFavorites = currentUserAccessor.IsAuthenticated,
+            IsPaidSiteEnabled = await parameters.GetBoolAsync(VentagramParameterService.PaidSiteEnabled, fallback: false),
             FavoritePublicationIds = favoritePublicationIds,
             FavoriteLists = favoriteLists,
             MapStyleUrl = configuration["Map:StyleUrl"] ?? string.Empty,
@@ -115,9 +204,10 @@ public class ContentController(
             MapGeocodingSearchUrlTemplate = configuration["Map:GeocodingSearchUrlTemplate"] ?? string.Empty,
             MapReverseGeocodingUrlTemplate = configuration["Map:ReverseGeocodingUrlTemplate"] ?? string.Empty,
             FlashMessage = flash,
-            GalleryApiEndpoint = BuildGalleryApiEndpoint(selectedGroupName, query, filters),
+            GalleryApiEndpoint = BuildGalleryApiEndpoint(selectedGroupName, query, filters, includeDebug),
+            MapMarkersApiEndpoint = BuildMapMarkersApiEndpoint(selectedGroupName, query, filters, includeDebug),
             MarkersJson = JsonSerializer.Serialize(publications
-                .Where(x => x.Latitude.HasValue && x.Longitude.HasValue)
+                .Where(x => x.Latitude.HasValue && x.Longitude.HasValue && !x.HideFromMap)
                 .Select(x => new
                 {
                     id = x.Id,
@@ -130,10 +220,13 @@ public class ContentController(
                     isFavorite = favoritePublicationIds.Contains(x.Id),
                     image = x.ImageList.FirstOrDefault(),
                     images = x.ImageList.Take(11).ToList(),
-                    detailsUrl = $"/Publications/Details/{x.Id}",
+                    operationLabel = x.OperationType.HasValue ? x.OperationType.Value.ToDisplayName() : null,
+                    categoryLabel = x.Category != null ? x.Category.Name : null,
+                    detailsUrl = BuildPublicationDetailsUrl(x.Id, includeDebug),
                     lat = x.Latitude,
                     lng = x.Longitude,
-                    price = $"{x.Currency} {x.Price:0}"
+                    price = FormatPublicationPrice(x.Currency, x.Price, x.OperationType, "N0"),
+                    priceTooltip = FormatPublicationPrice(x.Currency, x.Price, x.OperationType, "N0")
                 }))
         };
 
@@ -141,15 +234,18 @@ public class ContentController(
     }
 
     [HttpGet("browse")]
-    public async Task<IActionResult> Browse([FromQuery] string? group = "Inmuebles", [FromQuery] string? mode = "Galeria", [FromQuery] string? query = null, [FromQuery] string? flash = null, [FromQuery] decimal? priceFrom = null, [FromQuery] decimal? priceTo = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+    public async Task<IActionResult> Browse([FromQuery] string? group = "Inmuebles", [FromQuery] string? mode = "Galeria", [FromQuery] string? query = null, [FromQuery] string? flash = null, [FromQuery] int? categoryId = null, [FromQuery] decimal? priceFrom = null, [FromQuery] decimal? priceTo = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
+        var includeDebug = IsDebugModeEnabled();
         var selectedGroup = ParseGroupFilter(group);
         var selectedGroupName = selectedGroup?.ToDisplayName() ?? "Todos";
         var selectedMode = NormalizeBrowseMode(mode);
         var safePageSize = NormalizeTextPageSize(pageSize);
         var safePage = Math.Max(1, page);
         var publications = new List<Publication>();
+        var expandedRadiusPublications = new List<Publication>();
         var totalResults = 0;
+        var expandedRadiusTotalResults = 0;
         var effectiveLocality = await navigationLocalityService.GetEffectiveLocalityAsync(HttpContext);
         var userLocalityLabel = effectiveLocality?.DisplayLabel;
         var userLocalityLatitude = effectiveLocality?.Latitude;
@@ -157,14 +253,22 @@ public class ContentController(
         var favoritePublicationIds = new HashSet<int>();
         var favoriteLists = new List<FavoriteListSummaryViewModel>();
         var filters = BuildSearchFilters(priceFrom, priceTo, Request.Query);
-        var priceSliderMax = NormalizePriceSliderMax(await publicationService.GetActiveMaxPriceAsync(selectedGroup), filters);
-        List<PublicationCategoryField> requiredFields = selectedGroup is null
+        var priceSliderMax = NormalizePriceSliderMax(await publicationService.GetActiveMaxPriceAsync(selectedGroup, includeDebug), filters);
+        var requireLocalitySelection = effectiveLocality is null;
+        var requiredFields = await GetRequiredFieldsForSearchGroupAsync(selectedGroup);
+        var categoryOptions = selectedGroup is null
             ? []
-            : await publicationCategoryFieldService.GetRequiredActiveByGroupAsync(selectedGroup.Value);
+            : await publicationCategoryService.GetActiveByGroupAsync(selectedGroup.Value);
 
-        if (selectedMode == "Texto")
+        if (!requireLocalitySelection && selectedMode == "Texto")
         {
-            totalResults = await publicationService.CountActivePublicationsAsync(selectedGroup, query, filters);
+            totalResults = await publicationService.CountActivePublicationsAsync(
+                selectedGroup,
+                query,
+                userLocalityLatitude,
+                userLocalityLongitude,
+                filters,
+                includeDebug);
             var totalPages = Math.Max(1, (int)Math.Ceiling(totalResults / (double)safePageSize));
             safePage = Math.Min(safePage, totalPages);
             publications = await publicationService.SearchActivePublicationsPageAsync(
@@ -174,23 +278,85 @@ public class ContentController(
                 safePageSize,
                 userLocalityLatitude,
                 userLocalityLongitude,
-                filters);
+                filters,
+                includeDebug);
+
+            if (ShouldLoadExpandedRadiusFallback(filters, totalResults))
+            {
+                var expandedFilters = CloneFiltersWithRadius(filters, ExpandedSearchRadiusKm);
+                expandedRadiusTotalResults = await publicationService.CountActivePublicationsAsync(
+                    selectedGroup,
+                    query,
+                    userLocalityLatitude,
+                    userLocalityLongitude,
+                    expandedFilters,
+                    includeDebug);
+                if (expandedRadiusTotalResults > 0)
+                {
+                    expandedRadiusPublications = await publicationService.SearchActivePublicationsPageAsync(
+                        selectedGroup,
+                        query,
+                        0,
+                        safePageSize,
+                        userLocalityLatitude,
+                        userLocalityLongitude,
+                        expandedFilters,
+                        includeDebug);
+                }
+            }
         }
-        else if (selectedMode == "Mapa")
+        else if (!requireLocalitySelection && selectedMode == "Mapa")
         {
-            publications = await publicationService.SearchActivePublicationsAsync(
+            totalResults = await publicationService.CountActivePublicationsAsync(
                 selectedGroup,
                 query,
                 userLocalityLatitude,
                 userLocalityLongitude,
-                filters);
-            totalResults = publications.Count;
-            publications = LimitMapPublications(publications, MaxMapPublications);
+                filters,
+                includeDebug);
+            if (totalResults > 0)
+            {
+                publications = await publicationService.SearchActivePublicationsPageAsync(
+                    selectedGroup,
+                    query,
+                    0,
+                    MaxMapPublications,
+                    userLocalityLatitude,
+                    userLocalityLongitude,
+                    filters,
+                    includeDebug);
+            }
+            else if (ShouldLoadExpandedRadiusFallback(filters, totalResults))
+            {
+                var expandedFilters = CloneFiltersWithRadius(filters, ExpandedSearchRadiusKm);
+                expandedRadiusTotalResults = await publicationService.CountActivePublicationsAsync(
+                    selectedGroup,
+                    query,
+                    userLocalityLatitude,
+                    userLocalityLongitude,
+                    expandedFilters,
+                    includeDebug);
+                if (expandedRadiusTotalResults > 0)
+                {
+                    expandedRadiusPublications = await publicationService.SearchActivePublicationsPageAsync(
+                        selectedGroup,
+                        query,
+                        0,
+                        safePageSize,
+                        userLocalityLatitude,
+                        userLocalityLongitude,
+                        expandedFilters,
+                        includeDebug);
+                }
+            }
         }
 
         if (currentUserAccessor.UserId is int currentUserId)
         {
-            favoritePublicationIds = await favoriteService.GetFavoritePublicationIdsAsync(currentUserId, publications.Select(x => x.Id));
+            favoritePublicationIds = await favoriteService.GetFavoritePublicationIdsAsync(currentUserId, publications
+                .Select(x => x.Id)
+                .Concat(expandedRadiusPublications.Select(x => x.Id))
+                .Distinct());
             favoriteLists = await favoriteService.GetListSummariesAsync(currentUserId);
         }
 
@@ -201,22 +367,31 @@ public class ContentController(
         {
             Group = selectedGroupName,
             GroupOptions = await GetBrowseGroupOptionsAsync(),
+            CategoryOptions = categoryOptions,
+            SelectedCategoryId = filters.CategoryId,
             Mode = selectedMode,
             Query = query,
+            Operation = filters.Operation,
             PriceFrom = filters.PriceFrom,
             PriceTo = filters.PriceTo,
+            RadiusKm = filters.RadiusKm,
             PriceSliderMax = priceSliderMax,
             RequiredFilterFields = requiredFields,
             SelectedFieldFilters = filters.FieldFilters,
             Publications = publications,
+            ExpandedRadiusPublications = expandedRadiusPublications,
             Page = safePage,
             PageSize = safePageSize,
             TotalResults = totalResults,
             TotalPages = computedTotalPages,
+            ExpandedRadiusTotalResults = expandedRadiusTotalResults,
+            ExpandedRadiusKm = expandedRadiusPublications.Count > 0 ? ExpandedSearchRadiusKm : null,
             UserLocalityLabel = userLocalityLabel,
             UserLocalityLatitude = userLocalityLatitude,
             UserLocalityLongitude = userLocalityLongitude,
+            RequireLocalitySelection = requireLocalitySelection,
             CanManageFavorites = currentUserAccessor.IsAuthenticated,
+            IsPaidSiteEnabled = await parameters.GetBoolAsync(VentagramParameterService.PaidSiteEnabled, fallback: false),
             FavoritePublicationIds = favoritePublicationIds,
             FavoriteLists = favoriteLists,
             MapStyleUrl = configuration["Map:StyleUrl"] ?? string.Empty,
@@ -225,9 +400,10 @@ public class ContentController(
             MapGeocodingSearchUrlTemplate = configuration["Map:GeocodingSearchUrlTemplate"] ?? string.Empty,
             MapReverseGeocodingUrlTemplate = configuration["Map:ReverseGeocodingUrlTemplate"] ?? string.Empty,
             FlashMessage = flash,
-            GalleryApiEndpoint = BuildGalleryApiEndpoint(selectedGroupName, query, filters),
+            GalleryApiEndpoint = BuildGalleryApiEndpoint(selectedGroupName, query, filters, includeDebug),
+            MapMarkersApiEndpoint = BuildMapMarkersApiEndpoint(selectedGroupName, query, filters, includeDebug),
             MarkersJson = JsonSerializer.Serialize(publications
-                .Where(x => x.Latitude.HasValue && x.Longitude.HasValue)
+                .Where(x => x.Latitude.HasValue && x.Longitude.HasValue && !x.HideFromMap)
                 .Select(x => new
                 {
                     id = x.Id,
@@ -240,10 +416,13 @@ public class ContentController(
                     isFavorite = favoritePublicationIds.Contains(x.Id),
                     image = x.ImageList.FirstOrDefault(),
                     images = x.ImageList.Take(11).ToList(),
-                    detailsUrl = $"/Publications/Details/{x.Id}",
+                    operationLabel = x.OperationType.HasValue ? x.OperationType.Value.ToDisplayName() : null,
+                    categoryLabel = x.Category != null ? x.Category.Name : null,
+                    detailsUrl = BuildPublicationDetailsUrl(x.Id, includeDebug),
                     lat = x.Latitude,
                     lng = x.Longitude,
-                    price = $"{x.Currency} {x.Price:0}"
+                    price = FormatPublicationPrice(x.Currency, x.Price, x.OperationType, "N0"),
+                    priceTooltip = FormatPublicationPrice(x.Currency, x.Price, x.OperationType, "N0")
                 }))
         };
 
@@ -251,8 +430,9 @@ public class ContentController(
     }
 
     [HttpGet("gallery-items")]
-    public async Task<IActionResult> GalleryItems([FromQuery] string? group = "Inmuebles", [FromQuery] string? query = null, [FromQuery] decimal? priceFrom = null, [FromQuery] decimal? priceTo = null, [FromQuery] int offset = 0, [FromQuery] int limit = 20)
+    public async Task<IActionResult> GalleryItems([FromQuery] string? group = "Inmuebles", [FromQuery] string? query = null, [FromQuery] int? categoryId = null, [FromQuery] decimal? priceFrom = null, [FromQuery] decimal? priceTo = null, [FromQuery] int offset = 0, [FromQuery] int limit = 20)
     {
+        var includeDebug = IsDebugModeEnabled();
         var effectiveLocality = await navigationLocalityService.GetEffectiveLocalityAsync(HttpContext);
         var selectedGroup = ParseGroupFilter(group);
         var safeOffset = Math.Max(0, offset);
@@ -265,21 +445,105 @@ public class ContentController(
             safeLimit + 1,
             effectiveLocality?.Latitude,
             effectiveLocality?.Longitude,
-            filters);
+            filters,
+            includeDebug);
+        var usedExpandedRadius = false;
+        var expandedRadiusTotalResults = 0;
+        var expandedRadiusKm = 0;
+        if (safeOffset == 0 && items.Count == 0 && ShouldLoadExpandedRadiusFallback(filters, 0))
+        {
+            var expandedFilters = CloneFiltersWithRadius(filters, ExpandedSearchRadiusKm);
+            expandedRadiusTotalResults = await publicationService.CountActivePublicationsAsync(
+                selectedGroup,
+                query,
+                effectiveLocality?.Latitude,
+                effectiveLocality?.Longitude,
+                expandedFilters,
+                includeDebug);
+            if (expandedRadiusTotalResults > 0)
+            {
+                items = await publicationService.SearchActivePublicationsPageAsync(
+                    selectedGroup,
+                    query,
+                    safeOffset,
+                    safeLimit + 1,
+                    effectiveLocality?.Latitude,
+                    effectiveLocality?.Longitude,
+                    expandedFilters,
+                    includeDebug);
+                usedExpandedRadius = true;
+                expandedRadiusKm = ExpandedSearchRadiusKm;
+            }
+        }
         var hasMore = items.Count > safeLimit;
         var payloadItems = items.Take(safeLimit).ToList();
         var favoritePublicationIds = currentUserAccessor.UserId is int currentUserId
             ? await favoriteService.GetFavoritePublicationIdsAsync(currentUserId, payloadItems.Select(x => x.Id))
             : [];
         var payload = payloadItems
-            .Select(item => MapGalleryItem(item, favoritePublicationIds.Contains(item.Id)))
+            .Select(item => MapGalleryItem(item, favoritePublicationIds.Contains(item.Id), includeDebug))
             .ToList();
 
         return Ok(new
         {
             items = payload,
             hasMore,
-            nextOffset = safeOffset + payload.Count
+            nextOffset = safeOffset + payload.Count,
+            usedExpandedRadius,
+            expandedRadiusKm,
+            expandedRadiusTotalResults
+        });
+    }
+
+    [HttpGet("map-markers")]
+    public async Task<IActionResult> MapMarkers([FromQuery] string? group = "Inmuebles", [FromQuery] string? query = null, [FromQuery] int? categoryId = null, [FromQuery] decimal? priceFrom = null, [FromQuery] decimal? priceTo = null, [FromQuery] double? north = null, [FromQuery] double? south = null, [FromQuery] double? east = null, [FromQuery] double? west = null)
+    {
+        var includeDebug = IsDebugModeEnabled();
+        var effectiveLocality = await navigationLocalityService.GetEffectiveLocalityAsync(HttpContext);
+        var selectedGroup = ParseGroupFilter(group);
+        var filters = BuildSearchFilters(priceFrom, priceTo, Request.Query);
+        filters.North = north;
+        filters.South = south;
+        filters.East = east;
+        filters.West = west;
+
+        var limitedPublications = await publicationService.SearchActivePublicationsPageAsync(
+            selectedGroup,
+            query,
+            0,
+            MaxMapPublications,
+            effectiveLocality?.Latitude,
+            effectiveLocality?.Longitude,
+            filters,
+            includeDebug);
+        var favoritePublicationIds = currentUserAccessor.UserId is int currentUserId
+            ? await favoriteService.GetFavoritePublicationIdsAsync(currentUserId, limitedPublications.Select(x => x.Id))
+            : [];
+
+        return Ok(new
+        {
+            items = limitedPublications
+                .Where(item => !item.HideFromMap)
+                .Select(item => new
+                {
+                    id = item.Id,
+                    code = item.ToAdCode(),
+                    groupName = item.Group,
+                    videoUrl = item.PrimaryVideoUrl,
+                    title = item.Title,
+                    shortDescription = item.ShortDescription,
+                    locality = item.Locality,
+                    isFavorite = favoritePublicationIds.Contains(item.Id),
+                    image = item.ImageList.FirstOrDefault(),
+                    images = item.ImageList.Take(11).ToList(),
+                    operationLabel = item.OperationType.HasValue ? item.OperationType.Value.ToDisplayName() : null,
+                    categoryLabel = item.Category != null ? item.Category.Name : null,
+                    detailsUrl = BuildPublicationDetailsUrl(item.Id, includeDebug),
+                    lat = item.Latitude,
+                    lng = item.Longitude,
+                    price = FormatPublicationPrice(item.Currency, item.Price, item.OperationType, "N0"),
+                    priceTooltip = FormatPublicationPrice(item.Currency, item.Price, item.OperationType, "N0")
+                })
         });
     }
 
@@ -303,7 +567,7 @@ public class ContentController(
             return Unauthorized(new { message = "Tenes que iniciar sesion para usar favoritos." });
         }
 
-        var result = await favoriteService.GetListContentAsync(userId, listId);
+        var result = await favoriteService.GetListContentAsync(userId, listId, IsDebugModeEnabled());
         if (result is null)
         {
             return NotFound(new { message = "La lista no existe." });
@@ -313,7 +577,7 @@ public class ContentController(
         return Ok(new
         {
             list = summary,
-            items = publications.Select(item => MapGalleryItem(item, true)).ToList()
+            items = publications.Select(item => MapGalleryItem(item, true, IsDebugModeEnabled())).ToList()
         });
     }
 
@@ -399,17 +663,71 @@ public class ContentController(
     [HttpGet("details/{id:int}")]
     public async Task<IActionResult> Details(int id)
     {
+        var includeDebug = IsDebugModeEnabled();
+        var publication = await publicationService.GetByIdAsync(id, includeDebug);
+        var isOwnerPreview = string.Equals(Request.Query["ownerView"], "1", StringComparison.Ordinal);
+
+        if (publication is not null
+            && publication.IsActive
+            && (publication.ExpiresAtUtc is null || publication.ExpiresAtUtc > DateTime.UtcNow)
+            && !isOwnerPreview)
+        {
+            await publicationAnalyticsService.TrackUniqueOpenAsync(
+                publication.Id,
+                publication.UserId,
+                currentUserAccessor.UserId,
+                GetOrCreateAnonymousViewerFingerprint());
+        }
+
+        var advertiserReviews = publication?.UserId is int advertiserUserId
+            ? await reviewService.GetUserSummaryAsync(advertiserUserId, ReviewRoles.Advertiser)
+            : null;
+        var mapLocationLabel = publication is not null
+            && publication.Latitude.HasValue
+            && publication.Longitude.HasValue
+            && !publication.HideFromMap
+            ? await ResolveMapLocationLabelAsync(publication)
+            : null;
         var model = new PublicationDetailsContentViewModel
         {
-            Publication = await publicationService.GetByIdAsync(id),
+            Publication = publication,
             MapStyleUrl = configuration["Map:StyleUrl"] ?? string.Empty,
             MapTilesUrlTemplate = configuration["Map:TilesUrlTemplate"] ?? string.Empty,
             MapAttributionHtml = configuration["Map:AttributionHtml"] ?? string.Empty,
+            MapLocationLabel = mapLocationLabel,
             IsAuthenticated = currentUserAccessor.IsAuthenticated,
-            CurrentUserId = currentUserAccessor.UserId
+            CurrentUserId = currentUserAccessor.UserId,
+            AdvertiserReviews = advertiserReviews
         };
 
         return PartialView("~/Views/Content/Details.cshtml", model);
+    }
+
+    private async Task<string?> ResolveMapLocationLabelAsync(Publication publication)
+    {
+        var localities = await db.ArgentineLocalities
+            .AsNoTracking()
+            .Where(x => x.IsActive)
+            .ToListAsync();
+
+        var nearest = localities
+            .OrderBy(x => Math.Pow(x.Latitude - publication.Latitude!.Value, 2)
+                + Math.Pow(x.Longitude - publication.Longitude!.Value, 2))
+            .FirstOrDefault();
+        var locality = string.IsNullOrWhiteSpace(publication.Locality)
+            ? nearest?.Locality
+            : publication.Locality.Trim();
+        var province = nearest?.Province;
+
+        if (string.IsNullOrWhiteSpace(locality))
+        {
+            return null;
+        }
+
+        var parts = new[] { locality, province }
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        return string.Join(", ", parts);
     }
 
     [HttpGet("create")]
@@ -425,14 +743,14 @@ public class ContentController(
         {
             Group = defaultGroup,
             CategoryId = 0,
-            Currency = "ARS",
+            Currency = "AR$",
             ContactName = user?.Name ?? string.Empty,
             ContactPhone = user?.Phone ?? string.Empty,
             ContactEmail = user?.Email,
             Locality = user?.ArgentineLocality?.Locality ?? string.Empty,
             Address = suggestedLabel,
-            Latitude = user?.ArgentineLocality?.Latitude,
-            Longitude = user?.ArgentineLocality?.Longitude,
+            Latitude = null,
+            Longitude = null,
             NoLocation = false
         };
 
@@ -447,15 +765,20 @@ public class ContentController(
             CurrentUserEmail = user?.Email,
             CurrentUserPhone = user?.Phone,
             SuggestedLocalityLabel = suggestedLabel,
+            SuggestedMapLatitude = user?.ArgentineLocality?.Latitude,
+            SuggestedMapLongitude = user?.ArgentineLocality?.Longitude,
             PublishingBlocked = user is not null && !user.CanPublish,
             PublishingBlockedMessage = user is not null && !user.CanPublish
                 ? "Tu cuenta no puede publicar nuevos anuncios hasta que un administrador revise el anuncio denunciado."
                 : null,
+            IsPaidSiteEnabled = await parameters.GetBoolAsync(VentagramParameterService.PaidSiteEnabled, fallback: false),
             MapStyleUrl = configuration["Map:StyleUrl"] ?? string.Empty,
             MapTilesUrlTemplate = configuration["Map:TilesUrlTemplate"] ?? string.Empty,
             MapAttributionHtml = configuration["Map:AttributionHtml"] ?? string.Empty,
             MapGeocodingSearchUrlTemplate = configuration["Map:GeocodingSearchUrlTemplate"] ?? string.Empty,
-            MapReverseGeocodingUrlTemplate = configuration["Map:ReverseGeocodingUrlTemplate"] ?? string.Empty
+            MapReverseGeocodingUrlTemplate = configuration["Map:ReverseGeocodingUrlTemplate"] ?? string.Empty,
+            SubmitEndpoint = AppendDebugFlag("/api/content/create", IsDebugModeEnabled()),
+            OperationOptions = []
         };
 
         return PartialView("~/Views/Content/Create.cshtml", model);
@@ -497,12 +820,14 @@ public class ContentController(
             ContactName = publication.ContactName,
             ContactPhone = publication.ContactPhone,
             ContactEmail = publication.ContactEmail,
+            Operation = publication.OperationType?.ToDisplayName(),
             Featured = publication.Featured,
             InternalNotes = publication.InternalNotes,
             Latitude = publication.Latitude,
             Longitude = publication.Longitude,
-            NoLocation = !publication.Latitude.HasValue || !publication.Longitude.HasValue,
+            NoLocation = publication.HideFromMap,
             DynamicFields = publication.FieldValues
+                .Where(x => !string.Equals(x.CategoryField?.InternalName, "operacion", StringComparison.OrdinalIgnoreCase))
                 .Select(x => new PublicationDynamicFieldInput
                 {
                     FieldId = x.CategoryFieldId,
@@ -515,6 +840,7 @@ public class ContentController(
 
         var hasTechnicalValues = publication.FieldValues.Any(x =>
             x.CategoryField is not null
+            && !string.Equals(x.CategoryField.InternalName, "operacion", StringComparison.OrdinalIgnoreCase)
             && !(x.CategoryField.ShowInBasicData || x.CategoryField.Required)
             && (x.ValueBoolean.HasValue || x.ValueNumber.HasValue || !string.IsNullOrWhiteSpace(x.ValueText)));
 
@@ -529,6 +855,13 @@ public class ContentController(
             CurrentUserEmail = user.Email,
             CurrentUserPhone = user.Phone,
             SuggestedLocalityLabel = string.IsNullOrWhiteSpace(publication.Locality) ? null : publication.Locality,
+            SuggestedMapLatitude = publication.HideFromMap
+                ? user.ArgentineLocality?.Latitude
+                : publication.Latitude ?? user.ArgentineLocality?.Latitude,
+            SuggestedMapLongitude = publication.HideFromMap
+                ? user.ArgentineLocality?.Longitude
+                : publication.Longitude ?? user.ArgentineLocality?.Longitude,
+            IsPaidSiteEnabled = await parameters.GetBoolAsync(VentagramParameterService.PaidSiteEnabled, fallback: false),
             MapStyleUrl = configuration["Map:StyleUrl"] ?? string.Empty,
             MapTilesUrlTemplate = configuration["Map:TilesUrlTemplate"] ?? string.Empty,
             MapAttributionHtml = configuration["Map:AttributionHtml"] ?? string.Empty,
@@ -538,11 +871,13 @@ public class ContentController(
             FormTitle = "Editar anuncio",
             FormDescription = "Modifica los mismos datos que usas al crear un anuncio, incluyendo imagenes, video, ubicacion y ficha tecnica.",
             SubmitButtonText = "Guardar cambios",
-            CancelUrl = "/MisPublicaciones",
-            SubmitEndpoint = $"/api/content/edit/{publication.Id}",
-            ShowLocationSection = publication.Latitude.HasValue && publication.Longitude.HasValue,
+            CancelUrl = "/MisAnuncios",
+            SubmitEndpoint = AppendDebugFlag($"/api/content/edit/{publication.Id}", IsDebugModeEnabled()),
+            ShowLocationSection = !publication.HideFromMap,
             ShowTechnicalSection = hasTechnicalValues,
+            OperationOptions = await GetOperationOptionsForCategoryAsync(publication.CategoryId),
             InitialDynamicFieldValues = publication.FieldValues
+                .Where(x => !string.Equals(x.CategoryField?.InternalName, "operacion", StringComparison.OrdinalIgnoreCase))
                 .Select(x => new CreatePublicationDynamicFieldValueSeed
                 {
                     InternalName = x.CategoryField?.InternalName ?? string.Empty,
@@ -574,12 +909,7 @@ public class ContentController(
     public async Task<IActionResult> RequiredFilterFields([FromQuery] string? group = null)
     {
         var selectedGroup = ParseGroupFilter(group);
-        if (selectedGroup is null)
-        {
-            return Ok(Array.Empty<object>());
-        }
-
-        var fields = await publicationCategoryFieldService.GetRequiredActiveByGroupAsync(selectedGroup.Value);
+        var fields = await GetRequiredFieldsForSearchGroupAsync(selectedGroup);
         return Ok(fields.Select(x => new
         {
             id = x.Id,
@@ -640,7 +970,9 @@ public class ContentController(
             return Unauthorized(new { message = "Tenes que iniciar sesion para publicar." });
         }
 
-        var user = await db.Users.FirstOrDefaultAsync(x => x.Id == userId);
+        var user = await db.Users
+            .Include(x => x.ArgentineLocality)
+            .FirstOrDefaultAsync(x => x.Id == userId);
         if (user is null)
         {
             return Unauthorized(new { message = "No se encontro el usuario autenticado." });
@@ -654,9 +986,19 @@ public class ContentController(
         request.Currency = NormalizeCurrency(request.Currency);
         if (request.NoLocation)
         {
-            request.Latitude = null;
-            request.Longitude = null;
-            request.Locality = string.Empty;
+            request.Locality = request.Locality.Trim();
+            if (string.IsNullOrWhiteSpace(request.Locality))
+            {
+                request.Locality = user.ArgentineLocality?.Locality?.Trim() ?? string.Empty;
+            }
+            if (!request.Latitude.HasValue)
+            {
+                request.Latitude = user.ArgentineLocality?.Latitude;
+            }
+            if (!request.Longitude.HasValue)
+            {
+                request.Longitude = user.ArgentineLocality?.Longitude;
+            }
             request.Address = null;
         }
         request.ContactName = user.Name;
@@ -666,7 +1008,7 @@ public class ContentController(
         request.VideoUrl = string.IsNullOrWhiteSpace(request.VideoUrl) ? null : request.VideoUrl.Trim();
 
         var category = await publicationCategoryService.GetActiveByIdAsync(request.CategoryId);
-        request.Title = BuildPublicationTitle(category?.Name, request.Locality);
+        request.Title = BuildPublicationTitle(category?.Name, request.Locality, request.Latitude, request.Longitude, request.NoLocation);
 
         var errors = await ValidateCreateRequestAsync(request);
         if (errors.Count > 0)
@@ -679,7 +1021,7 @@ public class ContentController(
         return Ok(new
         {
             message = "Anuncio creado.",
-            redirectUrl = $"/Publications/Details/{result.Publication.Id}"
+            redirectUrl = BuildPublicationDetailsUrl(result.Publication.Id, IsDebugModeEnabled() || user.IsDebugUser)
         });
     }
 
@@ -701,7 +1043,9 @@ public class ContentController(
             return Unauthorized(new { message = "Tenes que iniciar sesion para editar." });
         }
 
-        var user = await db.Users.FirstOrDefaultAsync(x => x.Id == userId);
+        var user = await db.Users
+            .Include(x => x.ArgentineLocality)
+            .FirstOrDefaultAsync(x => x.Id == userId);
         if (user is null)
         {
             return Unauthorized(new { message = "No se encontro el usuario autenticado." });
@@ -716,9 +1060,19 @@ public class ContentController(
         request.Currency = NormalizeCurrency(request.Currency);
         if (request.NoLocation)
         {
-            request.Latitude = null;
-            request.Longitude = null;
-            request.Locality = string.Empty;
+            request.Locality = request.Locality.Trim();
+            if (string.IsNullOrWhiteSpace(request.Locality))
+            {
+                request.Locality = user.ArgentineLocality?.Locality?.Trim() ?? string.Empty;
+            }
+            if (!request.Latitude.HasValue)
+            {
+                request.Latitude = user.ArgentineLocality?.Latitude;
+            }
+            if (!request.Longitude.HasValue)
+            {
+                request.Longitude = user.ArgentineLocality?.Longitude;
+            }
             request.Address = null;
         }
 
@@ -729,7 +1083,7 @@ public class ContentController(
         request.VideoUrl = string.IsNullOrWhiteSpace(request.VideoUrl) ? null : request.VideoUrl.Trim();
 
         var category = await publicationCategoryService.GetActiveByIdAsync(request.CategoryId);
-        request.Title = BuildPublicationTitle(category?.Name, request.Locality);
+        request.Title = BuildPublicationTitle(category?.Name, request.Locality, request.Latitude, request.Longitude, request.NoLocation);
 
         var errors = await ValidateCreateRequestAsync(request);
         if (errors.Count > 0)
@@ -746,12 +1100,14 @@ public class ContentController(
         return Ok(new
         {
             message = "Anuncio actualizado.",
-            redirectUrl = $"/Publications/Details/{id}"
+            redirectUrl = BuildPublicationDetailsUrl(id, IsDebugModeEnabled() || user.IsDebugUser)
         });
     }
 
     [HttpPost("upload-images")]
     [IgnoreAntiforgeryToken]
+    [RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)]
+    [RequestSizeLimit(100 * 1024 * 1024)]
     public async Task<IActionResult> UploadImages([FromForm] List<IFormFile> files)
     {
         if (!currentUserAccessor.IsAuthenticated)
@@ -799,6 +1155,8 @@ public class ContentController(
 
     [HttpPost("upload-video")]
     [IgnoreAntiforgeryToken]
+    [RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)]
+    [RequestSizeLimit(100 * 1024 * 1024)]
     public async Task<IActionResult> UploadVideo([FromForm] IFormFile? file)
     {
         if (!currentUserAccessor.IsAuthenticated)
@@ -831,6 +1189,44 @@ public class ContentController(
         }
     }
 
+    [HttpPost("delete-uploaded-media")]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> DeleteUploadedMedia([FromBody] DeleteUploadedMediaRequest request)
+    {
+        if (!currentUserAccessor.IsAuthenticated)
+        {
+            return Unauthorized(new { message = "Tenes que iniciar sesion para borrar archivos subidos." });
+        }
+
+        var urls = request.Urls
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Select(url => url.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(20)
+            .ToList();
+
+        if (urls.Count == 0)
+        {
+            return BadRequest(new { message = "No se recibieron archivos para borrar." });
+        }
+
+        try
+        {
+            await imageStorageService.DeletePublicObjectsAsync(urls);
+            return Ok(new { deleted = urls.Count });
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogWarning(ex, "DeleteUploadedMedia validation failure for user {UserId}.", currentUserAccessor.UserId);
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "DeleteUploadedMedia unexpected failure for user {UserId}.", currentUserAccessor.UserId);
+            return StatusCode(500, new { message = "No se pudieron borrar los archivos subidos." });
+        }
+    }
+
     private async Task<ApplicationUser?> LoadCurrentUserAsync()
     {
         if (!currentUserAccessor.IsAuthenticated || currentUserAccessor.UserId is not int userId)
@@ -841,6 +1237,32 @@ public class ContentController(
         return await db.Users
             .Include(x => x.ArgentineLocality)
             .FirstOrDefaultAsync(x => x.Id == userId);
+    }
+
+    private string? GetOrCreateAnonymousViewerFingerprint()
+    {
+        var existingValue = Request.Cookies[AnonymousViewerCookieName]?.Trim();
+        if (!string.IsNullOrWhiteSpace(existingValue))
+        {
+            return existingValue[..Math.Min(existingValue.Length, 64)];
+        }
+
+        if (currentUserAccessor.IsAuthenticated)
+        {
+            return null;
+        }
+
+        var newValue = Guid.NewGuid().ToString("N");
+        Response.Cookies.Append(AnonymousViewerCookieName, newValue, new CookieOptions
+        {
+            HttpOnly = true,
+            IsEssential = true,
+            SameSite = SameSiteMode.Lax,
+            Secure = Request.IsHttps,
+            Expires = DateTimeOffset.UtcNow.AddYears(2)
+        });
+
+        return newValue;
     }
 
     private async Task<List<object>> ValidateCreateRequestAsync(CreatePublicationApiRequest request)
@@ -878,6 +1300,7 @@ public class ContentController(
 
         if (request.Price <= 0) AddError("price", "Ingresa un precio mayor a cero.");
         if (string.IsNullOrWhiteSpace(request.Currency)) AddError("currency", "Selecciona la moneda.");
+        if (request.NoLocation && string.IsNullOrWhiteSpace(request.Locality)) AddError("locationSearch", "Completa tu localidad de usuario o marca un punto en el mapa.");
         if (!request.NoLocation && string.IsNullOrWhiteSpace(request.Locality)) AddError("locationSearch", "Indica la ubicacion del anuncio.");
         if (!request.NoLocation && (request.Latitude is null || request.Longitude is null))
         {
@@ -885,7 +1308,10 @@ public class ContentController(
         }
 
         if (string.IsNullOrWhiteSpace(request.ShortDescription)) AddError("shortDescription", "Completa la descripcion corta.");
+        if (request.ShortDescription?.Length > 60) AddError("shortDescription", "La descripción corta debe tener como máximo 60 caracteres, incluidos los espacios.");
         if (string.IsNullOrWhiteSpace(request.LongDescription)) AddError("longDescription", "Completa la descripcion completa.");
+        if (ContainsHyperlink(request.ShortDescription)) AddError("shortDescription", "No se permiten hipervinculos en la descripcion.");
+        if (ContainsHyperlink(request.LongDescription)) AddError("longDescription", "No se permiten hipervinculos en la descripcion.");
         if (string.IsNullOrWhiteSpace(request.ImagesCsv)) AddError("imagesCsv", "Subi al menos una imagen.");
         if (!string.IsNullOrWhiteSpace(request.VideoUrl)
             && !Uri.IsWellFormedUriString(request.VideoUrl, UriKind.Absolute)
@@ -896,6 +1322,21 @@ public class ContentController(
 
         return errors;
     }
+
+    private static bool ContainsHyperlink(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        return HyperlinkPattern().IsMatch(value);
+    }
+
+    [GeneratedRegex(
+        @"(?ix)(https?://|ftp://|mailto:|www\.|\b[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.(?:com\.ar|net\.ar|org\.ar|com|net|org|info|io|app|co|uy|py|br|cl|es|dev|site|online|store|shop|me|ly)\b)",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex HyperlinkPattern();
 
     private static List<object> ModelStateToFieldErrors(ModelStateDictionary modelState)
     {
@@ -948,6 +1389,7 @@ public class ContentController(
             "CategoryId" => "category",
             "Category" => "category",
             "Price" => "price",
+            "Operation" => "operation",
             "Currency" => "currency",
             "Locality" => "locationSearch",
             "Latitude" => "locationSearch",
@@ -963,15 +1405,32 @@ public class ContentController(
 
     private static string NormalizeCurrency(string? currency)
     {
-        return string.Equals(currency, "ARS", StringComparison.OrdinalIgnoreCase) ? "ARS" : "USD";
+        var normalized = string.IsNullOrWhiteSpace(currency)
+            ? string.Empty
+            : currency.Trim().ToUpperInvariant();
+
+        return normalized switch
+        {
+            "ARS" or "AR$" => "AR$",
+            _ => "U$D"
+        };
     }
 
     private static PublicationSearchFilters BuildSearchFilters(decimal? priceFrom, decimal? priceTo, IQueryCollection query)
     {
         var filters = new PublicationSearchFilters
         {
+            Operation = string.IsNullOrWhiteSpace(query["operation"])
+                ? null
+                : query["operation"].ToString().Trim(),
+            CategoryId = int.TryParse(query["categoryId"], out var categoryId) && categoryId > 0 ? categoryId : null,
             PriceFrom = priceFrom is >= 0 ? priceFrom : null,
-            PriceTo = priceTo is >= 0 ? priceTo : null
+            PriceTo = priceTo is >= 0 ? priceTo : null,
+            RadiusKm = NormalizeRadiusKm(query),
+            North = double.TryParse(query["north"], NumberStyles.Float, CultureInfo.InvariantCulture, out var north) ? north : null,
+            South = double.TryParse(query["south"], NumberStyles.Float, CultureInfo.InvariantCulture, out var south) ? south : null,
+            East = double.TryParse(query["east"], NumberStyles.Float, CultureInfo.InvariantCulture, out var east) ? east : null,
+            West = double.TryParse(query["west"], NumberStyles.Float, CultureInfo.InvariantCulture, out var west) ? west : null
         };
 
         var fieldIds = query["filterFieldId"];
@@ -996,6 +1455,51 @@ public class ContentController(
         return filters;
     }
 
+    private static int? NormalizeRadiusKm(IQueryCollection query)
+    {
+        if (!query.ContainsKey("radioKm"))
+        {
+            return DefaultSearchRadiusKm;
+        }
+
+        return int.TryParse(query["radioKm"], out var radiusKm) && radiusKm > 0
+            ? Math.Clamp(radiusKm, 1, 200)
+            : null;
+    }
+
+    private static bool ShouldLoadExpandedRadiusFallback(PublicationSearchFilters filters, int totalResults)
+    {
+        return totalResults == 0
+            && filters.RadiusKm == DefaultSearchRadiusKm
+            && filters.North is null
+            && filters.South is null
+            && filters.East is null
+            && filters.West is null;
+    }
+
+    private static PublicationSearchFilters CloneFiltersWithRadius(PublicationSearchFilters filters, int radiusKm)
+    {
+        return new PublicationSearchFilters
+        {
+            Operation = filters.Operation,
+            CategoryId = filters.CategoryId,
+            PriceFrom = filters.PriceFrom,
+            PriceTo = filters.PriceTo,
+            RadiusKm = radiusKm,
+            North = filters.North,
+            South = filters.South,
+            East = filters.East,
+            West = filters.West,
+            FieldFilters = filters.FieldFilters
+                .Select(x => new PublicationFieldSearchFilter
+                {
+                    FieldId = x.FieldId,
+                    Value = x.Value
+                })
+                .ToList()
+        };
+    }
+
     private static decimal NormalizePriceSliderMax(decimal activeMaxPrice, PublicationSearchFilters filters)
     {
         var effectiveMax = new[]
@@ -1009,7 +1513,7 @@ public class ContentController(
         return Math.Ceiling(effectiveMax / 10000m) * 10000m;
     }
 
-    private static string BuildGalleryApiEndpoint(string group, string? query, PublicationSearchFilters filters)
+    private static string BuildGalleryApiEndpoint(string group, string? query, PublicationSearchFilters filters, bool includeDebug)
     {
         var parts = new List<string>
         {
@@ -1018,7 +1522,48 @@ public class ContentController(
         };
 
         AddFilterQueryParts(parts, filters);
+        if (includeDebug)
+        {
+            parts.Add("debug=1");
+        }
         return $"/api/content/gallery-items?{string.Join("&", parts)}";
+    }
+
+    private static string BuildMapMarkersApiEndpoint(string group, string? query, PublicationSearchFilters filters, bool includeDebug)
+    {
+        var parts = new List<string>
+        {
+            $"group={Uri.EscapeDataString(group)}",
+            $"query={Uri.EscapeDataString(query ?? string.Empty)}"
+        };
+
+        AddFilterQueryParts(parts, filters);
+        if (includeDebug)
+        {
+            parts.Add("debug=1");
+        }
+
+        return $"/api/content/map-markers?{string.Join("&", parts)}";
+    }
+
+    private bool IsDebugModeEnabled()
+    {
+        return string.Equals(Request.Query["debug"], "1", StringComparison.Ordinal);
+    }
+
+    private static string AppendDebugFlag(string url, bool includeDebug)
+    {
+        if (!includeDebug)
+        {
+            return url;
+        }
+
+        return url.Contains('?', StringComparison.Ordinal) ? $"{url}&debug=1" : $"{url}?debug=1";
+    }
+
+    private static string BuildPublicationDetailsUrl(int publicationId, bool includeDebug)
+    {
+        return AppendDebugFlag($"/Publications/Details/{publicationId}", includeDebug);
     }
 
     private async Task<List<PublicationGroupType>> GetBrowseGroupOptionsAsync()
@@ -1042,8 +1587,24 @@ public class ContentController(
         ];
     }
 
+    private async Task<List<PublicationCategoryField>> GetRequiredFieldsForSearchGroupAsync(PublicationGroup? group)
+    {
+        if (group is not null)
+        {
+            return await publicationCategoryFieldService.GetRequiredActiveByGroupAsync(group.Value);
+        }
+
+        var operationField = await publicationCategoryFieldService.GetOperationFilterForAllGroupsAsync();
+        return operationField is null ? [] : [operationField];
+    }
+
     private static void AddFilterQueryParts(List<string> parts, PublicationSearchFilters filters)
     {
+        if (filters.CategoryId is int categoryId && categoryId > 0)
+        {
+            parts.Add($"categoryId={categoryId.ToString(CultureInfo.InvariantCulture)}");
+        }
+
         if (filters.PriceFrom is decimal priceFrom)
         {
             parts.Add($"priceFrom={Uri.EscapeDataString(priceFrom.ToString(CultureInfo.InvariantCulture))}");
@@ -1052,6 +1613,16 @@ public class ContentController(
         if (filters.PriceTo is decimal priceTo)
         {
             parts.Add($"priceTo={Uri.EscapeDataString(priceTo.ToString(CultureInfo.InvariantCulture))}");
+        }
+
+        if (filters.RadiusKm is int radiusKm && radiusKm > 0)
+        {
+            parts.Add($"radioKm={radiusKm.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(filters.Operation))
+        {
+            parts.Add($"operation={Uri.EscapeDataString(filters.Operation)}");
         }
 
         foreach (var filter in filters.FieldFilters)
@@ -1073,12 +1644,28 @@ public class ContentController(
             : optionsCsv.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
-    private static string BuildPublicationTitle(string? categoryName, string? locality)
+    private async Task<List<string>> GetOperationOptionsForCategoryAsync(int categoryId)
+    {
+        if (categoryId <= 0)
+        {
+            return [];
+        }
+
+        var fields = await publicationCategoryFieldService.GetActiveByCategoryIdAsync(categoryId);
+        return fields
+            .Where(x => string.Equals(x.InternalName, "operacion", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(x => SplitCsvOptions(x.OptionsCsv))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string BuildPublicationTitle(string? categoryName, string? locality, double? latitude, double? longitude, bool noLocation)
     {
         var category = categoryName?.Trim();
         var city = locality?.Trim();
+        var hasSelectedMapLocation = !noLocation && latitude.HasValue && longitude.HasValue;
 
-        if (!string.IsNullOrWhiteSpace(category) && !string.IsNullOrWhiteSpace(city))
+        if (!string.IsNullOrWhiteSpace(category) && !string.IsNullOrWhiteSpace(city) && hasSelectedMapLocation)
         {
             return $"{category} en {city}";
         }
@@ -1155,14 +1742,14 @@ public class ContentController(
     private static List<Publication> LimitMapPublications(IEnumerable<Publication> publications, int maxItems)
     {
         return publications
-            .Where(x => x.Latitude.HasValue && x.Longitude.HasValue)
+            .Where(x => x.Latitude.HasValue && x.Longitude.HasValue && !x.HideFromMap)
             .OrderByDescending(x => x.Featured)
             .ThenByDescending(x => x.CreatedAtUtc)
             .Take(Math.Max(1, maxItems))
             .ToList();
     }
 
-    private static object MapGalleryItem(Publication item, bool isFavorite)
+    private static object MapGalleryItem(Publication item, bool isFavorite, bool includeDebug)
     {
         var images = item.ImageList
             .Take(11)
@@ -1173,14 +1760,30 @@ public class ContentController(
         {
             id = item.Id,
             title = item.Title,
-            galleryTitle = item.Title.Split(" - oportunidad", StringSplitOptions.TrimEntries)[0],
+            shortDescription = item.ShortDescription,
             publicationCode = item.ToAdCode(),
-            price = $"{item.Currency} {item.Price:0}",
-            detailsUrl = $"/Publications/Details/{item.Id}",
+            price = FormatPublicationPrice(item.Currency, item.Price, item.OperationType, "N0"),
+            priceTooltip = FormatPublicationPrice(item.Currency, item.Price, item.OperationType, "N0"),
+            operationLabel = item.OperationType?.ToDisplayName(),
+            categoryLabel = item.Category?.Name,
+            detailsUrl = BuildPublicationDetailsUrl(item.Id, includeDebug),
             videoUrl = item.PrimaryVideoUrl,
             images,
             groupName = item.Group.ToDisplayName(),
             isFavorite
         };
+    }
+
+    private static string FormatPublicationPrice(string? currency, decimal price, PublicationOperationType? operationType, string numericFormat)
+    {
+        var displayCurrency = NormalizeCurrency(currency);
+        var period = operationType switch
+        {
+            PublicationOperationType.Alquiler => " / mes",
+            PublicationOperationType.Temporario => " / día",
+            _ => string.Empty
+        };
+
+        return $"{displayCurrency} {price.ToString(numericFormat, CultureInfo.GetCultureInfo("es-AR"))}{period}";
     }
 }
