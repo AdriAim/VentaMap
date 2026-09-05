@@ -249,10 +249,13 @@
                                 <i class="fa-solid fa-star" aria-hidden="true"></i>
                                 <span>Mis favoritos</span>
                             </a>
-                            <a asp-page="/Reviews/Index">
-                                <i class="fa-solid fa-ranking-star" aria-hidden="true"></i>
-                                <span>Mis operaciones y reseñas</span>
-                            </a>
+                            @if (await Parameters.GetBoolAsync(VentagramParameterService.ReviewsEnabled))
+                            {
+                                <a asp-page="/Reviews/Index">
+                                    <i class="fa-solid fa-ranking-star" aria-hidden="true"></i>
+                                    <span>Mis operaciones y reseñas</span>
+                                </a>
+                            }
                             <a asp-page="/Reglas">
                                 <i class="fa-solid fa-book-open" aria-hidden="true"></i>
                                 <span>Reglas de funcionamiento</span>

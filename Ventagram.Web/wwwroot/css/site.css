@@ -2191,7 +2191,13 @@ textarea:focus {
 }
 
 .gallery-card-with-caption::after {
-  display: none;
+  display: block;
+  inset: 0 0 calc(-1 * var(--gallery-caption-height));
+  height: auto;
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  border-radius: 22px;
+  background: none;
+  pointer-events: none;
 }
 
 .listing-card.is-last-clicked .gallery-card-with-caption {
@@ -4802,7 +4808,14 @@ textarea:focus {
 }
 
 .my-publications-view-gallery .publication-admin-media::after {
-  display: none;
+  content: "";
+  display: block;
+  position: absolute;
+  inset: 0 0 calc(-1 * var(--gallery-caption-height));
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  border-radius: 22px;
+  z-index: 3;
+  pointer-events: none;
 }
 
 .my-publications-view-gallery .my-publication-gallery-price {

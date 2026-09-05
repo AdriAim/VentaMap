@@ -147,6 +147,7 @@ else
                      data-my-publication-status="@(publication.IsActive ? "active" : "inactive")"
                      data-my-publication-created-at="@publication.CreatedAtUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture)"
                      data-my-publication-title="@publication.Title"
+                     data-my-publication-short-description="@publication.ShortDescription"
                      data-my-publication-search="@($"{publication.Title} {publication.Category?.Name} {publication.Locality} {publication.ShortDescription}")">
                 <a class="publication-admin-media publication-preview-trigger"
                    href="@ownerPreviewUrl"
@@ -356,8 +357,8 @@ else
             const sortItems = () => {
                 items.sort((left, right) => {
                     if (selectedSort === "alphabetical") {
-                        return String(left.dataset.myPublicationTitle || "").localeCompare(
-                            String(right.dataset.myPublicationTitle || ""),
+                        return (left.dataset.myPublicationShortDescription?.trim() || left.dataset.myPublicationTitle || "").localeCompare(
+                            right.dataset.myPublicationShortDescription?.trim() || right.dataset.myPublicationTitle || "",
                             "es",
                             { sensitivity: "base" });
                     }

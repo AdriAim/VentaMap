@@ -16,6 +16,7 @@ public class SettingsModel(
     CurrentUserAccessor currentUserAccessor,
     CloudflareR2ImageStorageService imageStorageService,
     ArgentineLocalityLookupService localityLookupService,
+    NavigationLocalityService navigationLocalityService,
     PublicationGroupPreferenceService publicationGroupPreferenceService,
     PublicationGroupTypeService publicationGroupTypeService) : PageModel
 {
@@ -71,6 +72,12 @@ public class SettingsModel(
                 .Select(x => x.Locality + ", " + x.Province)
                 .FirstOrDefaultAsync() ?? string.Empty
             : string.Empty;
+        if (!Input.ArgentineLocalityId.HasValue)
+        {
+            var navigationLocality = await navigationLocalityService.GetEffectiveLocalityAsync(HttpContext);
+            Input.ArgentineLocalityId = navigationLocality?.ArgentineLocalityId;
+            Input.ArgentineLocalityLabel = navigationLocality?.DisplayLabel ?? string.Empty;
+        }
         Input.Phone = user.Phone;
         Input.PhoneCountry = user.Phone.StartsWith("+54 9 ", StringComparison.Ordinal) ? "AR" : "INT";
         Input.PublishEmail = user.RespondsEmails;
@@ -78,7 +85,8 @@ public class SettingsModel(
         Input.RespondsWhatsApp = user.RespondsWhatsApp;
         Input.AllowSiteChat = user.AllowsSiteChat;
         Input.CompanyTagline = user.CompanyTagline ?? string.Empty;
-        Input.HeaderPublicationGroups = PublicationGroupPreferenceService.NormalizeGroupNames(user.HeaderPublicationGroupsCsv);
+        Input.HeaderPublicationGroups = (await publicationGroupPreferenceService.GetHeaderGroupsAsync(HttpContext))
+            .Select(x => x.Name).ToList();
         LoadCompanyState(user);
         return Page();
     }
@@ -168,11 +176,12 @@ public class SettingsModel(
         user.HeaderPublicationGroupsCsv = await publicationGroupPreferenceService.NormalizeGroupNamesCsvAsync(Input.HeaderPublicationGroups);
         if (user.IsCompany)
         {
-            user.CompanyTagline = Input.CompanyTagline.Trim();
+            user.CompanyTagline = Input.CompanyTagline?.Trim();
             user.CompanyLogoUrl = string.IsNullOrWhiteSpace(uploadedLogoUrl) ? null : uploadedLogoUrl.Trim();
             user.CompanyHeroBackgroundUrl = string.IsNullOrWhiteSpace(uploadedHeroBackgroundUrl) ? null : uploadedHeroBackgroundUrl.Trim();
         }
         await db.SaveChangesAsync();
+        Response.Cookies.Delete(NavigationLocalityService.CookieName);
 
         var obsoleteAssets = new List<string>();
         if (!string.IsNullOrWhiteSpace(previousLogoUrl)
@@ -208,6 +217,9 @@ public class SettingsModel(
             Input.ArgentineLocalityId = locality.Id;
             Input.ArgentineLocalityLabel = $"{locality.Locality}, {locality.Province}";
             Input.SelectedExternalLocalityId = string.Empty;
+            ModelState.Remove($"{nameof(Input)}.{nameof(InputModel.ArgentineLocalityId)}");
+            ModelState.Remove($"{nameof(Input)}.{nameof(InputModel.ArgentineLocalityLabel)}");
+            ModelState.Remove($"{nameof(Input)}.{nameof(InputModel.SelectedExternalLocalityId)}");
             return true;
         }
         catch (InvalidOperationException ex)
@@ -274,7 +286,7 @@ public class SettingsModel(
 
         public string ArgentineLocalityLabel { get; set; } = string.Empty;
 
-        public string SelectedExternalLocalityId { get; set; } = string.Empty;
+        public string? SelectedExternalLocalityId { get; set; }
 
         [Required(ErrorMessage = "Ingresa tu telefono.")]
         public string Phone { get; set; } = string.Empty;
@@ -293,6 +305,6 @@ public class SettingsModel(
         public List<string> HeaderPublicationGroups { get; set; } = [];
 
         [StringLength(180)]
-        public string CompanyTagline { get; set; } = string.Empty;
+        public string? CompanyTagline { get; set; }
     }
 }

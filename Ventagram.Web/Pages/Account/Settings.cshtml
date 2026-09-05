@@ -17,7 +17,7 @@
     }
 
     <form method="post" enctype="multipart/form-data" class="stack-form">
-        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+        <div asp-validation-summary="All" class="text-danger"></div>
 
         <label>
             <span>Localidad de residencia</span>
@@ -29,12 +29,12 @@
                 <input type="hidden" asp-for="Input.SelectedExternalLocalityId" data-locality-external-id />
                 <input type="text"
                        asp-for="Input.ArgentineLocalityLabel"
-                       list="settings-locality-options"
                        placeholder="Buscar tu localidad"
                        aria-label="Buscar tu localidad"
                        autocomplete="off"
                        data-locality-input />
                 <datalist id="settings-locality-options" data-locality-suggestions></datalist>
+                <div class="guest-locality-suggestions" data-locality-suggestions-list hidden></div>
                 <button type="button" class="ghost-pill compact" data-detect-locality>Detectar</button>
             </div>
             <span class="field-hint" data-register-locality-status data-account-locality-status></span>

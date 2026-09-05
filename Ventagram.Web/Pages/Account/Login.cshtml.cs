@@ -20,6 +20,12 @@ public class LoginModel(AuthService authService, IConfiguration configuration) :
     {
     }
 
+    public IActionResult OnGetSession()
+    {
+        Response.Headers.CacheControl = "no-store";
+        return new JsonResult(new { isAuthenticated = User.Identity?.IsAuthenticated ?? false });
+    }
+
     public async Task<IActionResult> OnPostAsync()
     {
         if (!ModelState.IsValid)

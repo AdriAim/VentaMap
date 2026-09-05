@@ -463,8 +463,20 @@
     });
 
     if (response.status === 401) {
-      redirectToLogin();
-      throw new Error("Sesion vencida.");
+      const sessionResponse = await fetch("/Account/Login?handler=Session", {
+        headers: { "X-Requested-With": "fetch" },
+        credentials: "same-origin",
+        cache: "no-store"
+      });
+      if (!sessionResponse.ok) {
+        throw new Error("No pudimos verificar tu sesión. Recargá la página para volver a intentar.");
+      }
+      const session = await sessionResponse.json();
+      if (session.isAuthenticated === false) {
+        redirectToLogin();
+        throw new Error("Sesión vencida. Ingresá nuevamente.");
+      }
+      throw new Error("El servicio de mensajes no pudo reconocer tu sesión. Intentá cerrar sesión y volver a ingresar. Si continúa, comunicate con soporte.");
     }
 
     if (!response.ok) {

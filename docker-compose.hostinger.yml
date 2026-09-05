@@ -51,7 +51,8 @@ services:
       Authentication__SharedApplicationName: Ventagram
       Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID}
       Authentication__Google__ClientSecret: ${GOOGLE_CLIENT_SECRET}
-      Chat__BaseUrl: ${VENTAGRAM_WEB_BASE_URL:-https://ventagram.com.ar}
+      # Use the current browser origin; Traefik routes /api/chat and /hubs/chat.
+      Chat__BaseUrl: ""
       Email__SmtpHost: ${SMTP_HOST}
       Email__SmtpPort: ${SMTP_PORT:-587}
       Email__SmtpUser: ${SMTP_USER}
