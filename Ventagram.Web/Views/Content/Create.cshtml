@@ -50,6 +50,7 @@
 
         <div id="create-feedback"></div>
 
+        <div class="create-editor-layout">
         <form id="createPublicationForm"
               class="stack-form create-form"
               autocomplete="off"
@@ -141,7 +142,7 @@
                     <label class="wide" data-field-container="shortDescription">
                         <span>Descripción corta</span>
                         <input name="shortDescription" value="@Model.Input.ShortDescription" maxlength="60" aria-describedby="short-description-hint short-description-count" placeholder="Resumen breve para el listado" />
-                        <span class="field-hint" id="short-description-hint">Se muestra sobre la foto del anuncio, en hasta dos líneas. Máximo 60 caracteres, incluidos los espacios. Si no entra completa, se verá con puntos suspensivos.</span>
+                        <span class="field-hint" id="short-description-hint">Se muestra debajo de la foto del anuncio, en hasta dos líneas. Máximo 60 caracteres, incluidos los espacios. Si no entra completa, se verá con puntos suspensivos.</span>
                         <span class="field-hint" id="short-description-count" data-short-description-count></span>
                         <span class="field-hint create-description-example" data-description-example="short"></span>
                         <span class="field-error" data-field-error="shortDescription"></span>
@@ -369,5 +370,19 @@
                 <a class="ghost-pill" href="@Model.CancelUrl">Cancelar</a>
             </div>
         </form>
+        <aside class="create-live-preview" aria-label="Vista previa del anuncio">
+            <h2>Así se verá tu anuncio</h2>
+            <p class="field-hint">La vista previa cambia a medida que completás los datos.</p>
+            <article class="listing-card listing-card-compact">
+                <div class="card-image-wrap gallery-card-with-caption">
+                    <div class="create-preview-media" data-create-preview-media></div>
+                    <span class="gallery-price-cluster">
+                        <span class="gallery-badge gallery-tooltip-trigger gallery-tooltip-bottom" data-create-preview-price></span>
+                    </span>
+                    <span class="gallery-card-caption gallery-description-tooltip gallery-tooltip-trigger" data-create-preview-description tabindex="0"><span></span></span>
+                </div>
+            </article>
+        </aside>
+        </div>
     }
 </section>

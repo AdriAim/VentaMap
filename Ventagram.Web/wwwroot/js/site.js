@@ -5154,6 +5154,7 @@
     if (!form || form.dataset.bound === "true") return;
 
     form.dataset.bound = "true";
+    wireCreateLivePreview(form);
     syncCreateTitle(form);
     syncCreateDescriptionExamples(form);
     wireCreateDescriptionHyperlinkGuards(form);
@@ -7169,6 +7170,100 @@
     const minCardWidth = 220;
     const availableWidth = rail.clientWidth || rail.parentElement?.clientWidth || window.innerWidth;
     return Math.max(1, Math.floor((availableWidth + gap) / (minCardWidth + gap)));
+  }
+
+  function wireCreateLivePreview(form) {
+    const preview = form.closest(".create-editor-layout")?.querySelector(".create-live-preview");
+    if (!preview) return;
+    const media = preview.querySelector("[data-create-preview-media]");
+    const price = preview.querySelector("[data-create-preview-price]");
+    const description = preview.querySelector("[data-create-preview-description]");
+    const value = name => String(form.elements.namedItem(name)?.value || "").trim();
+    let mediaKey = "";
+    let frame = 0;
+    const update = () => {
+      const title = value("title");
+      const shortDescription = value("shortDescription");
+      description.firstElementChild.textContent = shortDescription || "Completa descripción corta";
+      description.dataset.tooltipLabel = [title, shortDescription].filter(Boolean).join("\n");
+      const operation = value("operation");
+      const amount = value("price");
+      const period = operation === "Alquiler" ? " / mes" : operation === "Temporario" ? " / día" : "";
+      const formattedPrice = amount && Number.isFinite(Number(amount))
+        ? `${value("currency")} ${Number(amount).toLocaleString("es-AR", { maximumFractionDigits: 2 })}${period}`
+        : "Precio a completar";
+      price.replaceChildren();
+      if (operation) {
+        const letter = document.createElement("strong");
+        letter.className = "gallery-operation-letter";
+        letter.textContent = operation.charAt(0).toUpperCase();
+        price.append(letter);
+      }
+      price.append(document.createTextNode(formattedPrice));
+      const category = form.querySelector("[data-category-select]")?.selectedOptions[0]?.textContent?.trim();
+      price.dataset.tooltipLabel = [operation, category, formattedPrice].filter(Boolean).join(" · ");
+      const videoUrl = form.querySelector("[data-video-previews] video")?.getAttribute("src") || value("videoUrl");
+      const imageUrl = form.querySelector("[data-image-previews] img")?.getAttribute("src") || value("imagesCsv").split(",").filter(Boolean)[0];
+      const nextKey = videoUrl ? `video:${videoUrl}` : imageUrl ? `image:${imageUrl}` : "empty";
+      if (nextKey !== mediaKey) {
+        mediaKey = nextKey;
+        media.querySelector("video")?.pause();
+        media.replaceChildren();
+        if (videoUrl || imageUrl) {
+          const element = document.createElement(videoUrl ? "video" : "img");
+          element.src = videoUrl || imageUrl;
+          if (videoUrl) {
+            element.muted = true;
+            element.playsInline = true;
+            element.className = "gallery-carousel-video";
+            element.controls = false;
+            element.preload = "metadata";
+          } else {
+            element.alt = "Portada del anuncio";
+          }
+          media.append(element);
+          if (videoUrl) {
+            const card = media.closest(".card-image-wrap");
+            const playButton = document.createElement("button");
+            playButton.type = "button";
+            playButton.className = "gallery-play-toggle gallery-tooltip-trigger gallery-tooltip-top";
+            playButton.dataset.galleryPlayToggle = "true";
+            playButton.dataset.bound = "true";
+            const audioButton = document.createElement("button");
+            audioButton.type = "button";
+            audioButton.className = "gallery-audio-toggle gallery-tooltip-trigger gallery-tooltip-side";
+            audioButton.dataset.galleryAudioToggle = "true";
+            audioButton.dataset.bound = "true";
+            playButton.addEventListener("click", event => {
+              event.preventDefault();
+              event.stopPropagation();
+              toggleGalleryVideoPlayback(card);
+            });
+            audioButton.addEventListener("click", event => {
+              event.preventDefault();
+              event.stopPropagation();
+              toggleGalleryVideoAudio(card);
+            });
+            media.append(playButton, audioButton);
+            bindGalleryVideoState(element);
+            element.addEventListener("volumechange", () => syncGalleryVideoAudioButton(card));
+            syncGalleryVideoVisualState(card);
+            syncGalleryVideoAudioButton(card);
+          }
+        } else {
+          media.textContent = "Tu foto o video de portada aparecerá acá";
+        }
+      }
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(update);
+    };
+    form.addEventListener("input", schedule);
+    form.addEventListener("change", schedule);
+    form.addEventListener("create:video-state-changed", schedule);
+    new MutationObserver(schedule).observe(form, { childList: true, subtree: true });
+    schedule();
   }
 
   function getGalleryDescription(item) {
