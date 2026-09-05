@@ -853,7 +853,7 @@ else
                 });
 
                 applyFilter();
-                setView("list");
+                setView(window.matchMedia("(max-width: 780px)").matches ? "gallery" : "list");
             })();
         </script>
     }

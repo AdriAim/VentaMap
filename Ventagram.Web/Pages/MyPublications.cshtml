@@ -58,6 +58,14 @@
                 <button type="button" data-my-publications-status="active" aria-pressed="false">Activos</button>
                 <button type="button" data-my-publications-status="inactive" aria-pressed="false">De baja</button>
             </div>
+            <label class="my-publications-sort">
+                <span>Ordenar</span>
+                <select data-my-publications-sort aria-label="Ordenar anuncios">
+                    <option value="alphabetical">Alfabético</option>
+                    <option value="date-asc" selected>Fecha publicación ascendente</option>
+                    <option value="date-desc">Fecha publicación descendente</option>
+                </select>
+            </label>
             <div class="company-catalog-view-switch" role="group" aria-label="Modo de visualizacion">
                 <button type="button" class="is-active" data-my-publications-view="list" aria-pressed="true">
                     <i class="fa-solid fa-list" aria-hidden="true"></i>
@@ -137,6 +145,8 @@ else
             <article class="publication-admin-card"
                      data-my-publication-item="true"
                      data-my-publication-status="@(publication.IsActive ? "active" : "inactive")"
+                     data-my-publication-created-at="@publication.CreatedAtUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture)"
+                     data-my-publication-title="@publication.Title"
                      data-my-publication-search="@($"{publication.Title} {publication.Category?.Name} {publication.Locality} {publication.ShortDescription}")">
                 <a class="publication-admin-media publication-preview-trigger"
                    href="@ownerPreviewUrl"
@@ -294,6 +304,7 @@ else
 
             const searchInput = toolbar.querySelector("[data-my-publications-search]");
             const statusButtons = Array.from(toolbar.querySelectorAll("[data-my-publications-status]"));
+            const sortSelect = toolbar.querySelector("[data-my-publications-sort]");
             const viewButtons = Array.from(toolbar.querySelectorAll("[data-my-publications-view]"));
             const countNode = toolbar.querySelector("[data-my-publications-count]");
             const emptyState = document.querySelector("[data-my-publications-empty='true']");
@@ -302,6 +313,7 @@ else
             const allowedViews = new Set(["list", "gallery"]);
             let selectedStatus = "all";
             let selectedView = "list";
+            let selectedSort = "date-asc";
 
             const separators = document.createElement("div");
             separators.className = "my-publications-row-separators";
@@ -340,6 +352,22 @@ else
                 .replace(/[\u0300-\u036f]/g, "")
                 .toLowerCase()
                 .trim();
+
+            const sortItems = () => {
+                items.sort((left, right) => {
+                    if (selectedSort === "alphabetical") {
+                        return String(left.dataset.myPublicationTitle || "").localeCompare(
+                            String(right.dataset.myPublicationTitle || ""),
+                            "es",
+                            { sensitivity: "base" });
+                    }
+
+                    const leftDate = Date.parse(left.dataset.myPublicationCreatedAt || "") || 0;
+                    const rightDate = Date.parse(right.dataset.myPublicationCreatedAt || "") || 0;
+                    return selectedSort === "date-desc" ? rightDate - leftDate : leftDate - rightDate;
+                });
+                results.append(...items, separators);
+            };
 
             const applyFilters = () => {
                 const query = normalize(searchInput?.value);
@@ -384,6 +412,10 @@ else
                 selectedView = "list";
             }
 
+            if (window.matchMedia("(max-width: 780px)").matches) {
+                selectedView = "gallery";
+            }
+
             viewButtons.forEach(button => {
                 button.addEventListener("click", () => {
                     const nextView = button.dataset.myPublicationsView || "list";
@@ -398,6 +430,11 @@ else
             });
 
             searchInput?.addEventListener("input", applyFilters);
+            sortSelect?.addEventListener("change", () => {
+                selectedSort = sortSelect.value || "date-asc";
+                sortItems();
+                applyFilters();
+            });
             statusButtons.forEach(button => {
                 button.addEventListener("click", () => {
                     selectedStatus = button.dataset.myPublicationsStatus || "all";
@@ -410,6 +447,7 @@ else
                 });
             });
 
+            sortItems();
             applyView();
             applyFilters();
 

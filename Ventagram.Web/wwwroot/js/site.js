@@ -329,6 +329,12 @@
   }
 
   function getPublicationOpenMode() {
+    const visibleControl = Array.from(document.querySelectorAll("[data-publication-open-mode]"))
+      .find(control => control instanceof HTMLSelectElement && control.offsetParent !== null);
+    if (visibleControl) {
+      return normalizePublicationOpenMode(visibleControl.value);
+    }
+
     try {
       return normalizePublicationOpenMode(localStorage.getItem(publicationOpenModeStorageKey));
     } catch {
@@ -7184,8 +7190,13 @@
     const update = () => {
       const title = value("title");
       const shortDescription = value("shortDescription");
-      description.firstElementChild.textContent = shortDescription || "Completa descripción corta";
-      description.dataset.tooltipLabel = [title, shortDescription].filter(Boolean).join("\n");
+      const categorySelect = form.querySelector("[data-category-select]");
+      const category = categorySelect?.value
+        ? String(categorySelect.selectedOptions[0]?.textContent || "").trim()
+        : "";
+      const previewDescription = shortDescription || "Completa descripción corta";
+      description.firstElementChild.textContent = previewDescription;
+      description.dataset.tooltipLabel = [category ? title : "", previewDescription].filter(Boolean).join("\n");
       const operation = value("operation");
       const amount = value("price");
       const period = operation === "Alquiler" ? " / mes" : operation === "Temporario" ? " / día" : "";
@@ -7200,7 +7211,6 @@
         price.append(letter);
       }
       price.append(document.createTextNode(formattedPrice));
-      const category = form.querySelector("[data-category-select]")?.selectedOptions[0]?.textContent?.trim();
       price.dataset.tooltipLabel = [operation, category, formattedPrice].filter(Boolean).join(" · ");
       const videoUrl = form.querySelector("[data-video-previews] video")?.getAttribute("src") || value("videoUrl");
       const imageUrl = form.querySelector("[data-image-previews] img")?.getAttribute("src") || value("imagesCsv").split(",").filter(Boolean)[0];
