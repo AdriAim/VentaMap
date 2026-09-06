@@ -10,5 +10,6 @@ public class ApplicationUser
     public bool AcceptsCalls { get; set; }
     public bool RespondsWhatsApp { get; set; }
     public bool AllowsSiteChat { get; set; }
+    public string MessageBubbleColor { get; set; } = "rose";
     public bool IsDebugUser { get; set; }
 }

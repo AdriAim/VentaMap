@@ -84,6 +84,7 @@ public class SettingsModel(
         Input.AcceptsCalls = user.AcceptsCalls;
         Input.RespondsWhatsApp = user.RespondsWhatsApp;
         Input.AllowSiteChat = user.AllowsSiteChat;
+        Input.MessageBubbleColor = NormalizeMessageBubbleColor(user.MessageBubbleColor);
         Input.CompanyTagline = user.CompanyTagline ?? string.Empty;
         Input.HeaderPublicationGroups = (await publicationGroupPreferenceService.GetHeaderGroupsAsync(HttpContext))
             .Select(x => x.Name).ToList();
@@ -172,6 +173,7 @@ public class SettingsModel(
         user.AcceptsCalls = Input.AcceptsCalls;
         user.RespondsWhatsApp = Input.RespondsWhatsApp;
         user.AllowsSiteChat = Input.AllowSiteChat;
+        user.MessageBubbleColor = NormalizeMessageBubbleColor(Input.MessageBubbleColor);
         user.ContactPreference = BuildContactPreference(user.RespondsEmails, user.AcceptsCalls, user.RespondsWhatsApp, user.AllowsSiteChat);
         user.HeaderPublicationGroupsCsv = await publicationGroupPreferenceService.NormalizeGroupNamesCsvAsync(Input.HeaderPublicationGroups);
         if (user.IsCompany)
@@ -270,6 +272,11 @@ public class SettingsModel(
         return digits.Length == 10 ? $"+54 9 {digits}" : trimmed;
     }
 
+    private static string NormalizeMessageBubbleColor(string? color)
+    {
+        return string.Equals(color, "blue", StringComparison.OrdinalIgnoreCase) ? "blue" : "rose";
+    }
+
     private static string BuildContactPreference(bool publishEmail, bool publishPhone, bool publishWhatsApp, bool allowSiteChat)
     {
         var preferences = new List<string>();
@@ -301,6 +308,8 @@ public class SettingsModel(
         public bool RespondsWhatsApp { get; set; }
 
         public bool AllowSiteChat { get; set; } = true;
+
+        public string MessageBubbleColor { get; set; } = "rose";
 
         public List<string> HeaderPublicationGroups { get; set; } = [];
 

@@ -494,12 +494,15 @@ public class PublicationService(
             if (!string.IsNullOrWhiteSpace(email))
             {
                 var subject = "Tu anuncio venció en Ventagram";
+                var publicationLabel = string.IsNullOrWhiteSpace(publication.ShortDescription)
+                    ? publication.Title
+                    : publication.ShortDescription.Trim();
                 var html = $"""
-                    <p>Tu anuncio <strong>{publication.Title}</strong> finalizó luego de 30 días de estar activo.</p>
+                    <p>Tu anuncio <strong>{System.Net.WebUtility.HtmlEncode(publicationLabel)}</strong> finalizó luego de 30 días de estar activo.</p>
                     <p>Si quieres republicarla, debes ingresar a <strong>Mis anuncios</strong> dentro de tu usuario y usar la opción de republicar.</p>
                     """;
                 var text = $"""
-                    Tu anuncio "{publication.Title}" finalizó luego de 30 días de estar activo.
+                    Tu anuncio "{publicationLabel}" finalizó luego de 30 días de estar activo.
 
                     Si quieres republicarla, debes ingresar a Mis anuncios dentro de tu usuario y usar la opción de republicar.
                     """;

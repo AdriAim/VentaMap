@@ -5,6 +5,7 @@ Regla operativa vigente al 19 de agosto de 2026:
 - Hostinger se actualiza siempre desde el estado local actual.
 - No depender de `git pull` ni del remoto para publicar cambios.
 - El stack activo en el VPS vive en `/root/ventagram-local`.
+- Si `Ventagram.ChatService` no tiene cambios, no incluirlo en el paquete ni reconstruir o desplegar el servicio de chat. Publicar únicamente `Ventagram.Web` y los archivos de infraestructura que hayan cambiado.
 
 ## Flujo real de deploy
 

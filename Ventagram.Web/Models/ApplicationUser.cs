@@ -59,6 +59,9 @@ public class ApplicationUser
     [StringLength(120)]
     public string? HeaderPublicationGroupsCsv { get; set; }
 
+    [StringLength(12)]
+    public string MessageBubbleColor { get; set; } = "rose";
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
     public bool IsAdmin { get; set; }

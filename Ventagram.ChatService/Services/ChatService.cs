@@ -70,6 +70,11 @@ public class ChatAppService(ChatDbContext db, VentagramLookupDbContext lookupDb,
     public async Task<ChatPageContentViewModel> GetPageAsync(int userId, int? conversationId)
     {
         var inbox = await LoadInboxAsync(userId);
+        var currentUserMessageColor = await lookupDb.Users
+            .AsNoTracking()
+            .Where(x => x.Id == userId)
+            .Select(x => x.MessageBubbleColor)
+            .FirstOrDefaultAsync();
         ChatConversationViewModel? selectedConversation = null;
 
         if (conversationId is int currentConversationId)
@@ -80,6 +85,7 @@ public class ChatAppService(ChatDbContext db, VentagramLookupDbContext lookupDb,
         return new ChatPageContentViewModel
         {
             CurrentUserId = userId,
+            CurrentUserMessageColor = string.Equals(currentUserMessageColor, "blue", StringComparison.OrdinalIgnoreCase) ? "blue" : "rose",
             Inbox = inbox,
             SelectedConversation = selectedConversation
         };
@@ -274,7 +280,7 @@ public class ChatAppService(ChatDbContext db, VentagramLookupDbContext lookupDb,
                 {
                     ConversationId = x.Id,
                     PublicationId = x.PublicationId,
-                    PublicationTitle = publication?.Title ?? "Publicacion",
+                    PublicationTitle = GetPublicationDisplayText(publication),
                     PublicationPrice = publication is null ? string.Empty : $"{publication.Currency} {publication.Price:0}",
                     PublicationLocality = publication?.Locality ?? string.Empty,
                     PublicationImageUrl = publication?.MediaItems
@@ -326,7 +332,7 @@ public class ChatAppService(ChatDbContext db, VentagramLookupDbContext lookupDb,
         {
             ConversationId = conversation.Id,
             PublicationId = publication?.Id ?? conversation.PublicationId,
-            PublicationTitle = publication?.Title ?? "Publicacion",
+            PublicationTitle = GetPublicationDisplayText(publication),
             PublicationPrice = publication is null ? string.Empty : $"{publication.Currency} {publication.Price:0}",
             PublicationLocality = publication?.Locality ?? string.Empty,
             PublicationImageUrl = publication?.MediaItems
@@ -355,6 +361,13 @@ public class ChatAppService(ChatDbContext db, VentagramLookupDbContext lookupDb,
                 })
                 .ToList()
         };
+    }
+
+    private static string GetPublicationDisplayText(Publication? publication)
+    {
+        return string.IsNullOrWhiteSpace(publication?.ShortDescription)
+            ? publication?.Title ?? "Publicacion"
+            : publication.ShortDescription.Trim();
     }
 
     private static string NormalizeBody(string? body)

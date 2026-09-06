@@ -258,7 +258,7 @@ else
                                        class="publication-preview-trigger"
                                        data-publication-id="@publication.Id"
                                        data-details-url="/api/content/details/@publication.Id@debugSuffix">
-                                        @publication.Title
+                                        @(string.IsNullOrWhiteSpace(publication.ShortDescription) ? publication.Title : publication.ShortDescription)
                                     </a>
                                 </h3>
                             </div>
@@ -274,7 +274,6 @@ else
                             </button>
                         </div>
                         <p class="publication-admin-price">@publication.Currency @publication.Price.ToString("0")</p>
-                        <p>@publication.ShortDescription</p>
                         <div class="publication-admin-meta">
                             <span>@(string.IsNullOrWhiteSpace(publication.Locality) ? "Sin ubicacion publica" : publication.Locality)</span>
                             <span>Publicado: @publication.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy")</span>

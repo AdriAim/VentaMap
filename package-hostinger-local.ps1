@@ -1,5 +1,6 @@
 param(
-    [string]$OutputName
+    [string]$OutputName,
+    [switch]$SkipChatService
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,12 +19,15 @@ New-Item -ItemType Directory -Path $stage | Out-Null
 
 $items = @(
     "Ventagram.Web",
-    "Ventagram.ChatService",
     "docker-compose.hostinger.yml",
     ".env.hostinger.example",
     "README.md",
     "DEPLOY_HOSTINGER.md"
 )
+
+if (-not $SkipChatService) {
+    $items += "Ventagram.ChatService"
+}
 
 foreach ($item in $items) {
     $source = Join-Path $root $item

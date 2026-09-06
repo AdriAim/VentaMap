@@ -69,6 +69,10 @@ public class VentagramDbContext(DbContextOptions<VentagramDbContext> options) : 
             .Property(x => x.CompanyHeroBackgroundUrl)
             .HasMaxLength(260);
 
+        modelBuilder.Entity<ApplicationUser>()
+            .Property(x => x.MessageBubbleColor)
+            .HasDefaultValue("rose");
+
         modelBuilder.Entity<ArgentineLocality>()
             .HasIndex(x => new { x.Province, x.Locality })
             .IsUnique();

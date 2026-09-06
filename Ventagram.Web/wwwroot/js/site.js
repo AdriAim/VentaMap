@@ -7935,7 +7935,10 @@
           throw new Error(payload?.message || "No se pudo abrir el chat.");
         }
 
-        window.location.href = payload.redirectUrl || "/Mensajes";
+        const conversationId = Number(payload?.conversationId || 0);
+        window.location.href = conversationId > 0
+          ? `/Mensajes/${conversationId}`
+          : "/Mensajes";
       } catch (error) {
         const fallbackMessage = buildChatNetworkErrorMessage(url, error);
         window.alert(error?.message && error.message !== "Failed to fetch" ? error.message : fallbackMessage);

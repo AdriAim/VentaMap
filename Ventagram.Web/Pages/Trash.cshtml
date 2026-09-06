@@ -45,8 +45,7 @@
                 <article class="classified-row">
                     <div>
                         <span class="card-meta">@publication.Group · @(publication.Category?.Name ?? "Sin categoría") · @publication.Locality</span>
-                        <h3><a href="/Publications/Details/@publication.Id">@publication.Title</a></h3>
-                        <p>@publication.ShortDescription</p>
+                        <h3><a href="/Publications/Details/@publication.Id">@(string.IsNullOrWhiteSpace(publication.ShortDescription) ? publication.Title : publication.ShortDescription)</a></h3>
                         <p><strong>Publicante:</strong> @ownerName · @ownerEmail</p>
                         <div class="trash-tags">
                             @foreach (var reason in publication.Reports
@@ -109,8 +108,7 @@
                 <article class="classified-row">
                     <div>
                         <span class="card-meta">@publication.Group · @(publication.Category?.Name ?? "Sin categoría") · @publication.Locality</span>
-                        <h3><a href="/Publications/Details/@publication.Id">@publication.Title</a></h3>
-                        <p>@publication.ShortDescription</p>
+                        <h3><a href="/Publications/Details/@publication.Id">@(string.IsNullOrWhiteSpace(publication.ShortDescription) ? publication.Title : publication.ShortDescription)</a></h3>
                         <p><strong>Usuario:</strong> @item.OwnerName</p>
                         <p><strong>Mail para responder:</strong> <a href="mailto:@item.OwnerEmail">@item.OwnerEmail</a></p>
                         <p><strong>Motivo de baja:</strong> @publication.DeactivationReason</p>

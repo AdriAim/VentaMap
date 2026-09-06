@@ -4386,6 +4386,15 @@ textarea:focus {
   line-height: 1.1;
 }
 
+.company-catalog-list .publication-admin-head h3,
+.my-publications-view-list .publication-admin-head h3 {
+  font-family: var(--ui-sans);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
 .publication-admin-favorite {
   flex: 0 0 auto;
   align-self: flex-start;
@@ -5398,6 +5407,49 @@ textarea:focus {
 
 .header-group-preferences > span:first-child {
   font-weight: 800;
+}
+
+.message-color-preferences {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.message-color-preferences legend {
+  margin-bottom: 0.25rem;
+  font-weight: 800;
+}
+
+.message-color-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.65rem;
+}
+
+.message-color-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(49, 70, 101, 0.14);
+  border-radius: 14px;
+  cursor: pointer;
+}
+
+.message-color-swatch {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+}
+
+.message-color-swatch.is-blue {
+  background: #b9dcf7;
+}
+
+.message-color-swatch.is-rose {
+  background: #ffd0d7;
 }
 
 .header-group-options .compact-check {
@@ -6618,10 +6670,16 @@ textarea.input-validation-error,
 }
 
 .chat-message.is-mine .chat-message-bubble {
-  background: linear-gradient(135deg, rgba(255, 75, 95, 0.94), rgba(227, 55, 78, 0.96));
-  color: white;
+  background: linear-gradient(135deg, #ffe5e8, #ffd0d7);
+  color: #7d2638;
   border-radius: 22px 22px 8px 22px;
-  border-color: rgba(227, 55, 78, 0.2);
+  border-color: rgba(227, 55, 78, 0.20);
+}
+
+.chat-shell[data-own-message-color="blue"] .chat-message.is-mine .chat-message-bubble {
+  background: linear-gradient(135deg, #d9efff, #b9dcf7);
+  color: #173b62;
+  border-color: rgba(55, 119, 172, 0.24);
 }
 
 .chat-message-bubble p {

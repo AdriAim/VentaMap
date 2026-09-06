@@ -95,17 +95,19 @@ public class ChatEmailReminderWorker(
 
             publications.TryGetValue(message.Conversation?.PublicationId ?? 0, out var publication);
             var senderName = users.TryGetValue(message.SenderUserId, out var sender) ? sender.Name : "Usuario";
-            var publicationTitle = publication?.Title ?? "un anuncio";
+            var publicationLabel = string.IsNullOrWhiteSpace(publication?.ShortDescription)
+                ? publication?.Title ?? "un anuncio"
+                : publication.ShortDescription.Trim();
             var publicBaseUrl = (configuration["Chat:PublicBaseUrl"] ?? string.Empty).TrimEnd('/');
             var detailsUrl = string.IsNullOrWhiteSpace(publicBaseUrl)
                 ? $"/Mensajes/{message.ConversationId}"
                 : $"{publicBaseUrl}/Mensajes/{message.ConversationId}";
 
-            var subject = $"Nuevo mensaje pendiente en Ventagram sobre {publicationTitle}";
+            var subject = $"Nuevo mensaje pendiente en Ventagram sobre {publicationLabel}";
             var htmlBody = $"""
                 <p>Hola {recipient.Name},</p>
                 <p>Hace una hora recibiste un mensaje en Ventagram y todavia no lo respondiste.</p>
-                <p><strong>Anuncio:</strong> {System.Net.WebUtility.HtmlEncode(publicationTitle)}</p>
+                <p><strong>Anuncio:</strong> {System.Net.WebUtility.HtmlEncode(publicationLabel)}</p>
                 <p><strong>De:</strong> {System.Net.WebUtility.HtmlEncode(senderName)}</p>
                 <blockquote style="margin:16px 0;padding:12px 16px;border-left:4px solid #e3374e;background:#f9f8f7;">
                     {System.Net.WebUtility.HtmlEncode(message.Body).Replace("\n", "<br />")}
@@ -117,7 +119,7 @@ public class ChatEmailReminderWorker(
 
                 Hace una hora recibiste un mensaje en Ventagram y todavia no lo respondiste.
 
-                Anuncio: {publicationTitle}
+                Anuncio: {publicationLabel}
                 De: {senderName}
 
                 Mensaje:

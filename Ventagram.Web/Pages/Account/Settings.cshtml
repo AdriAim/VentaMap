@@ -148,6 +148,23 @@
             Publicar tu telefono o email puede dejarte expuesto a llamadas, mensajes o contactos fraudulentos. El chat del sitio evita mostrar esos datos en el aviso.
         </div>
 
+        <fieldset class="message-color-preferences">
+            <legend>Color de mis mensajes</legend>
+            <span class="field-hint">Elige cómo se verán los mensajes que envíes en el chat.</span>
+            <div class="message-color-options">
+                <label class="message-color-option">
+                    <input type="radio" asp-for="Input.MessageBubbleColor" value="blue" />
+                    <span class="message-color-swatch is-blue" aria-hidden="true"></span>
+                    <span>Azul claro</span>
+                </label>
+                <label class="message-color-option">
+                    <input type="radio" asp-for="Input.MessageBubbleColor" value="rose" />
+                    <span class="message-color-swatch is-rose" aria-hidden="true"></span>
+                    <span>Rosa</span>
+                </label>
+            </div>
+        </fieldset>
+
         <div class="header-group-preferences" data-header-group-preferences data-max-groups="5">
             <span>Accesos rápidos de la cabecera</span>
             <span class="field-hint">Elige hasta 5 tipos de publicación. Si no eliges ninguno, usaremos la cabecera actual.</span>

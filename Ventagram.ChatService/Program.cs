@@ -74,7 +74,7 @@ builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
-        options.Cookie.Name = builder.Configuration["Authentication:CookieName"] ?? ".Ventagram.Auth";
+        options.Cookie.Name = builder.Configuration["Authentication:CookieName"] ?? ".Ventagram.Auth.v2";
         options.Cookie.Domain = builder.Configuration["Authentication:CookieDomain"];
         options.LoginPath = builder.Configuration["Authentication:LoginPath"] ?? "/Account/Login";
         options.LogoutPath = builder.Configuration["Authentication:LogoutPath"] ?? "/Account/Logout";

@@ -228,13 +228,14 @@ public class ReportService(
         }
 
         const string subject = "Tu anuncio recibió denuncias";
+        var publicationLabel = GetPublicationEmailLabel(publication);
         var html = $"""
-            <p>Tu anuncio <strong>{publication.Title}</strong> recibió varias denuncias de otros usuarios.</p>
+            <p>Tu anuncio <strong>{System.Net.WebUtility.HtmlEncode(publicationLabel)}</strong> recibió varias denuncias de otros usuarios.</p>
             <p>Te recomendamos revisar la información, imágenes y datos publicados para verificar que sean correctos y cumplan con las normas del sitio.</p>
             <p>Por el momento, el anuncio continúa visible.</p>
             """;
         var text = $"""
-            Tu anuncio "{publication.Title}" recibió varias denuncias de otros usuarios.
+            Tu anuncio "{publicationLabel}" recibió varias denuncias de otros usuarios.
 
             Revisa la información, imágenes y datos publicados para verificar que sean correctos y cumplan con las normas del sitio.
 
@@ -253,13 +254,14 @@ public class ReportService(
         }
 
         const string subject = "Tu anuncio pasó a revisión";
+        var publicationLabel = GetPublicationEmailLabel(publication);
         var html = $"""
-            <p>Tu anuncio <strong>{publication.Title}</strong> fue enviado a papelera para revisión administrativa luego de acumular 10 denuncias de 10 usuarios diferentes.</p>
+            <p>Tu anuncio <strong>{System.Net.WebUtility.HtmlEncode(publicationLabel)}</strong> fue enviado a papelera para revisión administrativa luego de acumular 10 denuncias de 10 usuarios diferentes.</p>
             <p>Mientras el caso se encuentra en revisión, no podrás publicar nuevos anuncios hasta nuevo aviso.</p>
             <p>Un administrador del sitio evaluará la situación y podrá restituir el anuncio y rehabilitar tu cuenta si corresponde.</p>
             """;
         var text = $"""
-            Tu anuncio "{publication.Title}" fue enviado a papelera para revisión administrativa luego de acumular 10 denuncias de 10 usuarios diferentes.
+            Tu anuncio "{publicationLabel}" fue enviado a papelera para revisión administrativa luego de acumular 10 denuncias de 10 usuarios diferentes.
 
             Mientras el caso se encuentra en revisión, no podrás publicar nuevos anuncios hasta nuevo aviso.
 
@@ -279,5 +281,12 @@ public class ReportService(
         {
             logger.LogError(ex, "No se pudo enviar el correo de moderación a {Email}.", email);
         }
+    }
+
+    private static string GetPublicationEmailLabel(Publication publication)
+    {
+        return string.IsNullOrWhiteSpace(publication.ShortDescription)
+            ? publication.Title
+            : publication.ShortDescription.Trim();
     }
 }

@@ -23,8 +23,7 @@
                 <article class="classified-row">
                     <div>
                         <span class="card-meta">@publication.Group Â· @(publication.Category?.Name ?? "Sin categoria") Â· @publication.Locality</span>
-                        <h3><a href="/Publications/Details/@publication.Id">@publication.Title</a></h3>
-                        <p>@publication.ShortDescription</p>
+                        <h3><a href="/Publications/Details/@publication.Id">@(string.IsNullOrWhiteSpace(publication.ShortDescription) ? publication.Title : publication.ShortDescription)</a></h3>
                         <div class="trash-tags">
                             @foreach (var reason in publication.Reports.OrderByDescending(r => r.CreatedAtUtc).Take(3).Select(r => r.Reason?.Name ?? $"RazÃ³n #{r.ReasonId}"))
                             {

@@ -47,7 +47,7 @@ services:
       TZ: ${TZ:-America/Argentina/Buenos_Aires}
       ConnectionStrings__DefaultConnection: server=mysql;port=3306;database=ventagram;user=root;password=${MYSQL_ROOT_PASSWORD};
       DataProtection__KeysPath: /keys/dataprotection
-      Authentication__CookieDomain: ${VENTAGRAM_COOKIE_DOMAIN}
+      Authentication__CookieDomain: ${VENTAGRAM_COOKIE_DOMAIN:-.ventagram.com.ar}
       Authentication__SharedApplicationName: Ventagram
       Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID}
       Authentication__Google__ClientSecret: ${GOOGLE_CLIENT_SECRET}
@@ -112,8 +112,8 @@ services:
       ConnectionStrings__VentagramConnection: server=mysql;port=3306;database=ventagram;user=root;password=${MYSQL_ROOT_PASSWORD};
       ConnectionStrings__ChatConnection: server=mysql;port=3306;database=ventagram_chat;user=root;password=${MYSQL_ROOT_PASSWORD};
       DataProtection__KeysPath: /keys/dataprotection
-      Authentication__CookieDomain: ${VENTAGRAM_COOKIE_DOMAIN}
-      Authentication__CookieName: .Ventagram.Auth
+      Authentication__CookieDomain: ${VENTAGRAM_COOKIE_DOMAIN:-.ventagram.com.ar}
+      Authentication__CookieName: .Ventagram.Auth.v2
       Authentication__LoginPath: /Account/Login
       Authentication__LogoutPath: /Account/Logout
       Authentication__AccessDeniedPath: /Account/Login

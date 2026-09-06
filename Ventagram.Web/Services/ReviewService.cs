@@ -91,7 +91,10 @@ public class ReviewService(
             var responseUrl = $"{baseUrl.TrimEnd('/')}/Reviews/Respond?token={Uri.EscapeDataString(token)}";
             var counterpartyName = counterparty?.Name ?? "usuario/a";
             var advertiserName = publication.User?.Name ?? publication.ContactName;
-            var safeTitle = WebUtility.HtmlEncode(publication.Title);
+            var publicationLabel = string.IsNullOrWhiteSpace(publication.ShortDescription)
+                ? publication.Title
+                : publication.ShortDescription.Trim();
+            var safeTitle = WebUtility.HtmlEncode(publicationLabel);
             var safeCounterpartyName = WebUtility.HtmlEncode(counterpartyName);
             var safeAdvertiserName = WebUtility.HtmlEncode(advertiserName);
             var safeUrl = WebUtility.HtmlEncode(responseUrl);
@@ -103,7 +106,7 @@ public class ReviewService(
                 <p><a href="{safeUrl}">Revisar y responder la operacion</a></p>
                 <p>El enlace vence en 30 dias.</p>
                 """;
-            var text = $"{advertiserName} informo que concreto contigo una operacion relacionada con '{publication.Title}'. Revisa y responde en: {responseUrl}";
+            var text = $"{advertiserName} informo que concreto contigo una operacion relacionada con '{publicationLabel}'. Revisa y responde en: {responseUrl}";
 
             try
             {

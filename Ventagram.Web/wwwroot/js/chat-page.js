@@ -285,6 +285,7 @@
     if (!root) return;
 
     root.dataset.currentUserId = String(Number(model?.currentUserId || 0));
+    root.dataset.ownMessageColor = model?.currentUserMessageColor === "blue" ? "blue" : "rose";
     activeChatConversationId = Number(model?.selectedConversation?.conversationId || 0);
     root.innerHTML = `
       <aside class="chat-sidebar">

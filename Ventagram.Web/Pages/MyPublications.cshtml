@@ -175,7 +175,7 @@ else
                         <div class="publication-admin-summary">
                             <div>
                                 <span class="gallery-kicker">@categoryLabel</span>
-                                <h3>@publication.Title</h3>
+                                <h3>@(string.IsNullOrWhiteSpace(publication.ShortDescription) ? publication.Title : publication.ShortDescription)</h3>
                             </div>
                             <span class="publication-admin-status @(publication.IsActive ? "is-active" : "is-inactive")" data-my-publication-status-label>@statusLabel</span>
                         </div>
@@ -191,7 +191,6 @@ else
                         </aside>
                     </div>
                     <p class="publication-admin-price">@formattedPrice</p>
-                    <p>@publication.ShortDescription</p>
                     <div class="publication-admin-meta">
                         <span>@(string.IsNullOrWhiteSpace(publication.Locality) ? "Sin ubicacion publica" : publication.Locality)</span>
                         <span>Creada: @publication.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy")</span>
