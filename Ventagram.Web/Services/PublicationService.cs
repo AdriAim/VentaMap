@@ -140,7 +140,7 @@ public class PublicationService(
             .Include(x => x.MediaItems)
             .Include(x => x.FieldValues)
                 .ThenInclude(x => x.CategoryField)
-            .FirstOrDefaultAsync(x => x.Id == publicationId && x.UserId == userId);
+            .FirstOrDefaultAsync(x => x.Id == publicationId && x.UserId == userId && x.Status != OwnerDeletedStatus);
     }
 
     public async Task<List<Publication>> GetReportedPublicationsAsync()
@@ -493,7 +493,7 @@ public class PublicationService(
             var email = publication.User?.Email ?? publication.ContactEmail;
             if (!string.IsNullOrWhiteSpace(email))
             {
-                var subject = "Tu anuncio venció en Ventagram";
+                var subject = "Tu anuncio venció en VentaMap";
                 var publicationLabel = string.IsNullOrWhiteSpace(publication.ShortDescription)
                     ? publication.Title
                     : publication.ShortDescription.Trim();
@@ -536,7 +536,7 @@ public class PublicationService(
         var publication = await db.Publications
             .Include(x => x.MediaItems)
             .Include(x => x.FieldValues)
-            .FirstOrDefaultAsync(x => x.Id == publicationId && x.UserId == userId && x.IsActive);
+            .FirstOrDefaultAsync(x => x.Id == publicationId && x.UserId == userId && x.Status != OwnerDeletedStatus);
         if (publication is null)
         {
             return false;

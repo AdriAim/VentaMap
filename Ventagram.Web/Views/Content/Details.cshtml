@@ -1,4 +1,4 @@
-﻿@using System.Text.Json
+@using System.Text.Json
 @model PublicationDetailsContentViewModel
 
 @if (Model.Publication is null)
@@ -236,7 +236,7 @@ else
                 <p class="detail-contact-chat">
                     @if (siteChatOnlyContact)
                     {
-                        <span class="detail-contact-label">El usuario sólo habilitó el chat de ventagram como medio de contacto.</span>
+                        <span class="detail-contact-label">El usuario sólo habilitó el chat de VentaMap como medio de contacto.</span>
                     }
                     @if (canStartChat)
                     {
@@ -244,13 +244,13 @@ else
                             class="primary-pill detail-chat-trigger"
                             data-start-chat="true"
                             data-publication-id="@publication.Id">
-                        Chatear en ventagram
+                        Chatear en VentaMap
                     </button>
                     }
                     else
                     {
                     <a class="primary-pill detail-chat-trigger" href="/Account/Login?returnUrl=@Uri.EscapeDataString($"/Publications/Details/{publication.Id}{debugSuffix}")">
-                        Chatear en ventagram
+                        Chatear en VentaMap
                     </a>
                     }
                 </p>

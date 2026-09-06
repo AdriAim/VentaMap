@@ -98,7 +98,7 @@ public class ReviewService(
             var safeCounterpartyName = WebUtility.HtmlEncode(counterpartyName);
             var safeAdvertiserName = WebUtility.HtmlEncode(advertiserName);
             var safeUrl = WebUtility.HtmlEncode(responseUrl);
-            var subject = "Confirma una operacion en Ventagram";
+            var subject = "Confirma una operacion en VentaMap";
             var html = $"""
                 <p>Hola {safeCounterpartyName},</p>
                 <p>{safeAdvertiserName} informo que concreto contigo una operacion relacionada con <strong>{safeTitle}</strong>.</p>

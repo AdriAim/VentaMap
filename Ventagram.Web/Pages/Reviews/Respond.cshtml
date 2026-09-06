@@ -10,7 +10,7 @@
     <div class="section-heading">
         <span class="eyebrow">Operacion verificada</span>
         <h1>Confirma la operacion</h1>
-        <p>Tu respuesta crea un historial que ayuda a proteger a las personas que participan en Ventagram.</p>
+        <p>Tu respuesta crea un historial que ayuda a proteger a las personas que participan en VentaMap.</p>
     </div>
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
@@ -32,7 +32,7 @@
             <span class="gallery-kicker">Anuncio</span>
             <h2>@Model.Operation.Publication?.Title</h2>
             <p>Tipo: <strong>@(Model.Operation.OperationType?.ToDisplayName() ?? "Operacion")</strong></p>
-            <p>Anunciante: <strong>@(Model.Operation.AdvertiserUser?.Name ?? "Usuario de Ventagram")</strong></p>
+            <p>Anunciante: <strong>@(Model.Operation.AdvertiserUser?.Name ?? "Usuario de VentaMap")</strong></p>
             <p>Email de la otra persona: <strong>@Model.Operation.CounterpartyEmail</strong></p>
         </article>
 

@@ -103,10 +103,10 @@ public class ChatEmailReminderWorker(
                 ? $"/Mensajes/{message.ConversationId}"
                 : $"{publicBaseUrl}/Mensajes/{message.ConversationId}";
 
-            var subject = $"Nuevo mensaje pendiente en Ventagram sobre {publicationLabel}";
+            var subject = $"Nuevo mensaje pendiente en VentaMap sobre {publicationLabel}";
             var htmlBody = $"""
                 <p>Hola {recipient.Name},</p>
-                <p>Hace una hora recibiste un mensaje en Ventagram y todavia no lo respondiste.</p>
+                <p>Hace una hora recibiste un mensaje en VentaMap y todavia no lo respondiste.</p>
                 <p><strong>Anuncio:</strong> {System.Net.WebUtility.HtmlEncode(publicationLabel)}</p>
                 <p><strong>De:</strong> {System.Net.WebUtility.HtmlEncode(senderName)}</p>
                 <blockquote style="margin:16px 0;padding:12px 16px;border-left:4px solid #e3374e;background:#f9f8f7;">
@@ -117,7 +117,7 @@ public class ChatEmailReminderWorker(
             var textBody = $"""
                 Hola {recipient.Name},
 
-                Hace una hora recibiste un mensaje en Ventagram y todavia no lo respondiste.
+                Hace una hora recibiste un mensaje en VentaMap y todavia no lo respondiste.
 
                 Anuncio: {publicationLabel}
                 De: {senderName}

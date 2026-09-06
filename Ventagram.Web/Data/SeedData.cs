@@ -277,7 +277,7 @@ public static class SeedData
         {
             user = new ApplicationUser
             {
-                Name = "Ventagram Demo",
+                Name = "VentaMap Demo",
                 Email = "demo@ventagram.local",
                 Phone = "3515550101",
                 PasswordHash = AuthService.HashPassword("Demo1234!")

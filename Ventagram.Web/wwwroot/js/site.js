@@ -1,4 +1,4 @@
-﻿(() => {
+(() => {
   let ventagramFlashMessage = "";
   let mapLibreSdkPromise = null;
   let mapWarmupPromise = null;
@@ -1286,8 +1286,8 @@
     const textarea = form.querySelector("[data-suggestion-textarea]");
     const prefixInput = form.querySelector("[data-suggestion-prefix]");
     const feedback = form.querySelector("[data-suggestion-feedback]");
-    const defaultTitle = titleNode?.textContent || "Sugerencias para Ventagram";
-    const defaultIntro = introNode?.textContent || "A Ventagram lo mejoramos entre todos.";
+    const defaultTitle = titleNode?.textContent || "Sugerencias para VentaMap";
+    const defaultIntro = introNode?.textContent || "A VentaMap lo mejoramos entre todos.";
     const defaultLabel = labelNode?.textContent || "Tu sugerencia";
     const defaultPlaceholder = textarea?.getAttribute("placeholder") || "Escribe aquí tu sugerencia para el sitio.";
 
@@ -6355,7 +6355,7 @@
     };
 
     const showVerticalImageWarning = () => {
-      window.alert('Ventagram fue optimizada para mostrar imagenes "Verticales" tamaño celular si pones otro tipo de imagenes pueden cortarse en los listados de anuncios.\n\nLo óptimo sería que todas sean verticales o al menos la principal.');
+      window.alert('VentaMap fue optimizada para mostrar imagenes "Verticales" tamaño celular si pones otro tipo de imagenes pueden cortarse en los listados de anuncios.\n\nLo óptimo sería que todas sean verticales o al menos la principal.');
     };
 
     const isSupportedImageFile = file => {
@@ -6866,8 +6866,8 @@
       }
 
       if (metadata.width >= metadata.height) {
-        window.alert("Ventagram sólo permite videos Verticales");
-        throw new Error("Ventagram sólo permite videos Verticales");
+        window.alert("VentaMap sólo permite videos Verticales");
+        throw new Error("VentaMap sólo permite videos Verticales");
       }
 
       if (!Number.isFinite(metadata.duration) || metadata.duration <= 0) {

@@ -7,10 +7,10 @@
 @inject IConfiguration Configuration
 @{
     var pageTitle = string.IsNullOrWhiteSpace(ViewData["Title"]?.ToString())
-        ? "Ventagram"
+        ? "VentaMap"
         : ViewData["Title"]!.ToString();
     var metaDescription = ViewData["MetaDescription"]?.ToString()
-        ?? "Ventagram es una plataforma de compra venta en Argentina para publicar anuncios clasificados de inmuebles, rodados y mas con precios claros.";
+        ?? "VentaMap es una plataforma de compra venta en Argentina para publicar anuncios clasificados de inmuebles, rodados y mas con precios claros.";
     var canonicalUrl = $"{Context.Request.Scheme}://{Context.Request.Host}{Context.Request.PathBase}{Context.Request.Path}";
     var ogImageUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/images/logo5.png";
     var hideSiteHeader = string.Equals(ViewData["HideSiteHeader"]?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
@@ -25,17 +25,17 @@
     <meta name="theme-color" content="#f9f8f7" />
     <meta name="theme-color" content="#f9f8f7" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#f9f8f7" media="(prefers-color-scheme: dark)" />
-    <title>@pageTitle - Ventagram</title>
+    <title>@pageTitle - VentaMap</title>
     <meta name="description" content="@metaDescription" />
     <link rel="canonical" href="@canonicalUrl" />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Ventagram" />
-    <meta property="og:title" content="@($"{pageTitle} - Ventagram")" />
+    <meta property="og:site_name" content="VentaMap" />
+    <meta property="og:title" content="@($"{pageTitle} - VentaMap")" />
     <meta property="og:description" content="@metaDescription" />
     <meta property="og:url" content="@canonicalUrl" />
     <meta property="og:image" content="@ogImageUrl" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="@($"{pageTitle} - Ventagram")" />
+    <meta name="twitter:title" content="@($"{pageTitle} - VentaMap")" />
     <meta name="twitter:description" content="@metaDescription" />
     <meta name="twitter:image" content="@ogImageUrl" />
     <link rel="icon" type="image/svg+xml" href="~/favicon.svg" asp-append-version="true" />
@@ -169,9 +169,9 @@
     <header class="site-header">
         <nav class="site-nav">
             <a class="brand-lockup" asp-page="/Index">
-                <img class="brand-mark" src="~/images/logo5.png" alt="Ventagram" />
+                <img class="brand-mark" src="~/images/logo5.png" alt="VentaMap" />
                 <span class="brand-text">
-                    <strong>Ventagram</strong>
+                    <strong>VentaMap</strong>
                     <small>Comunidad y Anuncios</small>
                 </span>
             </a>
@@ -313,7 +313,7 @@
             <div class="modal-content ventagram-modal preview-modal-shell report-modal-shell">
                 <div class="modal-header">
                     <div class="preview-modal-title">
-                        <img class="preview-modal-logo" src="~/images/logo5.png" alt="Ventagram" />
+                        <img class="preview-modal-logo" src="~/images/logo5.png" alt="VentaMap" />
                         <h5 class="modal-title" data-auth-required-title>Acci&oacute;n no disponible</h5>
                     </div>
                     <button type="button" class="btn-close" data-auth-required-close="true" aria-label="Cerrar"></button>
@@ -362,14 +362,14 @@
             <div class="modal-content ventagram-modal preview-modal-shell report-modal-shell">
                 <div class="modal-header">
                     <div class="preview-modal-title">
-                        <img class="preview-modal-logo" src="~/images/logo5.png" alt="Ventagram" />
-                        <h5 class="modal-title">Sugerencias para Ventagram</h5>
+                        <img class="preview-modal-logo" src="~/images/logo5.png" alt="VentaMap" />
+                        <h5 class="modal-title">Sugerencias para VentaMap</h5>
                     </div>
                     <button type="button" class="btn-close" data-suggestion-close="true" aria-label="Cerrar"></button>
                 </div>
                 <form id="suggestionForm" class="preview-modal-body report-modal-body" data-suggestion-form action="/api/content/suggestions">
                     <input type="hidden" name="prefix" value="" data-suggestion-prefix />
-                    <p data-suggestion-intro>A Ventagram lo mejoramos entre todos.</p>
+                    <p data-suggestion-intro>A VentaMap lo mejoramos entre todos.</p>
                     <label class="report-note wide">
                         <span data-suggestion-label>Tu sugerencia</span>
                         <textarea name="message" rows="5" maxlength="2000" placeholder="Escribe aquí tu sugerencia para el sitio." data-suggestion-textarea></textarea>
@@ -392,7 +392,7 @@
             <div class="modal-content ventagram-modal preview-modal-shell report-modal-shell">
                 <div class="modal-header">
                     <div class="preview-modal-title">
-                        <img class="preview-modal-logo" src="~/images/logo5.png" alt="Ventagram" />
+                        <img class="preview-modal-logo" src="~/images/logo5.png" alt="VentaMap" />
                         <h5 class="modal-title">Elige tu localidad</h5>
                     </div>
                     <button type="button" class="btn-close" data-guest-locality-close="true" aria-label="Cerrar"></button>
@@ -462,9 +462,9 @@
     </datalist>
     <footer class="site-footer">
         <div class="footer-brand">
-            <img class="footer-mark" src="~/images/logo5.png" alt="Ventagram" />
+            <img class="footer-mark" src="~/images/logo5.png" alt="VentaMap" />
             <div>
-                <strong>Ventagram</strong>
+                <strong>VentaMap</strong>
                 <p>Comunidad y Anuncios</p>
             </div>
         </div>
@@ -481,7 +481,7 @@
     </footer>
     <div class="system-loading-overlay" id="systemLoadingOverlay" hidden aria-live="polite" aria-busy="true">
         <div class="system-loading-shell">
-            <img class="system-loading-pin" src="~/images/logo5.png" alt="Ventagram cargando" />
+            <img class="system-loading-pin" src="~/images/logo5.png" alt="VentaMap cargando" />
         </div>
     </div>
     <script>

@@ -46,16 +46,16 @@ public class ContactoModel(IEmailSender emailSender, IConfiguration configuratio
             return Page();
         }
 
-        var subject = $"Contacto Ventagram: {Input.Subject.Trim()}";
+        var subject = $"Contacto VentaMap: {Input.Subject.Trim()}";
         var html = $"""
-            <p>Nuevo mensaje desde el formulario de contacto de Ventagram.</p>
+            <p>Nuevo mensaje desde el formulario de contacto de VentaMap.</p>
             <p><strong>Nombre:</strong> {safeName}</p>
             <p><strong>Email:</strong> {safeEmail}</p>
             <p><strong>Asunto:</strong> {safeSubject}</p>
             <p><strong>Mensaje:</strong><br />{safeMessage}</p>
             """;
         var text = $"""
-            Nuevo mensaje desde el formulario de contacto de Ventagram.
+            Nuevo mensaje desde el formulario de contacto de VentaMap.
 
             Nombre: {Input.Name}
             Email: {Input.Email}
@@ -68,7 +68,7 @@ public class ContactoModel(IEmailSender emailSender, IConfiguration configuratio
         bool sent;
         try
         {
-            sent = await emailSender.SendAsync(contactRecipient, subject, html, text);
+            sent = await emailSender.SendAsync(contactRecipient, subject, html, text, Input.Email, Input.Name);
         }
         catch
         {

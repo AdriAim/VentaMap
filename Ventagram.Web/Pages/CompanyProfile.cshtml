@@ -10,7 +10,7 @@
 {
     <section class="empty-state">
         <h1>Empresa no encontrada</h1>
-        <p>La direccion solicitada no corresponde a una empresa publica activa en Ventagram.</p>
+        <p>La direccion solicitada no corresponde a una empresa publica activa en VentaMap.</p>
     </section>
 }
 else
@@ -110,8 +110,8 @@ else
                 }
                 <div class="company-hero-copy">
                     <a class="company-hero-platform" href="/">
-                        <img src="~/images/logo5.png" alt="Ventagram" class="company-hero-platform-logo" />
-                        <span>Ventagram</span>
+                        <img src="~/images/logo5.png" alt="VentaMap" class="company-hero-platform-logo" />
+                        <span>VentaMap</span>
                     </a>
                     <h1>@company.CompanyName</h1>
                     @if (!string.IsNullOrWhiteSpace(company.CompanyIndustry))
@@ -287,13 +287,13 @@ else
                                             class="primary-pill"
                                             data-start-chat="true"
                                             data-publication-id="@publication.Id">
-                                        Chatear en ventagram
+                                        Chatear en VentaMap
                                     </button>
                                 }
                                 else
                                 {
                                     <a class="primary-pill" href="/Account/Login?returnUrl=@companyCatalogReturnUrl">
-                                        Chatear en ventagram
+                                        Chatear en VentaMap
                                     </a>
                                 }
                             }
@@ -364,11 +364,11 @@ else
                     }
 
                     if (chatMode === "button") {
-                        return `<button type="button" class="primary-pill compact" data-start-chat="true" data-publication-id="${escapeHtml(item?.id || "")}">Chatear en ventagram</button>`;
+                        return `<button type="button" class="primary-pill compact" data-start-chat="true" data-publication-id="${escapeHtml(item?.id || "")}">Chatear en VentaMap</button>`;
                     }
 
                     if (chatMode === "login") {
-                        return `<a class="primary-pill compact" href="${escapeHtml(item?.chatLoginUrl || "/Account/Login")}">Chatear en ventagram</a>`;
+                        return `<a class="primary-pill compact" href="${escapeHtml(item?.chatLoginUrl || "/Account/Login")}">Chatear en VentaMap</a>`;
                     }
 
                     return "";

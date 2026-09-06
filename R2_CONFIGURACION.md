@@ -22,7 +22,7 @@ Completar `Cloudflare:R2` en `appsettings.json` o en variables de entorno:
     "AccessKeyId": "tu-access-key",
     "SecretAccessKey": "tu-secret-key",
     "Bucket": "ventagram-publicaciones",
-    "PublicBaseUrl": "https://img.ventagram.com.ar",
+    "PublicBaseUrl": "https://img.ventamap.com.ar",
     "Prefix": "publications",
     "Region": "auto",
     "MaxImageSide": 1600,

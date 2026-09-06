@@ -23,7 +23,7 @@ public class SmtpEmailSender(
         var smtpUser = configuration["Email:SmtpUser"];
         var smtpPassword = configuration["Email:SmtpPassword"];
         var fromEmail = configuration["Email:FromEmail"];
-        var fromName = configuration["Email:FromName"] ?? "Ventagram";
+        var fromName = configuration["Email:FromName"] ?? "VentaMap";
         var useSsl = configuration.GetValue("Email:UseSsl", true);
         var timeoutSeconds = Math.Clamp(configuration.GetValue<int?>("Email:TimeoutSeconds") ?? 25, 5, 60);
         var normalizedToEmail = toEmail.Trim().ToLowerInvariant();

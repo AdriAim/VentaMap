@@ -243,7 +243,7 @@ public sealed class CloudflareR2ImageStorageService
 
             if (metadata.Width >= metadata.Height)
             {
-                throw new InvalidOperationException("Ventagram solo permite videos Verticales.");
+                throw new InvalidOperationException("VentaMap solo permite videos Verticales.");
             }
 
             if (metadata.DurationSeconds is > 60.5d)

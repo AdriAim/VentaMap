@@ -28,7 +28,7 @@ public class DetailsModel(SharedPublicationListService sharedPublicationListServ
             .Select(x => x.Publication)
             .Where(x => x.IsActive)
             .ToList();
-        OwnerName = SharedList.User?.CompanyName ?? SharedList.User?.Name ?? "Ventagram";
+        OwnerName = SharedList.User?.CompanyName ?? SharedList.User?.Name ?? "VentaMap";
 
         return Page();
     }

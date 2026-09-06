@@ -53,7 +53,7 @@ public class ForgotPasswordModel(AuthService authService, IEmailSender emailSend
             return Page();
         }
 
-        var subject = "Recuperar contraseña de Ventagram";
+        var subject = "Recuperar contraseña de VentaMap";
         var html = $"""
             <p>Hiciste una solicitud para blanquear tu contraseña.</p>
             <p><a href="{resetUrl}">Abrir enlace de recuperacion</a></p>
