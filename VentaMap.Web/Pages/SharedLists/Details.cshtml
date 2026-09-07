@@ -1,0 +1,220 @@
+@page "/Listas/{companySlug}/{slug}"
+@using System.Text.Json
+@using VentaMap.Models
+@inject IConfiguration Configuration
+@model VentaMap.Pages.SharedLists.DetailsModel
+@{
+    ViewData["Title"] = Model.SharedList?.Name ?? "Lista compartida";
+    ViewData["HideSiteHeader"] = "true";
+    string FormatMapPrice(VentaMap.Models.Publication publication, string numericFormat)
+    {
+        var period = publication.OperationType?.ToDisplayName() switch
+        {
+            "Alquiler" => " / mes",
+            "Temporario" => " / día",
+            _ => string.Empty
+        };
+
+        return $"{publication.Currency} {publication.Price.ToString(numericFormat, System.Globalization.CultureInfo.GetCultureInfo("es-AR"))}{period}";
+    }
+    var markersJson = JsonSerializer.Serialize(Model.Publications
+        .Where(x => x.Latitude.HasValue && x.Longitude.HasValue && !x.HideFromMap)
+        .Select(x => new
+        {
+            id = x.Id,
+            title = x.Title,
+            shortDescription = x.ShortDescription,
+            locality = x.Locality,
+            image = x.ImageList.FirstOrDefault(),
+            images = x.ImageList.Take(11).ToList(),
+            operationLabel = x.OperationType?.ToDisplayName(),
+            categoryLabel = x.Category?.Name,
+            detailsUrl = $"/Publications/Details/{x.Id}",
+            lat = x.Latitude,
+            lng = x.Longitude,
+            price = FormatMapPrice(x, "N0"),
+            priceTooltip = FormatMapPrice(x, "N0")
+        }));
+    var galleryItemsJson = JsonSerializer.Serialize(Model.Publications.Select(x => new
+    {
+        id = x.Id,
+        title = x.Title,
+        shortDescription = x.ShortDescription,
+        publicationCode = x.ToAdCode(),
+        price = FormatMapPrice(x, "N0"),
+        priceTooltip = FormatMapPrice(x, "N0"),
+        operationLabel = x.OperationType?.ToDisplayName(),
+        categoryLabel = x.Category?.Name,
+        detailsUrl = $"/Publications/Details/{x.Id}",
+        videoUrl = x.PrimaryVideoUrl,
+        images = x.ImageList.Take(11).ToList(),
+        isFavorite = false,
+        groupName = x.Group.ToDisplayName()
+    }));
+    string ModeUrl(string mode) => Url.Page("/SharedLists/Details", new { companySlug = Model.SharedList!.User!.CompanySlug, slug = Model.SharedList.Slug, mode })! + "#shared-list-results";
+    var resultsShell = Model.SharedList is null
+        ? null
+        : new ResultsShellViewModel
+        {
+            AnchorId = "shared-list-results",
+            Kicker = $"Vista {Model.Mode.ToLowerInvariant()}",
+            Title = "Anuncios seleccionados",
+            Subtitle = $"{Model.Publications.Count} anuncio(s)",
+            CurrentMode = Model.Mode,
+            TextViewUrl = ModeUrl("Lista"),
+            GalleryViewUrl = ModeUrl("Galeria"),
+            MapViewUrl = ModeUrl("Mapa"),
+            ActionUrl = Model.SharedList.User is null ? null : $"/{Model.SharedList.User.CompanySlug}",
+            ActionLabel = Model.SharedList.User is null ? null : $"Ver catálogo de {Model.SharedList.User.CompanyName}",
+            ShowOpenModeSelector = true,
+            MapStyleUrl = Configuration["Map:StyleUrl"] ?? string.Empty,
+            MapTilesUrlTemplate = Configuration["Map:TilesUrlTemplate"] ?? string.Empty,
+            MapAttributionHtml = Configuration["Map:AttributionHtml"] ?? string.Empty,
+            MarkersJson = markersJson,
+            MapPlaceholderTitle = "Mapa no disponible",
+            MapPlaceholderMessage = "Configurá el proveedor de mapas para usar esta vista."
+        };
+}
+
+@if (Model.SharedList is null)
+{
+    <section class="empty-state">
+        <h1>Lista no encontrada</h1>
+        <p>La lista compartida que intentaste abrir no existe o ya no está disponible.</p>
+    </section>
+}
+else
+{
+    var company = Model.SharedList.User!;
+    var companyHeaderBackgroundStyle = !string.IsNullOrWhiteSpace(company.CompanyHeroBackgroundUrl)
+        ? $"--company-profile-cover-image: url('{company.CompanyHeroBackgroundUrl}');"
+        : string.Empty;
+    var companyPhoneDigits = string.IsNullOrWhiteSpace(company.Phone)
+        ? string.Empty
+        : new string(company.Phone.Where(char.IsDigit).ToArray());
+    var companyWhatsAppUrl = string.IsNullOrWhiteSpace(companyPhoneDigits)
+        ? string.Empty
+        : $"https://wa.me/{companyPhoneDigits}";
+
+    <section class="company-hero">
+        <div class="company-hero-card" style="@companyHeaderBackgroundStyle">
+            <div class="company-hero-brand">
+                @if (!string.IsNullOrWhiteSpace(company.CompanyLogoUrl))
+                {
+                    <img src="@company.CompanyLogoUrl" alt="@company.CompanyName" class="company-hero-logo" />
+                }
+                <div class="company-hero-copy">
+                    <a class="company-hero-platform" href="/">
+                        <img src="~/images/logo5.png" alt="VentaMap" class="company-hero-platform-logo" />
+                        <span>VentaMap</span>
+                    </a>
+                    <h1>@company.CompanyName</h1>
+                    @if (!string.IsNullOrWhiteSpace(company.CompanyIndustry))
+                    {
+                        <strong class="company-hero-industry">@company.CompanyIndustry</strong>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(company.CompanyTagline))
+                    {
+                        <p>@company.CompanyTagline</p>
+                    }
+                </div>
+            </div>
+            <div class="company-hero-contact">
+                @if (!string.IsNullOrWhiteSpace(company.Email))
+                {
+                    <a class="company-contact-pill is-email" href="mailto:@company.Email">
+                        <i class="fa-solid fa-envelope" aria-hidden="true"></i>
+                        <span>Mail a: @company.Email</span>
+                    </a>
+                }
+                @if (!string.IsNullOrWhiteSpace(company.Phone))
+                {
+                    <a class="company-contact-pill is-phone" href="tel:@company.Phone">
+                        <i class="fa-solid fa-phone-volume" aria-hidden="true"></i>
+                        <span>Llamar: @company.Phone</span>
+                    </a>
+                }
+                @if (!string.IsNullOrWhiteSpace(companyWhatsAppUrl))
+                {
+                    <a class="company-contact-pill is-whatsapp" href="@companyWhatsAppUrl" target="_blank" rel="noopener noreferrer">
+                        <i class="fa-brands fa-whatsapp" aria-hidden="true"></i>
+                        <span>Whatsapp: @company.Phone</span>
+                    </a>
+                }
+            </div>
+        </div>
+    </section>
+
+    <section class="favorites-strip favorites-page-strip">
+        <div class="favorites-strip-copy">
+            <span class="eyebrow">Lista compartida</span>
+            <h2>@Model.SharedList.Name</h2>
+        </div>
+    </section>
+
+    @if (!Model.Publications.Any())
+    {
+        <section class="empty-state">
+            <h2>La lista todavía no tiene anuncios activos.</h2>
+            <p>Cuando se agreguen publicaciones disponibles, aparecerán aquí.</p>
+        </section>
+    }
+    else
+    {
+        <partial name="~/Views/Content/Results/_ResultsShellHeader.cshtml" model="resultsShell" />
+
+        @if (Model.Mode == "Lista")
+        {
+            <section class="publication-admin-list shared-list-publications-list">
+                @foreach (var publication in Model.Publications)
+                {
+                    var imageUrl = publication.ImageList.FirstOrDefault();
+                    <article class="publication-admin-card">
+                        <a class="publication-admin-media" href="/Publications/Details/@publication.Id">
+                            @if (!string.IsNullOrWhiteSpace(imageUrl))
+                            {
+                                <img src="@imageUrl" alt="@publication.Title" />
+                            }
+                            else
+                            {
+                                <div class="publication-admin-placeholder">Sin imagen</div>
+                            }
+                        </a>
+                        <div class="publication-admin-body">
+                            <div class="publication-admin-head">
+                                <div>
+                                    <span class="gallery-kicker">@(publication.Category?.Name ?? "Sin categoría")</span>
+                                    <h3><a href="/Publications/Details/@publication.Id">@publication.Title</a></h3>
+                                </div>
+                            </div>
+                            <p class="publication-admin-price">@publication.Currency @publication.Price.ToString("0")</p>
+                            <p>@publication.ShortDescription</p>
+                            <div class="publication-admin-meta">
+                                <span>@(string.IsNullOrWhiteSpace(publication.Locality) ? "Sin ubicación pública" : publication.Locality)</span>
+                                <span>Publicado: @publication.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy")</span>
+                            </div>
+                            <div class="publication-admin-actions">
+                                <a class="primary-pill" href="/Publications/Details/@publication.Id">Ver anuncio</a>
+                            </div>
+                        </div>
+                    </article>
+                }
+            </section>
+        }
+        else if (Model.Mode == "Galeria")
+        {
+            <section class="gallery-shell">
+                <div class="gallery-feed"
+                     data-static-gallery-feed="true"
+                     data-static-gallery-items-id="shared-list-gallery-items">
+                    <div class="gallery-rail"></div>
+                </div>
+            </section>
+            <script id="shared-list-gallery-items" type="application/json">@Html.Raw(galleryItemsJson)</script>
+        }
+        else
+        {
+            <partial name="~/Views/Content/Results/_ResultsMapShell.cshtml" model="resultsShell" />
+        }
+    }
+}

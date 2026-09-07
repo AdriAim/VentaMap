@@ -8,17 +8,17 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 if ([string]::IsNullOrWhiteSpace($OutputName)) {
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $OutputName = "ventagram-local-deploy-$timestamp.tar.gz"
+    $OutputName = "ventamap-local-deploy-$timestamp.tar.gz"
 }
 
 $outputPath = Join-Path $root $OutputName
-$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ventagram-hostinger-package-" + [Guid]::NewGuid().ToString("N"))
-$stage = Join-Path $tempRoot "ventagram"
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ventamap-hostinger-package-" + [Guid]::NewGuid().ToString("N"))
+$stage = Join-Path $tempRoot "ventamap"
 
 New-Item -ItemType Directory -Path $stage | Out-Null
 
 $items = @(
-    "Ventagram.Web",
+    "VentaMap.Web",
     "docker-compose.hostinger.yml",
     ".env.hostinger.example",
     "README.md",
@@ -26,7 +26,7 @@ $items = @(
 )
 
 if (-not $SkipChatService) {
-    $items += "Ventagram.ChatService"
+    $items += "VentaMap.ChatService"
 }
 
 foreach ($item in $items) {

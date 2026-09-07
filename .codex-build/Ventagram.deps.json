@@ -6,7 +6,7 @@
   "compilationOptions": {},
   "targets": {
     ".NETCoreApp,Version=v8.0": {
-      "Ventagram/1.0.0": {
+      "VentaMap/1.0.0": {
         "dependencies": {
           "AWSSDK.S3": "4.0.7.1",
           "Microsoft.AspNetCore.Authentication.Google": "8.0.8",
@@ -15,7 +15,7 @@
           "SixLabors.ImageSharp": "3.1.12"
         },
         "runtime": {
-          "Ventagram.dll": {}
+          "VentaMap.dll": {}
         }
       },
       "AWSSDK.Core/4.0.0.26": {
@@ -525,7 +525,7 @@
     }
   },
   "libraries": {
-    "Ventagram/1.0.0": {
+    "VentaMap/1.0.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Ventagram.Data;
-using Ventagram.Models;
+using VentaMap.Data;
+using VentaMap.Models;
 
 var config = new ConfigurationBuilder()
     .SetBasePath(Path.GetFullPath(".."))
@@ -12,10 +12,10 @@ var config = new ConfigurationBuilder()
 var connectionString = config.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Missing connection string.");
 
-var optionsBuilder = new DbContextOptionsBuilder<VentagramDbContext>();
+var optionsBuilder = new DbContextOptionsBuilder<VentaMapDbContext>();
 optionsBuilder.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
 
-await using var db = new VentagramDbContext(optionsBuilder.Options);
+await using var db = new VentaMapDbContext(optionsBuilder.Options);
 var user = await db.Users.OrderBy(x => x.Id).FirstOrDefaultAsync()
     ?? throw new InvalidOperationException("No users found to assign publication.");
 

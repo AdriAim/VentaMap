@@ -1,0 +1,242 @@
+@page
+@model VentaMap.Pages.Account.SettingsModel
+@{
+    ViewData["Title"] = "Otras configuraciones";
+}
+
+<section class="form-shell narrow">
+    <div class="section-heading">
+        <span class="eyebrow">Cuenta</span>
+        <h1>Otras configuraciones</h1>
+        <p>Defini que telefono usas como contacto y que canales se muestran en tus anuncios.</p>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+    {
+        <div class="status-banner success-banner">@Model.SuccessMessage</div>
+    }
+
+    <form method="post" enctype="multipart/form-data" class="stack-form">
+        <div asp-validation-summary="All" class="text-danger"></div>
+
+        <label>
+            <span>Localidad de residencia</span>
+            <div class="register-locality-actions">
+                <span class="field-hint">Busca tu localidad como en el selector de búsquedas o deja que la detectemos automáticamente.</span>
+            </div>
+            <div class="register-locality-picker" data-hybrid-locality-root data-account-locality-form>
+                <input type="hidden" asp-for="Input.ArgentineLocalityId" data-locality-id />
+                <input type="hidden" asp-for="Input.SelectedExternalLocalityId" data-locality-external-id />
+                <input type="text"
+                       asp-for="Input.ArgentineLocalityLabel"
+                       placeholder="Buscar tu localidad"
+                       aria-label="Buscar tu localidad"
+                       autocomplete="off"
+                       data-locality-input />
+                <datalist id="settings-locality-options" data-locality-suggestions></datalist>
+                <div class="guest-locality-suggestions" data-locality-suggestions-list hidden></div>
+                <button type="button" class="ghost-pill compact" data-detect-locality>Detectar</button>
+            </div>
+            <span class="field-hint" data-register-locality-status data-account-locality-status></span>
+            <span class="field-hint">Usaremos esta localidad para priorizar anuncios cercanos y sugerirte el mapa inicial.</span>
+            <span asp-validation-for="Input.ArgentineLocalityId" class="text-danger"></span>
+        </label>
+
+        @if (Model.IsCompany)
+        {
+            <section class="settings-company-shell">
+                <div class="settings-company-heading">
+                    <span class="eyebrow">Perfil publico</span>
+                    <h2>Perfil de empresa</h2>
+                    <p>Actualiza el logo, el fondo del encabezado, el lema y los datos de contacto visibles en tu catalogo.</p>
+                </div>
+
+                <label>
+                    <span>Nombre de empresa</span>
+                    <input value="@Model.CompanyName" readonly />
+                    <span class="field-hint">El nombre de empresa queda fijo. Si necesitas cambiarlo, solicitalo desde <a href="/Contacto">Contacto</a>.</span>
+                </label>
+
+                @if (!string.IsNullOrWhiteSpace(Model.CompanyPublicUrl))
+                {
+                    <label>
+                        <span>Direccion publica</span>
+                        <div class="company-public-url-field">
+                            <span class="company-public-url-domain">ventamap.com.ar</span>
+                            <input value="@Model.CompanyPublicUrl" readonly />
+                        </div>
+                        <span class="field-hint">La dirección pública queda fija. Si necesitas cambiarla, solicitalo desde <a href="/Contacto">Contacto</a>.</span>
+                    </label>
+                }
+
+                <label>
+                    <span>Lema</span>
+                    <input asp-for="Input.CompanyTagline" maxlength="180" placeholder="Ejemplo: Tasaciones claras y cierres agiles." />
+                    <span class="field-hint">Se muestra debajo del nombre de la empresa en la cabecera publica.</span>
+                    <span asp-validation-for="Input.CompanyTagline" class="text-danger"></span>
+                </label>
+
+                <div class="settings-company-media-grid">
+                    <label>
+                        <span>Logo</span>
+                        <input asp-for="CompanyLogo"
+                               type="file"
+                               accept="image/*"
+                               data-image-live-preview-input="true"
+                               data-preview-target-id="companyLogoPreview" />
+                        <span class="field-hint">Formato requerido: cuadrado. Recomendado: 900x900 px. Si subes otra, reemplaza la actual.</span>
+                        <span asp-validation-for="CompanyLogo" class="text-danger"></span>
+                        <img id="companyLogoPreview"
+                             class="settings-company-media-preview settings-company-logo-preview"
+                             src="@Model.CurrentCompanyLogoUrl"
+                             alt="Logo actual de la empresa"
+                             hidden="@string.IsNullOrWhiteSpace(Model.CurrentCompanyLogoUrl)" />
+                    </label>
+
+                    <label>
+                        <span>Fondo del encabezado</span>
+                        <input asp-for="CompanyHeroBackground"
+                               type="file"
+                               accept="image/*"
+                               data-image-live-preview-input="true"
+                               data-preview-target-id="companyHeroBackgroundPreview" />
+                        <span class="field-hint">Tamaño mínimo: 960x320 px. Recomendado: 960x320 px o múltiplos 3:1. Se usa como fondo de la tarjeta de presentación y del encabezado del catálogo.</span>
+                        <span asp-validation-for="CompanyHeroBackground" class="text-danger"></span>
+                        <img id="companyHeroBackgroundPreview"
+                             class="settings-company-media-preview settings-company-hero-preview"
+                             src="@Model.CurrentCompanyHeroBackgroundUrl"
+                             alt="Fondo actual del encabezado"
+                             hidden="@string.IsNullOrWhiteSpace(Model.CurrentCompanyHeroBackgroundUrl)" />
+                    </label>
+                </div>
+            </section>
+        }
+
+        <label>
+            <span>Telefono de contacto</span>
+            <div class="phone-inline">
+                <select asp-for="Input.PhoneCountry" data-phone-country>
+                    <option value="AR">Argentina</option>
+                    <option value="INT">Internacional</option>
+                </select>
+                <input asp-for="Input.Phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+54 9 1145666454" data-phone-mask="ar" />
+            </div>
+            <span class="field-hint">Argentina: +54 9 1145666454.</span>
+            <span asp-validation-for="Input.Phone" class="text-danger"></span>
+        </label>
+
+        <div class="inline-checks contact-settings-checks">
+            <label class="checkline compact-check">
+                <input asp-for="Input.PublishEmail" />
+                <span>Publicar mi mail</span>
+            </label>
+            <label class="checkline compact-check">
+                <input asp-for="Input.AcceptsCalls" />
+                <span>Recibe llamadas</span>
+            </label>
+            <label class="checkline compact-check">
+                <input asp-for="Input.RespondsWhatsApp" />
+                <span>Recibe WhatsApp</span>
+            </label>
+            <label class="checkline compact-check">
+                <input asp-for="Input.AllowSiteChat" />
+                <span>Permitir chat del sitio</span>
+            </label>
+        </div>
+        <p class="field-hint">Solo se mostraran en tus anuncios y en tu perfil publico los canales que marques.</p>
+        <div class="status-banner warning">
+            Publicar tu telefono o email puede dejarte expuesto a llamadas, mensajes o contactos fraudulentos. El chat del sitio evita mostrar esos datos en el aviso.
+        </div>
+
+        <fieldset class="message-color-preferences">
+            <legend>Color de mis mensajes</legend>
+            <span class="field-hint">Elige cómo se verán los mensajes que envíes en el chat.</span>
+            <div class="message-color-options">
+                <label class="message-color-option">
+                    <input type="radio" asp-for="Input.MessageBubbleColor" value="blue" />
+                    <span class="message-color-swatch is-blue" aria-hidden="true"></span>
+                    <span>Azul claro</span>
+                </label>
+                <label class="message-color-option">
+                    <input type="radio" asp-for="Input.MessageBubbleColor" value="rose" />
+                    <span class="message-color-swatch is-rose" aria-hidden="true"></span>
+                    <span>Rosa</span>
+                </label>
+            </div>
+        </fieldset>
+
+        <div class="header-group-preferences" data-header-group-preferences data-max-groups="5">
+            <span>Accesos rápidos de la cabecera</span>
+            <span class="field-hint">Elige hasta 5 tipos de publicación. Si no eliges ninguno, usaremos la cabecera actual.</span>
+            <div class="inline-checks header-group-options">
+                @foreach (var group in Model.HeaderGroupOptions)
+                {
+                    var selected = Model.Input.HeaderPublicationGroups.Contains(group.Name, StringComparer.OrdinalIgnoreCase);
+                    <label class="checkline compact-check">
+                        <input type="checkbox"
+                               name="Input.HeaderPublicationGroups"
+                               value="@group.Name"
+                               checked="@selected"
+                               data-header-group-option />
+                        <span>@group.Name</span>
+                    </label>
+                }
+            </div>
+            <span class="field-hint" data-header-group-status></span>
+        </div>
+
+        <div class="hero-actions">
+            <button type="submit" class="primary-pill">Guardar configuraciones</button>
+            <a class="ghost-pill" asp-page="/Index">Volver</a>
+        </div>
+    </form>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        (() => {
+            const livePreviewInputs = Array.from(document.querySelectorAll("[data-image-live-preview-input='true']"));
+            if (!livePreviewInputs.length) return;
+
+            const objectUrls = new Map();
+
+            const revokeObjectUrl = input => {
+                const currentUrl = objectUrls.get(input);
+                if (!currentUrl) return;
+                URL.revokeObjectURL(currentUrl);
+                objectUrls.delete(input);
+            };
+
+            livePreviewInputs.forEach(input => {
+                input.addEventListener("change", event => {
+                    const fileInput = event.currentTarget;
+                    if (!(fileInput instanceof HTMLInputElement)) return;
+
+                    const targetId = fileInput.dataset.previewTargetId || "";
+                    const preview = targetId ? document.getElementById(targetId) : null;
+                    if (!(preview instanceof HTMLImageElement)) return;
+
+                    revokeObjectUrl(fileInput);
+
+                    const file = fileInput.files?.[0];
+                    if (!file) {
+                        if (!preview.getAttribute("src")) {
+                            preview.hidden = true;
+                        }
+                        return;
+                    }
+
+                    const objectUrl = URL.createObjectURL(file);
+                    objectUrls.set(fileInput, objectUrl);
+                    preview.src = objectUrl;
+                    preview.hidden = false;
+                });
+            });
+
+            window.addEventListener("beforeunload", () => {
+                livePreviewInputs.forEach(revokeObjectUrl);
+            });
+        })();
+    </script>
+}

@@ -1,0 +1,74 @@
+@page
+@model VentaMap.Pages.Account.ChangeLocalityModel
+@{
+    ViewData["Title"] = "Cambiar localidad";
+}
+
+<section class="form-shell narrow">
+    <div class="section-heading">
+        <span class="eyebrow">Cuenta</span>
+        <h1>Cambiar localidad</h1>
+        <p>Esta localidad se usa para priorizar anuncios cercanos y sugerir el mapa inicial.</p>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+    {
+        <div class="status-banner success-banner">@Model.SuccessMessage</div>
+    }
+
+    <form method="post" class="stack-form">
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+        <label>
+            <span>Localidad de residencia</span>
+            <div class="register-locality-actions">
+                <span class="field-hint">Busca tu localidad como en el selector de búsquedas o deja que la detectemos automáticamente.</span>
+            </div>
+            <div class="register-locality-picker" data-hybrid-locality-root data-account-locality-form>
+                <input type="hidden" asp-for="Input.ArgentineLocalityId" data-locality-id />
+                <input type="hidden" asp-for="Input.SelectedExternalLocalityId" data-locality-external-id />
+                <input type="text"
+                       asp-for="Input.ArgentineLocalityLabel"
+                       list="account-locality-options"
+                       placeholder="Buscar tu localidad"
+                       aria-label="Buscar tu localidad"
+                       autocomplete="off"
+                       data-locality-input />
+                <datalist id="account-locality-options" data-locality-suggestions></datalist>
+                <button type="button" class="ghost-pill compact" data-detect-locality>Detectar</button>
+            </div>
+            <span class="field-hint" data-register-locality-status data-account-locality-status></span>
+            <span class="field-hint">Usaremos esta localidad para priorizar anuncios cercanos y sugerirte el mapa inicial.</span>
+            <span asp-validation-for="Input.ArgentineLocalityId" class="text-danger"></span>
+        </label>
+
+        <div class="header-group-preferences" data-header-group-preferences data-max-groups="5">
+            <span>Accesos rápidos de la cabecera</span>
+            <span class="field-hint">Elige hasta 5 tipos de publicación. Si no eliges ninguno, usaremos la cabecera actual.</span>
+            <div class="inline-checks header-group-options">
+                @foreach (var group in Model.HeaderGroupOptions)
+                {
+                    var selected = Model.Input.HeaderPublicationGroups.Contains(group.Name, StringComparer.OrdinalIgnoreCase);
+                    <label class="checkline compact-check">
+                        <input type="checkbox"
+                               name="Input.HeaderPublicationGroups"
+                               value="@group.Name"
+                               checked="@selected"
+                               data-header-group-option />
+                        <span>@group.Name</span>
+                    </label>
+                }
+            </div>
+            <span class="field-hint" data-header-group-status></span>
+        </div>
+
+        <div class="hero-actions">
+            <button type="submit" class="primary-pill">Guardar localidad</button>
+            <a class="ghost-pill" asp-page="/Index">Volver</a>
+        </div>
+    </form>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

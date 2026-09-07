@@ -1,4 +1,4 @@
-# Sistema de operaciones y reseñas de Ventagram
+# Sistema de operaciones y reseñas de VentaMap
 
 ## Objetivo
 
@@ -16,7 +16,7 @@ Crear un historial verificable para ventas, alquileres, temporarios, permutas y 
 ## Flujo de cierre
 
 1. El anunciante elige `Operacion concretada` al dar de baja el anuncio.
-2. Ventagram pregunta `¿Con quien concretaste la operacion?` y solicita:
+2. VentaMap pregunta `¿Con quien concretaste la operacion?` y solicita:
    - usuario registrado;
    - persona no registrada;
    - email de la otra persona.
@@ -68,7 +68,7 @@ La pantalla personal se llama `Mis operaciones y reseñas`. Los roles se explica
 
 ## Parametros
 
-La tabla `VentagramParameters` administra la funcionalidad:
+La tabla `VentaMapParameters` administra la funcionalidad:
 
 - `Reviews.Enabled`
 - `Reviews.Advertiser.Enabled`

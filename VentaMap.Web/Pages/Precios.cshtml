@@ -1,0 +1,82 @@
+@page
+@model VentaMap.Pages.PreciosModel
+@{
+    ViewData["Title"] = "Precios vigentes";
+    ViewData["MetaDescription"] = "Consulta los precios vigentes para publicar en VentaMap para personas y empresas, con detalles de límites, extras y beneficios.";
+}
+
+<section class="form-shell narrow">
+    <div class="section-heading">
+        <span class="eyebrow">Precios</span>
+        <h1>Precios vigentes para publicar</h1>
+        <p>Este apartado resume cómo funciona hoy el cobro de publicaciones en VentaMap para personas y empresas. Si en el futuro cambia, acá debe verse la versión actualizada.</p>
+    </div>
+
+    @if (!Model.IsPaidSiteEnabled)
+    {
+        <section class="empty-state">
+            <h2>Publicación sin cobro activo</h2>
+            <p>La parte paga del sitio está desactivada por el momento.</p>
+            <a class="primary-pill" href="/Publications/Create">Publicar anuncio</a>
+        </section>
+    }
+    else
+    {
+    <section class="detail-panel pricing-panel">
+        <div class="pricing-grid">
+            <article class="pricing-card pricing-card-individual">
+                <span class="pricing-card-tag">Personas</span>
+                <h3>Hasta 3 anuncios gratis por mes</h3>
+                <p>Pensado para publicaciones ocasionales o ventas particulares.</p>
+                <ul class="pricing-list">
+                    <li>Los primeros 3 anuncios del mes no tienen costo.</li>
+                    <li>Cada anuncio gratuito incluye hasta 3 fotos.</li>
+                    <li>Desde el cuarto anuncio del mes, cada publicación cuesta $3000.</li>
+                    <li>Si el anuncio incluye video o más de 3 fotos, ese anuncio cuesta $3000.</li>
+                </ul>
+            </article>
+
+            <article class="pricing-card pricing-card-company">
+                <span class="pricing-card-tag">Empresas</span>
+                <h3>3 meses gratis y luego $50000 por mes</h3>
+                <p>Orientado a empresas que necesitan continuidad, más volumen y herramientas comerciales.</p>
+                <ul class="pricing-list">
+                    <li>Los primeros 3 meses son gratuitos.</li>
+                    <li>Después, el valor es de $50000 por mes.</li>
+                    <li class="pricing-list-highlight">El plan mensual incluye hasta 50 anuncios.</li>
+                    <li>Si necesitas más, consulta por pack premium ilimitado.</li>
+                    <li>Incluye estadísticas para seguir rendimiento.</li>
+                    <li>Incluye listas personalizadas para compartir anuncios con clientes.</li>
+                </ul>
+            </article>
+        </div>
+    </section>
+
+    <div class="detail-panel">
+        <h2>Qué se considera un extra pago en cuentas persona</h2>
+        <p>En cuentas persona, el extra pago no depende solo de la cantidad mensual de anuncios. También se activa cuando un aviso necesita más recursos que el esquema gratuito base.</p>
+        <ul>
+            <li>Agregar video convierte ese anuncio en pago.</li>
+            <li>Agregar más de 3 fotos convierte ese anuncio en pago.</li>
+            <li>El valor de ese anuncio pago es $3000.</li>
+        </ul>
+    </div>
+
+    <div class="detail-panel">
+        <h2>Qué incluye una cuenta empresa</h2>
+        <p>La modalidad empresa está pensada para quienes publican de manera profesional y necesitan mostrar catálogo, ordenar mejor su oferta y compartir material con clientes.</p>
+        <ul>
+            <li>Hasta 50 anuncios incluidos en el plan mensual.</li>
+            <li>Si necesitas más volumen, consulta por pack premium ilimitado.</li>
+            <li>Web pública de empresa dentro de VentaMap.</li>
+            <li>Estadísticas para revisar el movimiento de las publicaciones.</li>
+            <li>Listas personalizadas para compartir selecciones con clientes.</li>
+        </ul>
+    </div>
+
+    <section class="status-banner promo-banner">
+        <strong>Promoción vigente para aprovechar.</strong>
+        <span>Hoy las personas tienen hasta 3 anuncios gratis por mes y las empresas cuentan con 3 meses bonificados al comenzar.</span>
+    </section>
+    }
+</section>

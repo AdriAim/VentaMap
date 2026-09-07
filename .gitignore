@@ -6,13 +6,18 @@ _buildcheck*/
 build-verify-local/
 build-verify*/
 build-verify-*/
-ventagram-*.tar.gz
+ventamap-*.tar.gz
 artifacts/buildcheck*/
 artifacts/buildcheck-*/
 .codex-build/
 .codextemp/
 .env
 *.tar.gz
+
+# Documentación y utilidades locales no versionadas por defecto.
+*.md
+*.ps1
+*.txt
 
 *.user
 *.suo

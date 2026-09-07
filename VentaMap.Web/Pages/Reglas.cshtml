@@ -1,0 +1,99 @@
+@page
+@model VentaMap.Pages.ReglasModel
+@{
+    ViewData["Title"] = "Reglas de funcionamiento";
+}
+
+<section class="form-shell narrow">
+    <div class="section-heading">
+        <span class="eyebrow">Reglas</span>
+        <h1>Reglas de funcionamiento</h1>
+        <p>Este espacio explica de forma simple cómo funcionan los anuncios, las denuncias, la papelera y la revisión administrativa dentro de VentaMap.</p>
+    </div>
+
+    <div class="detail-panel">
+        <h2>1. Anuncios</h2>
+        <p>Cada usuario es responsable por la información, imágenes y datos de contacto que publica.</p>
+        <div id="imagenes">
+            <h3>Imágenes del bien/producto ofrecido</h3>
+            <p>Solo se permiten fotos reales del bien/producto que se intenta vender, alquilar u ofrecer. No se permiten imágenes generadas o modificadas con inteligencia artificial (IA), ni imágenes que no correspondan al bien/producto ofrecido.</p>
+            <p><strong>El incumplimiento puede dar lugar al baneo de la cuenta sin aviso previo.</strong> Esta medida puede aplicarse sin esperar los umbrales de denuncias ni los avisos del proceso automático descrito a continuación.</p>
+        </div>
+        <p>Si un anuncio recibe denuncias, puede entrar en revisión automática según las reglas del sitio.</p>
+        <p>Cada anuncio realizado por un usuario dura 30 días desde su creación.</p>
+    </div>
+
+    <div class="detail-panel">
+        <h2>2. Quién puede denunciar</h2>
+        <p>Para denunciar un anuncio debes:</p>
+        <ul>
+            <li>haber iniciado sesión,</li>
+            <li>tener al menos 2 anuncios realizados,</li>
+            <li>no estar bloqueado para denunciar.</li>
+        </ul>
+        <p>Cada usuario puede denunciar una sola vez el mismo anuncio.</p>
+    </div>
+
+    <div class="detail-panel">
+        <h2>3. Aviso al publicante</h2>
+        <p>Si un anuncio recibe 5 denuncias de 5 usuarios diferentes, el publicante recibe un correo para revisar la información publicada.</p>
+        <p>En ese punto el anuncio sigue visible.</p>
+    </div>
+
+    <div class="detail-panel">
+        <h2>4. Papelera automática</h2>
+        <p>Si un anuncio recibe 10 denuncias de 10 usuarios diferentes:</p>
+        <ul>
+            <li>el anuncio pasa a papelera,</li>
+            <li>el usuario queda inhabilitado para publicar nuevos anuncios,</li>
+            <li>se envía un correo informando la medida,</li>
+            <li>el caso entra en revisión administrativa.</li>
+        </ul>
+    </div>
+
+    <div class="detail-panel">
+        <h2>5. Revisión del administrador</h2>
+        <p>El administrador puede revisar el caso y decidir:</p>
+        <ul>
+            <li>restaurar el anuncio y rehabilitar al usuario, o</li>
+            <li>confirmar que el anuncio permanezca en papelera.</li>
+        </ul>
+    </div>
+
+    <div class="detail-panel">
+        <h2>6. Denuncias incorrectas</h2>
+        <p>Si un usuario acumula 5 denuncias incorrectas, pierde la posibilidad de denunciar nuevos anuncios.</p>
+        <p>Una denuncia incorrecta es una denuncia revisada por el administrador y rechazada por no corresponder.</p>
+    </div>
+
+    <div class="detail-panel">
+        <h2>7. Vencimiento de anuncios</h2>
+        <p>Cuando un anuncio cumple 30 días, deja de estar activo automáticamente.</p>
+        <p>En ese momento el usuario recibe un correo indicando que, para volver a publicarlo, debe ingresar a <strong>Mis anuncios</strong> dentro de su cuenta.</p>
+    </div>
+
+    <div class="detail-panel">
+        <h2>8. Renovación y baja manual</h2>
+        <p>Desde <strong>Mis anuncios</strong>:</p>
+        <ul>
+            <li>si un anuncio está activo, el usuario puede darlo de baja,</li>
+            <li>si un anuncio está inactivo o vencido, el usuario puede volver a publicarlo por otros 30 días.</li>
+        </ul>
+    </div>
+
+    <div class="detail-panel">
+        <h2>9. Motivo de baja y comentario al sitio</h2>
+        <p>Cuando un usuario da de baja un anuncio activo, debe seleccionar un motivo de baja.</p>
+        <p>Además, puede dejar un comentario opcional para el sitio.</p>
+    </div>
+
+    <div class="detail-panel">
+        <h2>10. Qué puede ver el administrador</h2>
+        <p>El administrador puede ver las bajas voluntarias realizadas por usuarios junto con:</p>
+        <ul>
+            <li>el motivo de baja elegido,</li>
+            <li>el comentario dejado al sitio,</li>
+            <li>el correo electrónico del usuario para poder responderle.</li>
+        </ul>
+    </div>
+</section>

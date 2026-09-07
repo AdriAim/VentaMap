@@ -1,9 +1,9 @@
 param(
     [string]$SourceDirectory = 'C:\Users\eaima\OneDrive\Desktop\localidades',
-    [string]$WorkspaceRoot = 'E:\Proyectos\ventagram',
+    [string]$WorkspaceRoot = 'E:\Proyectos\ventamap',
     [string]$OutputSqlFile = 'C:\Users\eaima\OneDrive\Desktop\localidades\argentine_localities_inserts.sql',
     [string]$OutputUnresolvedFile = 'C:\Users\eaima\OneDrive\Desktop\localidades\argentine_localities_unresolved.csv',
-    [string]$GeorefCsvFile = 'E:\Proyectos\ventagram\.codextemp\georef_localidades.csv'
+    [string]$GeorefCsvFile = 'E:\Proyectos\ventamap\.codextemp\georef_localidades.csv'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -230,7 +230,7 @@ $locFile = Join-Path $SourceDirectory 'localidades.sql'
 
 $provincesText = [System.IO.File]::ReadAllText($provFile, [System.Text.Encoding]::UTF8)
 $localitiesText = [System.IO.File]::ReadAllText($locFile, [System.Text.Encoding]::UTF8)
-$catalogText = [System.IO.File]::ReadAllText((Join-Path $WorkspaceRoot 'Ventagram.Web\Data\ArgentineLocalityCatalog.cs'), [System.Text.Encoding]::UTF8)
+$catalogText = [System.IO.File]::ReadAllText((Join-Path $WorkspaceRoot 'VentaMap.Web\Data\ArgentineLocalityCatalog.cs'), [System.Text.Encoding]::UTF8)
 $georefCsvText = [System.IO.File]::ReadAllText($GeorefCsvFile, [System.Text.Encoding]::UTF8)
 
 $provincePattern = 'INSERT INTO `ma_Provincias` \(`Id`, `Nombre`\) VALUES \((\d+), ''((?:''''|[^''])*)''\);'

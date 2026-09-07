@@ -1,6 +1,6 @@
 PARCHE LOCAL — BÚSQUEDA AJAX + SCROLL + ALTURA DEL MAPA
 
-Copiar el contenido de este ZIP sobre la raíz del proyecto Ventagram.
+Copiar el contenido de este ZIP sobre la raíz del proyecto VentaMap.
 
 Archivos incluidos:
 - Pages/Browse.cshtml

@@ -1,0 +1,336 @@
+@page
+@model VentaMap.Pages.Account.RegisterModel
+@{
+    ViewData["Title"] = "Crear cuenta";
+}
+
+<section class="form-shell narrow">
+    <div class="section-heading">
+        <span class="eyebrow">Cuenta nueva</span>
+        <h1>Crear usuario</h1>
+        <p>Elige si te registras como persona o como empresa. Las empresas tendrán una web pública en VentaMap y un panel especial para seguir todas sus publicaciones.</p>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="stack-form register-form" data-account-type-form="true">
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+        <div class="register-row">
+            <span class="register-kind-label">Quiero registrarme como</span>
+            <div class="register-account-kind-grid">
+                <label class="register-account-kind-card">
+                    <input asp-for="Input.AccountType" type="radio" value="Person" data-account-type-option />
+                    <span class="register-account-kind-copy">
+                        <strong>Persona</strong>
+                        <span>Cuenta clásica para publicar y responder consultas a tu nombre.</span>
+                    </span>
+                </label>
+                <label class="register-account-kind-card">
+                    <input asp-for="Input.AccountType" type="radio" value="Company" data-account-type-option />
+                    <span class="register-account-kind-copy">
+                        <strong>Empresa</strong>
+                        <span>Tendrás una web en VentaMap para tu empresa y un panel especial para seguir todos tus anuncios.</span>
+                    </span>
+                </label>
+            </div>
+        </div>
+
+        @if (Model.IsPaidSiteEnabled)
+        {
+            <section class="detail-panel pricing-panel register-pricing-panel">
+                <div class="section-heading">
+                    <span class="eyebrow">Planes de publicación</span>
+                    <h2>Antes de crear la cuenta, mira cómo cobra VentaMap</h2>
+                    <p>Así puedes elegir el tipo de usuario correcto desde el inicio y entender qué incluye cada modalidad.</p>
+                </div>
+
+                <div class="pricing-grid">
+                    <article class="pricing-card pricing-card-individual">
+                        <span class="pricing-card-tag">Persona</span>
+                        <h3>3 anuncios gratis por mes</h3>
+                        <p>Ideal para quienes publican por cuenta propia y de forma ocasional.</p>
+                        <ul class="pricing-list">
+                            <li>Hasta 3 anuncios gratis por mes.</li>
+                            <li>Cada anuncio gratis incluye hasta 3 fotos.</li>
+                            <li>Desde el cuarto anuncio, cada publicación cuesta $3000.</li>
+                            <li>Si agregas video o más de 3 fotos, ese anuncio cuesta $3000.</li>
+                        </ul>
+                    </article>
+
+                    <article class="pricing-card pricing-card-company">
+                        <span class="pricing-card-tag">Empresa</span>
+                        <h3>3 meses gratis y luego $50000 por mes</h3>
+                        <p>Pensado para negocio activo, catálogo continuo y atención comercial.</p>
+                        <ul class="pricing-list">
+                            <li>Los primeros 3 meses son gratis.</li>
+                            <li>Luego pagas $50000 por mes.</li>
+                            <li class="pricing-list-highlight">El plan mensual incluye hasta 50 anuncios.</li>
+                            <li>Si necesitas más, consulta por pack premium ilimitado.</li>
+                            <li>Incluye estadísticas y listas personalizadas para compartir con clientes.</li>
+                        </ul>
+                    </article>
+                </div>
+            </section>
+        }
+
+        <div class="register-row" data-account-type-section="person">
+            <label>
+                <span>Nombre</span>
+                <input asp-for="Input.Name" />
+                <span asp-validation-for="Input.Name" class="text-danger"></span>
+            </label>
+        </div>
+
+        <div class="register-company-shell" data-account-type-section="company" hidden>
+            <div class="status-banner civic-banner">
+                <strong>Tu empresa tendrá una mini web propia.</strong>
+                <span>Se verá en una dirección como <code>ventamap.com.ar/tuempresa</code> con logo, datos y todos los anuncios publicados.</span>
+            </div>
+
+            <div class="register-row">
+                <label>
+                    <span>Nombre de la empresa</span>
+                    <input asp-for="Input.CompanyName" placeholder="Ejemplo: Inmobiliaria López" />
+                    <span class="field-hint">Debe ser único dentro del sitio.</span>
+                    <span asp-validation-for="Input.CompanyName" class="text-danger"></span>
+                </label>
+            </div>
+
+            <div class="register-row">
+                <label>
+                    <span>Direccion publica</span>
+                    <div class="company-public-url-field">
+                        <span class="company-public-url-domain">ventamap.com.ar</span>
+                        <input value="/tuempresa" readonly data-company-public-url />
+                    </div>
+                    <span class="field-hint">Se genera a partir del nombre de la empresa y debe estar disponible en el sitio.</span>
+                </label>
+            </div>
+
+            <div class="register-row">
+                <label>
+                    <span>Rubro de la empresa</span>
+                    <select asp-for="Input.CompanyIndustry">
+                        <option value="">Selecciona el rubro</option>
+                        @foreach (var option in Model.CompanyIndustryOptions)
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                    <span class="field-hint">Ejemplo: inmobiliaria, aberturas o materiales de construcción.</span>
+                    <span asp-validation-for="Input.CompanyIndustry" class="text-danger"></span>
+                </label>
+            </div>
+
+            <div class="register-row">
+                <label>
+                    <span>Lema de la empresa</span>
+                    <input asp-for="Input.CompanyTagline" maxlength="180" placeholder="Ejemplo: Viví en el lugar de tus sueños." />
+                    <span class="field-hint">Se mostrará debajo del logo en la página pública de la empresa.</span>
+                    <span asp-validation-for="Input.CompanyTagline" class="text-danger"></span>
+                </label>
+            </div>
+
+            <div class="settings-company-media-grid">
+                <label>
+                    <span>Logo cuadrado</span>
+                    <input asp-for="CompanyLogo"
+                           type="file"
+                           accept="image/*"
+                           data-image-live-preview-input="true"
+                           data-preview-target-id="companyLogoPreview" />
+                    <span class="field-hint">Sube un logo cuadrado. Lo usaremos en la web pública de la empresa.</span>
+                    <span asp-validation-for="CompanyLogo" class="text-danger"></span>
+                    <img id="companyLogoPreview"
+                         class="settings-company-media-preview settings-company-logo-preview"
+                         alt="Vista previa del logo de la empresa"
+                         hidden />
+                </label>
+
+                <label>
+                    <span>Fondo del encabezado</span>
+                    <input asp-for="CompanyHeroBackground"
+                           type="file"
+                           accept="image/*"
+                           data-image-live-preview-input="true"
+                           data-preview-target-id="companyHeroBackgroundPreview" />
+                    <span class="field-hint">Tamaño mínimo: 960x320 px. Recomendado: 960x320 px o múltiplos 3:1. Se usa como fondo de la tarjeta de presentación y del encabezado del catálogo.</span>
+                    <span asp-validation-for="CompanyHeroBackground" class="text-danger"></span>
+                    <img id="companyHeroBackgroundPreview"
+                         class="settings-company-media-preview settings-company-hero-preview"
+                         alt="Vista previa del fondo del encabezado"
+                         hidden />
+                </label>
+            </div>
+        </div>
+
+        <div class="register-row">
+            <label>
+                <span>Email</span>
+                <input asp-for="Input.Email" />
+                <span asp-validation-for="Input.Email" class="text-danger"></span>
+            </label>
+        </div>
+
+        <div class="register-row">
+            <label>
+                <div class="register-locality-heading">
+                    <span class="register-locality-title">
+                        <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+                        <span>Localidad de residencia</span>
+                    </span>
+                </div>
+                <div class="register-locality-actions">
+                    <span class="field-hint">Busca tu localidad como en el selector de búsquedas o deja que la detectemos automáticamente.</span>
+                </div>
+                <div class="register-locality-picker" data-hybrid-locality-root data-account-locality-form>
+                    <input type="hidden" asp-for="Input.ArgentineLocalityId" data-locality-id />
+                    <input type="hidden" asp-for="Input.SelectedExternalLocalityId" data-locality-external-id />
+                    <input asp-for="Input.ArgentineLocalityLabel"
+                           type="text"
+                           placeholder="Buscar tu localidad"
+                           aria-label="Buscar tu localidad"
+                           autocomplete="off"
+                           data-locality-input />
+                    <datalist id="register-locality-options" data-locality-suggestions></datalist>
+                    <div class="guest-locality-suggestions" data-locality-suggestions-list hidden></div>
+                    <button type="button" class="ghost-pill compact" data-detect-locality>Detectar</button>
+                </div>
+                <span class="field-hint" data-register-locality-status data-account-locality-status></span>
+                <span class="field-hint">Usaremos esta localidad para priorizar anuncios cercanos y sugerirte el mapa inicial.</span>
+                <span asp-validation-for="Input.ArgentineLocalityId" class="text-danger"></span>
+            </label>
+        </div>
+
+        <div class="register-row">
+            <div class="header-group-preferences" data-header-group-preferences data-max-groups="5">
+                <span>Accesos rápidos de la cabecera</span>
+                <span class="field-hint">Elige hasta 5 tipos de publicación. Si no eliges ninguno, usaremos la cabecera actual.</span>
+                <div class="inline-checks header-group-options">
+                    @foreach (var group in Model.HeaderGroupOptions)
+                    {
+                        var selected = Model.Input.HeaderPublicationGroups.Contains(group.Name, StringComparer.OrdinalIgnoreCase);
+                        <label class="checkline compact-check">
+                            <input type="checkbox"
+                                   name="Input.HeaderPublicationGroups"
+                                   value="@group.Name"
+                                   checked="@selected"
+                                   data-header-group-option />
+                            <span>@group.Name</span>
+                        </label>
+                    }
+                </div>
+                <span class="field-hint" data-header-group-status></span>
+            </div>
+        </div>
+
+        <div class="register-row">
+            <label>
+                <span>Telefono</span>
+                <div class="phone-inline">
+                    <select asp-for="Input.PhoneCountry" data-phone-country>
+                        <option value="AR">Argentina</option>
+                        <option value="INT">Internacional</option>
+                    </select>
+                    <input asp-for="Input.Phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+54 9 1145666454" data-phone-mask="ar" />
+                </div>
+                <span class="field-hint">Argentina: +54 9 3425444444 o +54 9 1145666454.</span>
+                <span asp-validation-for="Input.Phone" class="text-danger"></span>
+            </label>
+
+            <div class="inline-checks">
+                <label class="checkline compact-check">
+                    <input asp-for="Input.AllowSiteChat" />
+                    <span>Chat directo en el sitio (recomendado)</span>
+                </label>
+                <label class="checkline compact-check">
+                    <input asp-for="Input.RespondsEmails" />
+                    <span>Respondo emails</span>
+                </label>
+                <label class="checkline compact-check">
+                    <input asp-for="Input.AcceptsCalls" />
+                    <span>Recibe llamadas</span>
+                </label>
+                <label class="checkline compact-check">
+                    <input asp-for="Input.RespondsWhatsApp" />
+                    <span>Recibe WhatsApp</span>
+                </label>
+            </div>
+            <span class="field-hint">Solo se mostraran en el anuncio los datos de contacto que marques.</span>
+            <div class="status-banner warning">
+                Publicar tu telefono o email puede dejarte expuesto a llamadas, mensajes o contactos fraudulentos. El chat del sitio evita mostrar esos datos en el aviso.
+            </div>
+        </div>
+
+        <div class="register-row">
+            <label>
+                <span>Contrasena</span>
+                <input asp-for="Input.Password" type="password" autocomplete="new-password" />
+                <span asp-validation-for="Input.Password" class="text-danger"></span>
+            </label>
+        </div>
+
+        <div class="register-row">
+            <label>
+                <span>Repetir contrasena</span>
+                <input asp-for="Input.ConfirmPassword" type="password" autocomplete="new-password" />
+                <span asp-validation-for="Input.ConfirmPassword" class="text-danger"></span>
+            </label>
+        </div>
+
+        <div class="hero-actions">
+            <button type="submit" class="primary-pill">Crear cuenta</button>
+            @if (Model.IsGoogleEnabled)
+            {
+                <button type="submit" asp-page-handler="Google" class="ghost-pill">Usar Gmail</button>
+            }
+        </div>
+    </form>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        (() => {
+            const livePreviewInputs = Array.from(document.querySelectorAll("[data-image-live-preview-input='true']"));
+            if (!livePreviewInputs.length) return;
+
+            const objectUrls = new Map();
+
+            const revokeObjectUrl = input => {
+                const currentUrl = objectUrls.get(input);
+                if (!currentUrl) return;
+                URL.revokeObjectURL(currentUrl);
+                objectUrls.delete(input);
+            };
+
+            livePreviewInputs.forEach(input => {
+                input.addEventListener("change", event => {
+                    const fileInput = event.currentTarget;
+                    if (!(fileInput instanceof HTMLInputElement)) return;
+
+                    const targetId = fileInput.dataset.previewTargetId || "";
+                    const preview = targetId ? document.getElementById(targetId) : null;
+                    if (!(preview instanceof HTMLImageElement)) return;
+
+                    revokeObjectUrl(fileInput);
+
+                    const file = fileInput.files?.[0];
+                    if (!file) {
+                        preview.hidden = true;
+                        preview.removeAttribute("src");
+                        return;
+                    }
+
+                    const objectUrl = URL.createObjectURL(file);
+                    objectUrls.set(fileInput, objectUrl);
+                    preview.src = objectUrl;
+                    preview.hidden = false;
+                });
+            });
+
+            window.addEventListener("beforeunload", () => {
+                livePreviewInputs.forEach(revokeObjectUrl);
+            });
+        })();
+    </script>
+}

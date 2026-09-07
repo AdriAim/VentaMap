@@ -2,7 +2,7 @@
 
 ## Hecho
 
-- proyecto ASP.NET Core 8 creado en `E:\Proyectos\ventagram`
+- proyecto ASP.NET Core 8 creado en `E:\Proyectos\ventamap`
 - MySQL configurado con Pomelo
 - semilla inicial de publicaciones
 - búsqueda por grupo y texto

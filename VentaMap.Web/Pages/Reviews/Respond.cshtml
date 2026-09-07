@@ -1,0 +1,80 @@
+@page
+@model VentaMap.Pages.Reviews.RespondModel
+@using VentaMap.Models
+@{
+    ViewData["Title"] = "Confirmar operacion";
+    var returnUrl = $"/Reviews/Respond?token={Uri.EscapeDataString(Model.Token)}";
+}
+
+<section class="form-shell narrow rating-response-shell">
+    <div class="section-heading">
+        <span class="eyebrow">Operacion verificada</span>
+        <h1>Confirma la operacion</h1>
+        <p>Tu respuesta crea un historial que ayuda a proteger a las personas que participan en VentaMap.</p>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="status-banner success-banner">@Model.StatusMessage</div>
+    }
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="status-banner danger-banner">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.Operation is null)
+    {
+        <div class="status-banner danger-banner">El enlace no existe o ha vencido.</div>
+    }
+    else
+    {
+        <article class="rating-operation-card">
+            <span class="gallery-kicker">Anuncio</span>
+            <h2>@Model.Operation.Publication?.Title</h2>
+            <p>Tipo: <strong>@(Model.Operation.OperationType?.ToDisplayName() ?? "Operacion")</strong></p>
+            <p>Anunciante: <strong>@(Model.Operation.AdvertiserUser?.Name ?? "Usuario de VentaMap")</strong></p>
+            <p>Email de la otra persona: <strong>@Model.Operation.CounterpartyEmail</strong></p>
+        </article>
+
+        <div class="status-banner civic-banner rating-history-warning">
+            <strong>Confirmar no significa que estes conforme.</strong>
+            <span>Si la experiencia fue mala, confirma que la operacion existio, indica que hubo un problema y luego podras reflejarlo en tu reseña.</span>
+        </div>
+
+        @if (Model.RequiresLogin)
+        {
+            <div class="rating-login-actions">
+                <p>Este aviso corresponde a un usuario registrado. Inicia sesion con la cuenta vinculada a la operacion.</p>
+                <a class="primary-pill" asp-page="/Account/Login" asp-route-returnUrl="@returnUrl">Iniciar sesion</a>
+            </div>
+        }
+        else if (Model.Operation.Status == VerifiedOperationStatuses.PendingCounterpartyConfirmation)
+        {
+            <form method="post" class="stack-form rating-response-actions">
+                <input type="hidden" name="token" value="@Model.Token" />
+                <button type="submit" name="response" value="confirm" class="primary-pill">Si, concrete esta operacion</button>
+                <button type="submit" name="response" value="problem" class="danger-pill">La operacion existio, pero hubo un problema</button>
+                <button type="submit" name="response" value="reject" class="ghost-pill">No participe en esta operacion</button>
+            </form>
+        }
+        else if (Model.Operation.Status == VerifiedOperationStatuses.Confirmed)
+        {
+            <div class="rating-login-actions">
+                <p>La operacion ya esta confirmada.</p>
+                @if (User.Identity?.IsAuthenticated == true)
+                {
+                    <a class="primary-pill" asp-page="/Reviews/Index">Ir a Mis operaciones y reseñas</a>
+                }
+                else
+                {
+                    <p>Para dejar una reseña debes crear una cuenta con <strong>@Model.Operation.CounterpartyEmail</strong>.</p>
+                    <a class="primary-pill" asp-page="/Account/Register">Crear cuenta</a>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="status-banner">Esta operacion no fue reconocida y no admite reseñas.</div>
+        }
+    }
+</section>

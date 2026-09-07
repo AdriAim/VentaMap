@@ -1,6 +1,6 @@
-# Ventagram
+# VentaMap
 
-Ventagram es un portal de clasificados hecho en ASP.NET Core 8 con Razor Pages, MySQL y Entity Framework Core.
+VentaMap es un portal de clasificados hecho en ASP.NET Core 8 con Razor Pages, MySQL y Entity Framework Core.
 
 El producto quedó orientado a tres grandes rubros:
 
@@ -32,25 +32,25 @@ Las páginas Razor principales ya no renderizan el contenido completo del negoci
 
 Páginas shell:
 
-- [Pages/Index.cshtml](E:\Proyectos\ventagram\Pages\Index.cshtml)
-- [Pages/Trash.cshtml](E:\Proyectos\ventagram\Pages\Trash.cshtml)
-- [Pages/Publications/Details.cshtml](E:\Proyectos\ventagram\Pages\Publications\Details.cshtml)
-- [Pages/Publications/Create.cshtml](E:\Proyectos\ventagram\Pages\Publications\Create.cshtml)
+- [Pages/Index.cshtml](E:\Proyectos\ventamap\Pages\Index.cshtml)
+- [Pages/Trash.cshtml](E:\Proyectos\ventamap\Pages\Trash.cshtml)
+- [Pages/Publications/Details.cshtml](E:\Proyectos\ventamap\Pages\Publications\Details.cshtml)
+- [Pages/Publications/Create.cshtml](E:\Proyectos\ventamap\Pages\Publications\Create.cshtml)
 
 Controllers:
 
-- [Controllers/ContentController.cs](E:\Proyectos\ventagram\Controllers\ContentController.cs)
+- [Controllers/ContentController.cs](E:\Proyectos\ventamap\Controllers\ContentController.cs)
 
 Vistas parciales HTML servidas por controller:
 
-- [Views/Content/Home.cshtml](E:\Proyectos\ventagram\Views\Content\Home.cshtml)
-- [Views/Content/Trash.cshtml](E:\Proyectos\ventagram\Views\Content\Trash.cshtml)
-- [Views/Content/Details.cshtml](E:\Proyectos\ventagram\Views\Content\Details.cshtml)
-- [Views/Content/Create.cshtml](E:\Proyectos\ventagram\Views\Content\Create.cshtml)
+- [Views/Content/Home.cshtml](E:\Proyectos\ventamap\Views\Content\Home.cshtml)
+- [Views/Content/Trash.cshtml](E:\Proyectos\ventamap\Views\Content\Trash.cshtml)
+- [Views/Content/Details.cshtml](E:\Proyectos\ventamap\Views\Content\Details.cshtml)
+- [Views/Content/Create.cshtml](E:\Proyectos\ventamap\Views\Content\Create.cshtml)
 
 Cliente:
 
-- [wwwroot/js/site.js](E:\Proyectos\ventagram\wwwroot\js\site.js)
+- [wwwroot/js/site.js](E:\Proyectos\ventamap\wwwroot\js\site.js)
 
 ### Endpoints API actuales
 
@@ -99,18 +99,18 @@ Se usa un modelo mixto:
 
 Entidades relevantes:
 
-- [Models/Publication.cs](E:\Proyectos\ventagram\Models\Publication.cs)
-- [Models/PropertyDetail.cs](E:\Proyectos\ventagram\Models\PropertyDetail.cs)
-- [Models/VehicleDetail.cs](E:\Proyectos\ventagram\Models\VehicleDetail.cs)
-- [Models/GeneralDetail.cs](E:\Proyectos\ventagram\Models\GeneralDetail.cs)
-- [Models/PublicationExtraAttribute.cs](E:\Proyectos\ventagram\Models\PublicationExtraAttribute.cs)
-- [Models/PublicationReport.cs](E:\Proyectos\ventagram\Models\PublicationReport.cs)
-- [Models/ApplicationUser.cs](E:\Proyectos\ventagram\Models\ApplicationUser.cs)
+- [Models/Publication.cs](E:\Proyectos\ventamap\Models\Publication.cs)
+- [Models/PropertyDetail.cs](E:\Proyectos\ventamap\Models\PropertyDetail.cs)
+- [Models/VehicleDetail.cs](E:\Proyectos\ventamap\Models\VehicleDetail.cs)
+- [Models/GeneralDetail.cs](E:\Proyectos\ventamap\Models\GeneralDetail.cs)
+- [Models/PublicationExtraAttribute.cs](E:\Proyectos\ventamap\Models\PublicationExtraAttribute.cs)
+- [Models/PublicationReport.cs](E:\Proyectos\ventamap\Models\PublicationReport.cs)
+- [Models/ApplicationUser.cs](E:\Proyectos\ventamap\Models\ApplicationUser.cs)
 
 Persistencia:
 
-- [Data/VentagramDbContext.cs](E:\Proyectos\ventagram\Data\VentagramDbContext.cs)
-- [Data/SeedData.cs](E:\Proyectos\ventagram\Data\SeedData.cs)
+- [Data/VentaMapDbContext.cs](E:\Proyectos\ventamap\Data\VentaMapDbContext.cs)
+- [Data/SeedData.cs](E:\Proyectos\ventamap\Data\SeedData.cs)
 
 ## Base de datos
 
@@ -120,14 +120,14 @@ Proveedor configurado:
 
 Cadena de desarrollo actual:
 
-- [appsettings.Development.json](E:\Proyectos\ventagram\appsettings.Development.json)
+- [appsettings.Development.json](E:\Proyectos\ventamap\appsettings.Development.json)
 
 Entorno de prueba definido:
 
 - host: `127.0.0.1`
 - puerto: `3307`
 - usuario: `root`
-- base: `ventagram`
+- base: `ventamap`
 
 ## Autenticación
 
@@ -140,8 +140,8 @@ Soporta:
 
 Configuración:
 
-- [Program.cs](E:\Proyectos\ventagram\Program.cs)
-- [Services/AuthService.cs](E:\Proyectos\ventagram\Services\AuthService.cs)
+- [Program.cs](E:\Proyectos\ventamap\Program.cs)
+- [Services/AuthService.cs](E:\Proyectos\ventamap\Services\AuthService.cs)
 
 ## Mapa
 
@@ -167,27 +167,27 @@ Si no hay clave, se muestra placeholder.
 ### Build
 
 ```powershell
-dotnet build E:\Proyectos\ventagram\Ventagram.csproj
+dotnet build E:\Proyectos\ventamap\VentaMap.csproj
 ```
 
 ### Run
 
 ```powershell
-dotnet run --project E:\Proyectos\ventagram\Ventagram.csproj --urls http://127.0.0.1:5099
+dotnet run --project E:\Proyectos\ventamap\VentaMap.csproj --urls http://127.0.0.1:5099
 ```
 
 ### Debug local con chat
 
-El chat no vive dentro de `Ventagram.Web`. Para que funcione en local hay que iniciar los dos proyectos:
+El chat no vive dentro de `VentaMap.Web`. Para que funcione en local hay que iniciar los dos proyectos:
 
-- `Ventagram.Web` en `https://localhost:7048`
-- `Ventagram.ChatService` en `https://localhost:7065`
+- `VentaMap.Web` en `https://localhost:7048`
+- `VentaMap.ChatService` en `https://localhost:7065`
 
-Si solo se ejecuta `Ventagram.Web`, las acciones del chat van a fallar porque el frontend intenta llamar a `https://localhost:7065/api/chat/...`.
+Si solo se ejecuta `VentaMap.Web`, las acciones del chat van a fallar porque el frontend intenta llamar a `https://localhost:7065/api/chat/...`.
 
 ## Estado Git
 
-`E:\Proyectos\ventagram` hoy no es un repositorio Git. Por eso:
+`E:\Proyectos\ventamap` hoy no es un repositorio Git. Por eso:
 
 - no hay branch local para actualizar
 - no se puede hacer `git status`, `commit` ni `switch` ahí

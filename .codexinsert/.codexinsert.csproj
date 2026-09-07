@@ -8,6 +8,6 @@
     <BaseIntermediateOutputPath>..\.codextemp\obj\</BaseIntermediateOutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Ventagram.csproj" />
+    <ProjectReference Include="..\VentaMap.csproj" />
   </ItemGroup>
 </Project>

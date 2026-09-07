@@ -1,6 +1,6 @@
-# Cloudflare R2 en Ventagram
+# Cloudflare R2 en VentaMap
 
-Ventagram sube las imágenes procesadas al bucket de Cloudflare R2 por el endpoint S3-compatible y luego guarda en la publicación la URL pública final.
+VentaMap sube las imágenes procesadas al bucket de Cloudflare R2 por el endpoint S3-compatible y luego guarda en la publicación la URL pública final.
 
 ## Configuración en Cloudflare
 
@@ -21,7 +21,7 @@ Completar `Cloudflare:R2` en `appsettings.json` o en variables de entorno:
     "AccountId": "tu-account-id",
     "AccessKeyId": "tu-access-key",
     "SecretAccessKey": "tu-secret-key",
-    "Bucket": "ventagram-publicaciones",
+    "Bucket": "ventamap-publicaciones",
     "PublicBaseUrl": "https://img.ventamap.com.ar",
     "Prefix": "publications",
     "Region": "auto",

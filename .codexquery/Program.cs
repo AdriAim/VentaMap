@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Ventagram.Data;
+using VentaMap.Data;
 
 var config = new ConfigurationBuilder()
     .SetBasePath(Path.GetFullPath(".."))
@@ -9,10 +9,10 @@ var config = new ConfigurationBuilder()
     .Build();
 
 var connectionString = config.GetConnectionString("DefaultConnection");
-var optionsBuilder = new DbContextOptionsBuilder<VentagramDbContext>();
+var optionsBuilder = new DbContextOptionsBuilder<VentaMapDbContext>();
 optionsBuilder.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
 
-await using var db = new VentagramDbContext(optionsBuilder.Options);
+await using var db = new VentaMapDbContext(optionsBuilder.Options);
 var rows = await db.Publications
     .Where(x => x.Title.Contains("Candioti Norte"))
     .OrderByDescending(x => x.Id)

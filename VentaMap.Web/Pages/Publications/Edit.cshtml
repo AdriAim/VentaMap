@@ -1,0 +1,14 @@
+@page "{id:int}"
+@model VentaMap.Pages.Publications.EditModel
+@{
+    ViewData["Title"] = "Editar anuncio";
+    var endpoint = $"/api/content/edit/{Model.Id}";
+    if (string.Equals(Request.Query["debug"], "1", StringComparison.Ordinal))
+    {
+        endpoint += "?debug=1";
+    }
+}
+
+<div id="api-page" data-page-kind="edit" data-api-endpoint="@endpoint"></div>
+
+<partial name="_GlobalModals" model="Model" />
