@@ -70,6 +70,9 @@ public class ApplicationUser
 
     public bool CanPublish { get; set; } = true;
 
+    // 0 = normal, 1 = exempt, 2 = force billing even when site billing is disabled.
+    public int IsBillingExempt { get; set; }
+
     public bool CanReport { get; set; } = true;
 
     public List<FavoriteList> FavoriteLists { get; set; } = [];
@@ -83,4 +86,5 @@ public class ApplicationUser
     public List<VerifiedOperation> OperationsAsCounterparty { get; set; } = [];
     public List<OperationReview> ReviewsWritten { get; set; } = [];
     public List<OperationReview> ReviewsReceived { get; set; } = [];
+    public List<BillingCharge> BillingCharges { get; set; } = [];
 }

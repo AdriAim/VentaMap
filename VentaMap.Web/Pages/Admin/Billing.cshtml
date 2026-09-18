@@ -1,0 +1,11 @@
+@page "/Admin/Facturacion"
+@model VentaMap.Pages.Admin.BillingModel
+@{
+    ViewData["Title"] = "Cuentas gratuitas";
+}
+<section class="form-shell">
+    <div class="section-heading"><span class="eyebrow">Administración</span><h1>Cuentas gratuitas</h1><p>Las cuentas marcadas como gratuitas no generan ni deben cargos.</p></div>
+    <section class="detail-panel"><div class="table-responsive"><table class="table"><thead><tr><th>Usuario</th><th>Tipo</th><th>Facturación</th><th></th></tr></thead><tbody>
+    @foreach (var user in Model.Users) { <tr><td><strong>@user.Name</strong><br /><small>@user.Email</small></td><td>@(user.IsCompany ? "Empresa" : "Persona")</td><td>@(user.IsBillingExempt == 1 ? "Gratuita" : user.IsBillingExempt == 2 ? "Cobro forzado" : "Con cobro")</td><td><form method="post" asp-page-handler="ToggleExempt"><input type="hidden" name="userId" value="@user.Id" /><button class="ghost-pill" type="submit">@(user.IsBillingExempt == 1 ? "Quitar gratuidad" : "Marcar gratuita")</button></form></td></tr> }
+    </tbody></table></div></section>
+</section>

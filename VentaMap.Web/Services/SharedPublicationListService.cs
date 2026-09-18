@@ -7,7 +7,7 @@ using VentaMap.ViewModels;
 
 namespace VentaMap.Services;
 
-public class SharedPublicationListService(VentaMapDbContext db)
+public class SharedPublicationListService(VentaMapDbContext db, BillingService billingService)
 {
     public async Task<List<SharedPublicationListSummaryViewModel>> GetOwnedSummariesAsync(int userId)
     {
@@ -100,6 +100,11 @@ public class SharedPublicationListService(VentaMapDbContext db)
 
         db.SharedPublicationLists.Add(list);
         await db.SaveChangesAsync();
+        var user = await db.Users.FindAsync(userId);
+        if (user is not null)
+        {
+            await billingService.EnsureCompanyCurrentMonthChargeAsync(user);
+        }
         return list;
     }
 

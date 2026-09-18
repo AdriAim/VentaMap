@@ -487,6 +487,7 @@
     wireRegisterAccountType(document);
     wireHybridLocalityPicker(document);
     wireReportModal();
+    wireDetailShareModal();
     wireAuthRequiredModal();
     wireSuggestionModal();
     wirePublicationPreviewModal();
@@ -699,6 +700,7 @@
       wireDynamicGalleryCards();
       wireFavoriteActions(host);
       wireReportForm();
+      wireDetailShareModal();
       wireCreateForm();
       wireBrowseSearchFilters(host);
       wireChatExperience(host);
@@ -5200,6 +5202,7 @@
 
     const uploader = wireCreateImageUploader(form);
     const videoUploader = wireCreateVideoUploader(form);
+    wirePublicationChargeEstimator(form);
 
     form.addEventListener("submit", async event => {
       event.preventDefault();
@@ -5246,7 +5249,10 @@
 
         if (feedback) {
           const errorMessage = result.message || "No se pudo crear la publicacion.";
-          feedback.innerHTML = `<div class="status-banner warning">${escapeHtml(errorMessage)}</div>`;
+          const billingAction = result.billingUrl
+            ? ` <a href="${escapeHtml(result.billingUrl)}">Ir a Mi facturación</a>`
+            : "";
+          feedback.innerHTML = `<div class="status-banner warning">${escapeHtml(errorMessage)}${billingAction}</div>`;
         }
 
         focusFirstCreateError(form, fieldErrors);
@@ -6438,6 +6444,7 @@
           .filter(Boolean)
           .join(",");
       }
+      form.dispatchEvent(new CustomEvent("create:images-state-changed", { bubbles: true }));
     };
 
     const hasPrimaryVideo = () => String(videoUrlInput?.value || "").trim().length > 0;
@@ -6455,7 +6462,7 @@
 
     const render = () => {
       if (countNode) {
-        countNode.textContent = `${state.length}/11 imágenes`;
+        countNode.textContent = `${state.length}/10 imágenes`;
       }
 
       if (!previews) return;
@@ -6483,7 +6490,7 @@
       const unsupportedFiles = selectedFiles.filter(file => !isSupportedImageFile(file));
       const validFiles = selectedFiles
         .filter(file => isSupportedImageFile(file))
-        .slice(0, Math.max(0, 11 - state.length));
+        .slice(0, Math.max(0, 10 - state.length));
 
       if (unsupportedFiles.length) {
         const unsupportedNames = unsupportedFiles
@@ -6749,6 +6756,93 @@
       },
       hasPendingFiles: () => state.some(item => !item.uploadedUrl)
     };
+  }
+
+  function wireDetailShareModal() {
+    if (document.body.dataset.detailShareBound === "true") return;
+    document.body.dataset.detailShareBound = "true";
+    document.addEventListener("click", async event => {
+      const trigger = event.target.closest("[data-detail-share-trigger]");
+      if (!trigger) return;
+      const modal = trigger.closest(".detail-hero")?.parentElement?.querySelector("[data-detail-share-modal]");
+      if (!modal) return;
+      const url = new URL(trigger.getAttribute("data-detail-share-url") || window.location.href, window.location.origin).href;
+      const title = trigger.closest(".detail-hero")?.querySelector(".detail-title-text")?.textContent?.trim() || "Anuncio en VentaMap";
+      const text = `${title} · ${url}`;
+      if (event.target.closest("[data-detail-share-trigger]")) {
+        event.preventDefault();
+        modal.querySelector("[data-detail-share-email]").href = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(text)}`;
+        modal.querySelector("[data-detail-share-whatsapp]").href = `https://wa.me/?text=${encodeURIComponent(text)}`;
+        modal.querySelector("[data-detail-share-facebook]").href = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+        modal.querySelector("[data-detail-share-x]").href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`;
+        modal.hidden = false; trigger.setAttribute("aria-expanded", "true");
+      }
+    });
+    document.addEventListener("click", async event => {
+      const modal = event.target.closest("[data-detail-share-modal]");
+      if (!modal) return;
+      if (event.target === modal || event.target.closest("[data-detail-share-close]")) {
+        modal.hidden = true;
+        modal.previousElementSibling?.querySelector("[data-detail-share-trigger]")?.setAttribute("aria-expanded", "false");
+      }
+      if (event.target.closest("[data-detail-share-copy]")) { await navigator.clipboard?.writeText(new URL(modal.closest(".detail-share-modal")?.previousElementSibling?.querySelector("[data-detail-share-url]")?.getAttribute("data-detail-share-url") || window.location.href, window.location.origin).href); modal.querySelector(".detail-share-status").textContent = "Enlace copiado."; }
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key !== "Escape") return;
+      document.querySelectorAll("[data-detail-share-modal]").forEach(modal => {
+        modal.hidden = true;
+        modal.previousElementSibling?.querySelector("[data-detail-share-trigger]")?.setAttribute("aria-expanded", "false");
+      });
+    });
+  }
+
+  function wirePublicationChargeEstimator(form) {
+    const panels = Array.from(form.closest(".create-editor-layout")?.querySelectorAll("[data-publication-charge-estimator]") || []);
+    if (!panels.length) return;
+
+    const panel = panels[0];
+    const imagesInput = form.querySelector('input[name="imagesCsv"]');
+    const videoInput = form.querySelector('input[name="videoUrl"]');
+    const isCompany = panel.dataset.company === "true";
+    const isExempt = panel.dataset.exempt === "true";
+    const activeCount = Number(panel.dataset.activeCount || 0);
+
+    const setEstimate = (titleText, detailText) => {
+      panels.forEach(currentPanel => {
+        currentPanel.querySelector("[data-charge-estimator-title]").textContent = titleText;
+        currentPanel.querySelector("[data-charge-estimator-detail]").textContent = detailText;
+      });
+    };
+
+    const refresh = () => {
+      if (isExempt) {
+        setEstimate("Costo estimado: gratis", "Tu cuenta está marcada como gratuita.");
+        return;
+      }
+
+      if (isCompany) {
+        const exceedsAds = activeCount + 1 > 50;
+        setEstimate(exceedsAds ? "Límite de anuncios alcanzado" : "Plan empresa", exceedsAds
+          ? "Tu cuenta puede tener hasta 50 anuncios activos simultáneos."
+          : `Con este anuncio quedarás con ${activeCount + 1} de 50 anuncios activos simultáneos.`);
+        return;
+      }
+
+      const photoCount = String(imagesInput?.value || "").split(",").map(value => value.trim()).filter(Boolean).length;
+      const hasVideo = Boolean(String(videoInput?.value || "").trim());
+      const reasons = [];
+      if (activeCount + 1 > 2) reasons.push("será tu tercer anuncio activo");
+      if (photoCount > 3) reasons.push("incluye más de 3 fotos");
+      if (hasVideo) reasons.push("incluye video");
+      const isPaid = reasons.length > 0;
+      setEstimate(isPaid ? "Anuncio completo · $3.000" : "Anuncio básico · gratis", isPaid
+        ? `Incluye hasta 10 fotos y video. Se aplica porque ${reasons.join(" y ")}.`
+        : `Incluye hasta 3 fotos y no incluye video. Llevás ${activeCount} de 2 anuncios activos gratuitos.`);
+    };
+
+    form.addEventListener("create:images-state-changed", refresh);
+    form.addEventListener("create:video-state-changed", refresh);
+    refresh();
   }
 
   function wireCreateVideoUploader(form) {

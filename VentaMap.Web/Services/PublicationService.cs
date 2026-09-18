@@ -8,6 +8,7 @@ namespace VentaMap.Services;
 public class PublicationService(
     VentaMapDbContext db,
     CloudflareR2ImageStorageService imageStorageService,
+    BillingService billingService,
     ILogger<PublicationService> logger)
 {
     public const string OwnerDeletedStatus = "Eliminado por usuario";
@@ -278,6 +279,11 @@ public class PublicationService(
 
         db.Publications.Add(publication);
         await db.SaveChangesAsync();
+        var user = userId.HasValue ? await db.Users.FindAsync(userId.Value) : null;
+        if (user is not null)
+        {
+            await billingService.EnsureCompanyCurrentMonthChargeAsync(user);
+        }
         return (publication, rawAnonymousPassword);
     }
 
@@ -400,6 +406,11 @@ public class PublicationService(
         publication.DeactivationComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
         publication.DeactivatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync();
+        var user = await db.Users.FindAsync(userId);
+        if (user is not null)
+        {
+            await billingService.EnsureCompanyCurrentMonthChargeAsync(user);
+        }
         return true;
     }
 

@@ -132,6 +132,8 @@ builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 builder.Services.AddSingleton<CloudflareR2ImageStorageService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PublicationService>();
+builder.Services.AddScoped<BillingService>();
+builder.Services.AddHttpClient<MercadoPagoService>();
 builder.Services.AddScoped<PublicationAnalyticsService>();
 builder.Services.AddScoped<PublicationGroupTypeService>();
 builder.Services.AddScoped<PublicationCategoryService>();
@@ -273,6 +275,7 @@ static async Task EnsureDatabaseSchemaAsync(VentaMapDbContext db, IWebHostEnviro
         await EnsurePublicationCategoryFieldSchemaAsync(connection);
         await EnsurePublicationMediaSchemaAsync(connection);
         await EnsurePublicationExpirationSchemaAsync(connection);
+        await EnsureBillingSchemaAsync(connection);
         await EnsurePublicationFavoritesSchemaAsync(connection);
         await EnsurePublicationAnalyticsSchemaAsync(connection);
         await EnsurePublicationCountersSchemaAsync(connection);
@@ -548,6 +551,34 @@ static async Task EnsurePublicationExpirationSchemaAsync(System.Data.Common.DbCo
         """);
 }
 
+static async Task EnsureBillingSchemaAsync(System.Data.Common.DbConnection connection)
+{
+    await EnsureColumnAsync(connection, "Users", "IsBillingExempt", "tinyint(1) NOT NULL DEFAULT 0");
+
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `BillingCharges` (
+            `Id` int NOT NULL AUTO_INCREMENT,
+            `UserId` int NOT NULL,
+            `Type` varchar(40) CHARACTER SET utf8mb4 NOT NULL,
+            `Amount` decimal(18,2) NOT NULL,
+            `BillingMonthUtc` datetime(6) NOT NULL,
+            `Status` varchar(40) CHARACTER SET utf8mb4 NOT NULL,
+            `Description` varchar(180) CHARACTER SET utf8mb4 NOT NULL,
+            `Reference` varchar(100) CHARACTER SET utf8mb4 NULL,
+            `CreatedAtUtc` datetime(6) NOT NULL,
+            `PaidAtUtc` datetime(6) NULL,
+            `MercadoPagoPaymentId` varchar(180) CHARACTER SET utf8mb4 NULL,
+            CONSTRAINT `PK_BillingCharges` PRIMARY KEY (`Id`),
+            CONSTRAINT `FK_BillingCharges_Users_UserId`
+                FOREIGN KEY (`UserId`) REFERENCES `Users` (`Id`) ON DELETE CASCADE
+        ) CHARACTER SET=utf8mb4;
+        """);
+
+    await EnsureIndexAsync(connection, "BillingCharges", "IX_BillingCharges_UserId_Type_Month_Reference", "CREATE UNIQUE INDEX `IX_BillingCharges_UserId_Type_Month_Reference` ON `BillingCharges` (`UserId`, `Type`, `BillingMonthUtc`, `Reference`)");
+    await EnsureIndexAsync(connection, "BillingCharges", "IX_BillingCharges_UserId_Status_Month", "CREATE INDEX `IX_BillingCharges_UserId_Status_Month` ON `BillingCharges` (`UserId`, `Status`, `BillingMonthUtc`)");
+}
+
 static async Task EnsureCompanyAndSuggestionsSchemaAsync(System.Data.Common.DbConnection connection)
 {
     await EnsureColumnAsync(connection, "Users", "CompanyIndustry", "varchar(120) CHARACTER SET utf8mb4 NULL");
@@ -709,7 +740,7 @@ static async Task EnsureReviewSchemaAsync(System.Data.Common.DbConnection connec
             ('Reviews.DisplayExisting.Enabled', 'true', 'Boolean', 'Muestra reseñas publicadas existentes.', UTC_TIMESTAMP(6), NULL),
             ('Reviews.PublicationDelayDays', '7', 'Integer', 'Dias de espera antes de publicar las respuestas.', UTC_TIMESTAMP(6), NULL),
             ('Reviews.ResponseDeadlineDays', '14', 'Integer', 'Dias maximos para esperar la respuesta de la otra persona.', UTC_TIMESTAMP(6), NULL),
-            ('PaidSite.Enabled', 'false', 'Boolean', 'Activa las leyendas y secciones de cobro del sitio.', UTC_TIMESTAMP(6), NULL);
+            ('PaidSite.Enabled', 'false', 'Boolean', 'Activa las leyendas, los cargos y los bloqueos de facturación del sitio.', UTC_TIMESTAMP(6), NULL);
         """);
 }
 

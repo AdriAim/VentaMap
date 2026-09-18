@@ -291,6 +291,12 @@ img {
   filter: drop-shadow(0 18px 24px rgba(255, 75, 95, 0.18));
 }
 
+/* Mantiene el ícono de la marca del encabezado al mismo tamaño que el destacado. */
+.brand-mark {
+  width: 108px;
+  height: 108px;
+}
+
 .brand-text {
   display: grid;
   gap: 0.1rem;
@@ -3780,6 +3786,19 @@ textarea:focus {
   margin: 1rem auto 0;
 }
 
+.prepublish-guidance a {
+  text-decoration: underline;
+  text-underline-offset: 0.14em;
+}
+
+.create-pricing-estimator {
+  margin-top: 1rem;
+}
+
+.create-pricing-estimator-mobile {
+  display: none;
+}
+
 .create-preview-media {
   position: absolute;
   inset: 0;
@@ -3832,6 +3851,10 @@ textarea:focus {
   .create-live-preview {
     display: none;
   }
+
+  .create-pricing-estimator-mobile {
+    display: grid;
+  }
 }
 
 .form-shell.narrow {
@@ -3865,6 +3888,7 @@ textarea:focus {
 }
 
 .register-account-kind-card {
+  position: relative;
   display: flex;
   gap: 0.8rem;
   align-items: flex-start;
@@ -3887,6 +3911,43 @@ textarea:focus {
 .register-account-kind-copy strong {
   color: var(--ink);
   font-size: 1rem;
+}
+
+.register-pricing-tooltip {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + 0.6rem);
+  left: 0;
+  width: min(21rem, calc(100vw - 2rem));
+  padding: 0.8rem 0.9rem;
+  border: 1px solid rgba(227, 55, 78, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 249, 249, 0.98);
+  box-shadow: 0 12px 28px rgba(49, 70, 101, 0.16);
+  color: var(--ink);
+  font-size: 0.88rem;
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-0.35rem);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.register-pricing-tooltip strong {
+  color: var(--accent-deep);
+}
+
+.register-pricing-tooltip ul {
+  display: grid;
+  gap: 0.28rem;
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.register-account-kind-card:hover .register-pricing-tooltip,
+.register-account-kind-card:focus-within .register-pricing-tooltip {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .register-company-shell {
@@ -5535,6 +5596,19 @@ textarea:focus {
   gap: 2rem;
   padding: 2rem;
 }
+
+.detail-hero-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }
+.detail-share-modal { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 1rem; background: rgba(20, 28, 43, 0.48); }
+.detail-share-panel { position: relative; width: min(620px, 100%); padding: 1.5rem; border-radius: 28px; background: var(--paper); box-shadow: var(--shadow); }
+.detail-share-panel h2 { margin: 0 2rem 0.55rem 0; }
+.detail-share-summary { display: flex; align-items: center; gap: 0.9rem; margin: 0 0 1rem; }
+.detail-share-image { width: 64px; height: 64px; flex: 0 0 64px; border-radius: 12px; object-fit: cover; background: #e8edf4; }
+.detail-share-image-fallback { display: grid; place-items: center; color: var(--muted); }
+.detail-share-name { margin: 0; color: var(--muted); }
+.detail-share-close { position: absolute; top: 1rem; right: 1rem; border: 0; background: transparent; font-size: 1.2rem; cursor: pointer; }
+.detail-share-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+.detail-share-options a, .detail-share-options button { display: flex; align-items: center; gap: 0.7rem; min-height: 3rem; padding: 0.7rem 0.9rem; border: 1px solid var(--line); border-radius: 14px; background: #fff; color: var(--ink); font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+.detail-share-status { display: block; min-height: 1.2rem; margin-top: 0.65rem; color: var(--accent-deep); font-weight: 700; }
 
 .price-panel {
   display: grid;

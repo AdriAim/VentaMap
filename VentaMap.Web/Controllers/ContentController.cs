@@ -28,6 +28,7 @@ public partial class ContentController(
     NavigationLocalityService navigationLocalityService,
     ReviewService reviewService,
     VentaMapParameterService parameters,
+    BillingService billingService,
     VentaMapDbContext db,
     ILogger<ContentController> logger,
     IConfiguration configuration) : Controller
@@ -772,6 +773,11 @@ public partial class ContentController(
                 ? "Tu cuenta no puede publicar nuevos anuncios hasta que un administrador revise el anuncio denunciado."
                 : null,
             IsPaidSiteEnabled = await parameters.GetBoolAsync(VentaMapParameterService.PaidSiteEnabled, fallback: false),
+            IsCompanyAccount = user?.IsCompany == true,
+            IsBillingExempt = user?.IsBillingExempt == 1,
+            ShowPublicationChargeEstimator = user is not null,
+            ActivePublicationCount = user is null ? 0 : await db.Publications.CountAsync(x => x.UserId == user.Id && x.IsActive),
+            SharedListCount = user is null ? 0 : await db.SharedPublicationLists.CountAsync(x => x.UserId == user.Id),
             MapStyleUrl = configuration["Map:StyleUrl"] ?? string.Empty,
             MapTilesUrlTemplate = configuration["Map:TilesUrlTemplate"] ?? string.Empty,
             MapAttributionHtml = configuration["Map:AttributionHtml"] ?? string.Empty,
@@ -862,6 +868,9 @@ public partial class ContentController(
                 ? user.ArgentineLocality?.Longitude
                 : publication.Longitude ?? user.ArgentineLocality?.Longitude,
             IsPaidSiteEnabled = await parameters.GetBoolAsync(VentaMapParameterService.PaidSiteEnabled, fallback: false),
+            IsCompanyAccount = user.IsCompany,
+            IsBillingExempt = user.IsBillingExempt == 1,
+            ShowPublicationChargeEstimator = false,
             MapStyleUrl = configuration["Map:StyleUrl"] ?? string.Empty,
             MapTilesUrlTemplate = configuration["Map:TilesUrlTemplate"] ?? string.Empty,
             MapAttributionHtml = configuration["Map:AttributionHtml"] ?? string.Empty,
@@ -983,6 +992,16 @@ public partial class ContentController(
             return StatusCode(403, new { message = "No puedes publicar nuevos anuncios hasta que un administrador revise el anuncio denunciado." });
         }
 
+        if (await billingService.IsPublishingBlockedAsync(user))
+        {
+            return StatusCode(403, new { message = "Tenés un pago pendiente. Regularizalo desde Mi facturación para publicar o modificar anuncios.", billingUrl = "/Account/Billing" });
+        }
+
+        if (await billingService.HasReachedCompanyPublicationLimitAsync(user))
+        {
+            return StatusCode(403, new { message = "Tu cuenta empresa ya tiene 50 anuncios activos simultáneos. Da de baja uno para publicar otro." });
+        }
+
         request.Currency = NormalizeCurrency(request.Currency);
         if (request.NoLocation)
         {
@@ -1016,7 +1035,20 @@ public partial class ContentController(
             return BadRequest(new { message = "Revisa los datos del formulario.", errors });
         }
 
+        var needsPersonPack = await billingService.IsPersonPublicationPackRequiredAsync(user, request);
+        var charge = await billingService.RequirePersonPublicationPackAsync(user, request);
+        if (charge is not null)
+        {
+            return StatusCode(402, new
+            {
+                message = "Este anuncio requiere el anuncio completo de $3.000. Podés pagarlo desde Mi facturación.",
+                billingUrl = "/Account/Billing",
+                chargeId = charge.Id
+            });
+        }
+
         var result = await publicationService.CreateAsync(request, user.Id);
+        if (needsPersonPack) await billingService.ConsumePaidPersonPublicationPackAsync(user.Id);
 
         return Ok(new
         {
@@ -1049,6 +1081,11 @@ public partial class ContentController(
         if (user is null)
         {
             return Unauthorized(new { message = "No se encontro el usuario autenticado." });
+        }
+
+        if (await billingService.IsPublishingBlockedAsync(user))
+        {
+            return StatusCode(403, new { message = "Tenés un pago pendiente. Regularizalo desde Mi facturación para modificar anuncios.", billingUrl = "/Account/Billing" });
         }
 
         var publication = await publicationService.GetOwnedByIdAsync(id, userId);
@@ -1121,10 +1158,10 @@ public partial class ContentController(
             return BadRequest(new { message = "Subi al menos una imagen." });
         }
 
-        if (files.Count > 11)
+        if (files.Count > 10)
         {
             logger.LogWarning("UploadImages rejected: too many files ({Count}) for user {UserId}.", files.Count, currentUserAccessor.UserId);
-            return BadRequest(new { message = "Podes subir hasta 11 imagenes." });
+            return BadRequest(new { message = "Podes subir hasta 10 imagenes." });
         }
 
         var fileInfo = files.Select(file => new { file.FileName, file.Length, file.ContentType }).ToList();

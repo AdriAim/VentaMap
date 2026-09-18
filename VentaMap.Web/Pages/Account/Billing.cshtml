@@ -1,0 +1,86 @@
+@page
+@model VentaMap.Pages.Account.BillingModel
+@{
+    ViewData["Title"] = "Mi facturación";
+}
+
+<section class="form-shell narrow">
+    <div class="section-heading">
+        <span class="eyebrow">Cuenta</span>
+        <h1>Mi facturación</h1>
+        @if (Model.UserAccount?.IsBillingExempt == 1)
+        {
+            <p>Tu cuenta está marcada como gratuita: no se generan cargos por anuncios ni catálogo.</p>
+        }
+        else if (Model.UserAccount?.IsCompany == true)
+        {
+            <p>Los primeros 3 meses desde el alta son gratuitos. Desde el cuarto mes, el plan empresa cuesta $50.000 por mes e incluye hasta 50 anuncios activos simultáneos, estadísticas de vistas y listas personalizadas.</p>
+        }
+        else
+        {
+            <p>Anuncio básico: hasta 3 fotos y sin video. Anuncio completo: hasta 10 fotos, video incluido y $3.000.</p>
+        }
+    </div>
+
+    @if (!Model.Charges.Any())
+    {
+        <section class="empty-state"><h2>No tenés cargos pendientes ni pagos registrados.</h2></section>
+    }
+    else
+    {
+        <section class="detail-panel">
+            <div class="table-responsive"><table class="table">
+                <thead><tr><th>Período</th><th>Concepto</th><th>Importe</th><th>Estado</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var charge in Model.Charges)
+                {
+                    <tr>
+                        <td>@charge.BillingMonthUtc.ToLocalTime().ToString("MMMM yyyy", new System.Globalization.CultureInfo("es-AR"))</td>
+                        <td>@charge.Description</td>
+                        <td>$@charge.Amount.ToString("N0", new System.Globalization.CultureInfo("es-AR"))</td>
+                        <td>@(charge.Status switch { "Paid" => "Pagado", "Used" => "Pagado y aplicado", _ => "Pendiente" })</td>
+                        <td>
+                            @if (charge.Status == "Pending")
+                            {
+                                <button type="button" class="primary-pill compact" data-mercadopago-checkout="@charge.Id">Pagar con Mercado Pago</button>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table></div>
+        </section>
+    }
+
+    @if (Model.Charges.Any(x => x.Status == "Pending"))
+    {
+        <section class="status-banner">
+            @if (Model.IsMercadoPagoConfigured)
+            {
+                <span>Elegí un cargo y presioná “Pagar con Mercado Pago”. Al acreditarse, se actualizará automáticamente.</span>
+            }
+            else
+            {
+                <span>Los cargos ya están registrados. Falta conectar Mercado Pago para mostrar el QR y el botón de pago.</span>
+            }
+        </section>
+    }
+</section>
+
+@section Scripts {
+<script>
+document.querySelectorAll('[data-mercadopago-checkout]').forEach(button => {
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    const response = await fetch(`/api/payments/mercadopago/checkout/${button.dataset.mercadopagoCheckout}`, { method: 'POST' });
+    const result = await response.json().catch(() => ({}));
+    if (response.ok && result.checkoutUrl) {
+      window.location.assign(result.checkoutUrl);
+      return;
+    }
+    button.disabled = false;
+    window.alert(result.message || 'No se pudo iniciar el pago.');
+  });
+});
+</script>
+}

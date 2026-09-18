@@ -48,6 +48,8 @@ else
         _ => string.Empty
     };
     var formattedPrice = $"{publication.Currency} {publication.Price.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-AR"))}{pricePeriod}";
+    var detailShareUrl = $"{Context.Request.PathBase}/Publications/Details/{publication.Id}{debugSuffix}";
+    var detailShareImage = publication.ImageList.FirstOrDefault();
 
     <section class="detail-hero">
         <div>
@@ -55,9 +57,9 @@ else
                 @detailEyebrow
             </span>
             <h1><span class="detail-title-text">@detailHeadline</span></h1>
-            @if (!hideReportActions)
-            {
-                <p>
+            <div class="detail-hero-actions">
+                @if (!hideReportActions)
+                {
                     <button type="button"
                             class="ghost-pill report-trigger detail-report-trigger"
                             data-publication-id="@publication.Id"
@@ -65,8 +67,12 @@ else
                             data-publication-title="@displayTitle">
                         Denunciar
                     </button>
-                </p>
-            }
+                }
+                <button type="button" class="ghost-pill detail-share-trigger" data-detail-share-trigger data-detail-share-url="@detailShareUrl" aria-haspopup="dialog" aria-expanded="false">
+                    <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
+                    Compartir
+                </button>
+            </div>
         </div>
         <div class="price-panel" id="publication-start">
             <span class="detail-price-cluster">
@@ -142,6 +148,32 @@ else
             }
         </div>
     </section>
+
+    <div class="detail-share-modal" data-detail-share-modal hidden role="dialog" aria-modal="true" aria-labelledby="detailShareTitle">
+        <section class="detail-share-panel">
+            <button type="button" class="detail-share-close" data-detail-share-close aria-label="Cerrar"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+            <h2 id="detailShareTitle">Compartí este anuncio</h2>
+            <div class="detail-share-summary">
+                @if (!string.IsNullOrWhiteSpace(detailShareImage))
+                {
+                    <img src="@detailShareImage" alt="" class="detail-share-image" />
+                }
+                else
+                {
+                    <span class="detail-share-image detail-share-image-fallback" aria-hidden="true"><i class="fa-solid fa-image"></i></span>
+                }
+                <p class="detail-share-name">@detailHeadline</p>
+            </div>
+            <div class="detail-share-options">
+                <button type="button" data-detail-share-copy><i class="fa-regular fa-copy" aria-hidden="true"></i>Copiar enlace</button>
+                <a data-detail-share-email><i class="fa-solid fa-envelope" aria-hidden="true"></i>Correo electrónico</a>
+                <a data-detail-share-whatsapp target="_blank" rel="noreferrer"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i>WhatsApp</a>
+                <a data-detail-share-facebook target="_blank" rel="noreferrer"><i class="fa-brands fa-facebook" aria-hidden="true"></i>Facebook</a>
+                <a data-detail-share-x target="_blank" rel="noreferrer"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i>X</a>
+            </div>
+            <span class="detail-share-status" aria-live="polite"></span>
+        </section>
+    </div>
 
     <section class="detail-grid detail-gallery-grid">
         <div class="detail-gallery">

@@ -18,59 +18,33 @@
             <span class="register-kind-label">Quiero registrarme como</span>
             <div class="register-account-kind-grid">
                 <label class="register-account-kind-card">
-                    <input asp-for="Input.AccountType" type="radio" value="Person" data-account-type-option />
+                    <input asp-for="Input.AccountType" type="radio" value="Person" data-account-type-option aria-describedby="person-pricing-help" />
                     <span class="register-account-kind-copy">
                         <strong>Persona</strong>
                         <span>Cuenta clásica para publicar y responder consultas a tu nombre.</span>
                     </span>
+                    <div class="register-pricing-tooltip" id="person-pricing-help" role="tooltip">
+                        <strong>Gratis:</strong> hasta 2 anuncios básicos activos simultáneos, con 3 fotos (no incluye video).<br />
+                        <strong>Pago:</strong>
+                        <ul>
+                            <li>Anuncios con más de 3 fotos y/o video. Valor $3000.</li>
+                            <li>A partir del tercer anuncio: $3000 cada anuncio (incluye hasta 10 fotos y video).</li>
+                        </ul>
+                    </div>
                 </label>
                 <label class="register-account-kind-card">
-                    <input asp-for="Input.AccountType" type="radio" value="Company" data-account-type-option />
+                    <input asp-for="Input.AccountType" type="radio" value="Company" data-account-type-option aria-describedby="company-pricing-help" />
                     <span class="register-account-kind-copy">
                         <strong>Empresa</strong>
                         <span>Tendrás una web en VentaMap para tu empresa y un panel especial para seguir todos tus anuncios.</span>
                     </span>
+                    <span class="register-pricing-tooltip" id="company-pricing-help" role="tooltip">
+                        <strong>Gratis:</strong> los primeros 3 meses.<br />
+                        <strong>Pago:</strong> a partir del cuarto mes, incluye hasta 50 anuncios activos en simultáneo, estadísticas de vistas y listas para compartir personalizadas. Valor $50000 por mes.
+                    </span>
                 </label>
             </div>
         </div>
-
-        @if (Model.IsPaidSiteEnabled)
-        {
-            <section class="detail-panel pricing-panel register-pricing-panel">
-                <div class="section-heading">
-                    <span class="eyebrow">Planes de publicación</span>
-                    <h2>Antes de crear la cuenta, mira cómo cobra VentaMap</h2>
-                    <p>Así puedes elegir el tipo de usuario correcto desde el inicio y entender qué incluye cada modalidad.</p>
-                </div>
-
-                <div class="pricing-grid">
-                    <article class="pricing-card pricing-card-individual">
-                        <span class="pricing-card-tag">Persona</span>
-                        <h3>3 anuncios gratis por mes</h3>
-                        <p>Ideal para quienes publican por cuenta propia y de forma ocasional.</p>
-                        <ul class="pricing-list">
-                            <li>Hasta 3 anuncios gratis por mes.</li>
-                            <li>Cada anuncio gratis incluye hasta 3 fotos.</li>
-                            <li>Desde el cuarto anuncio, cada publicación cuesta $3000.</li>
-                            <li>Si agregas video o más de 3 fotos, ese anuncio cuesta $3000.</li>
-                        </ul>
-                    </article>
-
-                    <article class="pricing-card pricing-card-company">
-                        <span class="pricing-card-tag">Empresa</span>
-                        <h3>3 meses gratis y luego $50000 por mes</h3>
-                        <p>Pensado para negocio activo, catálogo continuo y atención comercial.</p>
-                        <ul class="pricing-list">
-                            <li>Los primeros 3 meses son gratis.</li>
-                            <li>Luego pagas $50000 por mes.</li>
-                            <li class="pricing-list-highlight">El plan mensual incluye hasta 50 anuncios.</li>
-                            <li>Si necesitas más, consulta por pack premium ilimitado.</li>
-                            <li>Incluye estadísticas y listas personalizadas para compartir con clientes.</li>
-                        </ul>
-                    </article>
-                </div>
-            </section>
-        }
 
         <div class="register-row" data-account-type-section="person">
             <label>

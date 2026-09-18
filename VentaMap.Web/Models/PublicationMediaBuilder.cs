@@ -12,7 +12,7 @@ public static class PublicationMediaBuilder
         return raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(IsValidMediaUrl)
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Take(11)
+            .Take(10)
             .ToList();
     }
 

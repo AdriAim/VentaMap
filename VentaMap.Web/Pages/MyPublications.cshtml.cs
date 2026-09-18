@@ -14,7 +14,8 @@ public class MyPublicationsModel(
     PublicationService publicationService,
     CurrentUserAccessor currentUserAccessor,
     VentaMapDbContext db,
-    ReviewService reviewService) : PageModel
+    ReviewService reviewService,
+    BillingService billingService) : PageModel
 {
     public static readonly IReadOnlyList<string> DeactivationReasons =
     [
@@ -33,6 +34,8 @@ public class MyPublicationsModel(
     public string? CompanyPublicUrl { get; private set; }
     public string? CompanyHeroBackgroundUrl { get; private set; }
     public bool ReviewsEnabled { get; private set; }
+    public bool BillingEnabled { get; private set; }
+    public int PendingChargeCount { get; private set; }
 
     [TempData]
     public string? SuccessMessage { get; set; }
@@ -63,6 +66,12 @@ public class MyPublicationsModel(
             ? $"/{user.CompanySlug}"
             : null;
         ReviewsEnabled = await reviewService.IsEnabledAsync();
+        BillingEnabled = await db.VentaMapParameters.AnyAsync(x => x.Key == VentaMapParameterService.PaidSiteEnabled && x.Value == "true");
+        if (BillingEnabled)
+        {
+            await billingService.EnsureCompanyCurrentMonthChargeAsync(user);
+            PendingChargeCount = (await billingService.GetChargesAsync(userId)).Count(x => x.Status == "Pending");
+        }
         Publications = await publicationService.GetOwnedPublicationsAsync(userId);
         ReportReasons = await db.PublicationReportReasons
             .Where(x => x.IsActive)
@@ -154,9 +163,42 @@ public class MyPublicationsModel(
             return RedirectToPage();
         }
 
+        if (await billingService.IsPublishingBlockedAsync(user))
+        {
+            if (isAjax) return StatusCode(403, new { message = "Tenés un pago pendiente. Regularizalo desde Mi facturación.", billingUrl = "/Account/Billing" });
+            ErrorMessage = "Tenés un pago pendiente. Regularizalo desde Mi facturación.";
+            return RedirectToPage();
+        }
+
+        var publication = await publicationService.GetOwnedByIdAsync(id, userId);
+        if (publication is null)
+        {
+            if (isAjax) return BadRequest(new { message = "No se encontró el anuncio indicado." });
+            ErrorMessage = "No se encontró el anuncio indicado.";
+            return RedirectToPage();
+        }
+
+        if (await billingService.HasReachedCompanyPublicationLimitAsync(user))
+        {
+            const string limitMessage = "Tu cuenta empresa ya tiene 50 anuncios activos simultáneos. Da de baja uno para republicar este anuncio.";
+            if (isAjax) return StatusCode(403, new { message = limitMessage });
+            ErrorMessage = limitMessage;
+            return RedirectToPage();
+        }
+
+        var needsPersonPack = await billingService.IsPersonRepublishPackRequiredAsync(user, publication);
+        var charge = await billingService.RequirePersonRepublishPackAsync(user, publication);
+        if (charge is not null)
+        {
+            if (isAjax) return StatusCode(402, new { message = "La republicación requiere el anuncio completo de $3.000. Podés pagarlo desde Mi facturación.", billingUrl = "/Account/Billing", chargeId = charge.Id });
+            ErrorMessage = "La republicación requiere el anuncio completo de $3.000. Podés pagarlo desde Mi facturación.";
+            return RedirectToPage();
+        }
+
         var success = await publicationService.RepublishOwnedAsync(id, userId);
         if (success)
         {
+            if (needsPersonPack) await billingService.ConsumePaidPersonPublicationPackAsync(userId);
             if (isAjax) return new JsonResult(new
             {
                 message = "El anuncio fue republicado por 30 días más.",

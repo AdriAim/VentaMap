@@ -36,6 +36,22 @@
     </div>
 </section>
 
+@if (Model.BillingEnabled)
+{
+    <section class="status-banner @(Model.PendingChargeCount > 0 ? "warning" : "success-banner")">
+        @if (Model.IsCompany)
+        {
+            <strong>Catálogo empresa: los primeros 3 meses son gratis.</strong>
+            <span>Desde el cuarto mes se cobran $50.000 por mes e incluye hasta 50 anuncios activos simultáneos, estadísticas de vistas y listas personalizadas. @(Model.PendingChargeCount > 0 ? $"Tenés {Model.PendingChargeCount} mes(es) pendiente(s)." : "No tenés meses pendientes.") <a href="/Account/Billing">Ver facturación</a></span>
+        }
+        else
+        {
+            <strong>Anuncio básico: hasta 2 activos, 3 fotos y sin video.</strong>
+            <span>Anuncio completo: hasta 10 fotos, video incluido y $3.000. @(Model.PendingChargeCount > 0 ? "Tenés un pago pendiente." : "No tenés pagos pendientes.") <a href="/Account/Billing">Ver facturación</a></span>
+        }
+    </section>
+}
+
 @if (Model.Publications.Any())
 {
     <section class="favorites-strip favorites-page-strip company-publications-strip"

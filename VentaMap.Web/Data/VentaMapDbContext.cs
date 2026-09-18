@@ -25,6 +25,7 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
     public DbSet<VentaMapParameter> VentaMapParameters => Set<VentaMapParameter>();
     public DbSet<VerifiedOperation> VerifiedOperations => Set<VerifiedOperation>();
     public DbSet<OperationReview> OperationReviews => Set<OperationReview>();
+    public DbSet<BillingCharge> BillingCharges => Set<BillingCharge>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -60,6 +61,23 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
         modelBuilder.Entity<ApplicationUser>()
             .Property(x => x.CanReport)
             .HasDefaultValue(true);
+
+        modelBuilder.Entity<ApplicationUser>()
+            .Property(x => x.IsBillingExempt)
+            .HasDefaultValue(0);
+
+        modelBuilder.Entity<BillingCharge>()
+            .Property(x => x.Amount)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<BillingCharge>()
+            .HasOne(x => x.User)
+            .WithMany(x => x.BillingCharges)
+            .HasForeignKey(x => x.UserId);
+
+        modelBuilder.Entity<BillingCharge>()
+            .HasIndex(x => new { x.UserId, x.Type, x.BillingMonthUtc, x.Reference })
+            .IsUnique();
 
         modelBuilder.Entity<ApplicationUser>()
             .Property(x => x.IsCompany)

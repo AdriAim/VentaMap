@@ -31,6 +31,11 @@ public class CreatePublicationContentViewModel
     public bool PublishingBlocked { get; set; }
     public string? PublishingBlockedMessage { get; set; }
     public bool IsPaidSiteEnabled { get; set; }
+    public bool IsCompanyAccount { get; set; }
+    public bool IsBillingExempt { get; set; }
+    public bool ShowPublicationChargeEstimator { get; set; }
+    public int ActivePublicationCount { get; set; }
+    public int SharedListCount { get; set; }
     public List<CreatePublicationDynamicFieldValueSeed> InitialDynamicFieldValues { get; set; } = [];
     public List<string> OperationOptions { get; set; } = [];
 }

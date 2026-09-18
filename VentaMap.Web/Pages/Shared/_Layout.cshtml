@@ -249,6 +249,10 @@
                                 <i class="fa-solid fa-star" aria-hidden="true"></i>
                                 <span>Mis favoritos</span>
                             </a>
+                            <a asp-page="/Account/Billing">
+                                <i class="fa-solid fa-receipt" aria-hidden="true"></i>
+                                <span>Mi facturación</span>
+                            </a>
                             @if (await Parameters.GetBoolAsync(VentaMapParameterService.ReviewsEnabled))
                             {
                                 <a asp-page="/Reviews/Index">
@@ -269,6 +273,10 @@
                             }
                             @if (currentUserIsAdmin)
                             {
+                                <a asp-page="/Admin/Billing">
+                                    <i class="fa-solid fa-receipt" aria-hidden="true"></i>
+                                    <span>Cuentas gratuitas</span>
+                                </a>
                                 <a asp-page="/Trash">
                                     <i class="fa-solid fa-box-archive" aria-hidden="true"></i>
                                     <span>Bandeja de revisión</span>

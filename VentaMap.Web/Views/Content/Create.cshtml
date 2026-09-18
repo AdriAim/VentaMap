@@ -35,18 +35,10 @@
             <span>Tu cuenta queda asociada a este anuncio.</span>
         </div>
 
-        <div class="status-banner">
+        <div class="status-banner prepublish-guidance">
             <strong>Antes de publicar, revisa las reglas del sitio.</strong>
-            <span><a href="/Reglas">Ver reglas de funcionamiento</a></span>
+            <span><a href="/Reglas">Ver reglas de funcionamiento</a> y los precios vigentes <a href="/Precios">Ver precios vigentes</a>.</span>
         </div>
-
-        @if (Model.IsPaidSiteEnabled)
-        {
-            <div class="status-banner">
-                <strong>Consulta los precios vigentes antes de cargar el aviso.</strong>
-                <span><a href="/Precios">Ver precios para personas y empresas</a></span>
-            </div>
-        }
 
         <div id="create-feedback"></div>
 
@@ -217,7 +209,7 @@
             <section class="detail-panel create-uploads-panel">
                 <div class="section-heading">
                     <span class="eyebrow create-step-label">Paso 2 - Imágenes</span>
-                    <h2>Subi una principal (obligaria) y hasta 10 mas (opcionales)</h2>
+                    <h2>Subí hasta 10 fotos</h2>
                     <p>Arrastra y suelta archivos o usa el selector. La primera se toma como principal y podes reorganizarla despues.</p>
                 </div>
 
@@ -242,10 +234,10 @@
                     <div class="upload-dropzone-actions">
                         <button type="button" class="primary-pill" data-create-images-pick>Elegir imagenes</button>
                         <button type="button" class="ghost-pill" data-create-images-clear>Limpiar todo</button>
-                        <span class="field-hint" data-image-count>0/11 imagenes</span>
+                        <span class="field-hint" data-image-count>0/10 imagenes</span>
                     </div>
                     <div class="upload-previews" data-image-previews></div>
-                    <p class="field-hint">Podes cargar una imagen principal y hasta 10 adicionales. Se guardan en formato web para el anuncio.</p>
+                    <p class="field-hint">El anuncio básico permite hasta 3 fotos; el completo, hasta 10. La primera foto será la principal.</p>
                     <span class="field-error" data-field-error="imagesCsv"></span>
                 </div>
             </section>
@@ -366,6 +358,17 @@
                 </div>
             </section>
 
+            @if (Model.IsPaidSiteEnabled && Model.ShowPublicationChargeEstimator && !Model.IsCompanyAccount)
+            {
+                <section class="status-banner civic-banner create-pricing-estimator create-pricing-estimator-mobile" data-publication-charge-estimator
+                         data-company="@Model.IsCompanyAccount.ToString().ToLowerInvariant()"
+                         data-exempt="@Model.IsBillingExempt.ToString().ToLowerInvariant()"
+                         data-active-count="@Model.ActivePublicationCount">
+                    <strong data-charge-estimator-title>Calculando costo…</strong>
+                    <span data-charge-estimator-detail></span>
+                </section>
+            }
+
             <div class="hero-actions">
                 <button type="submit" class="primary-pill">@Model.SubmitButtonText</button>
                 <a class="ghost-pill" href="@Model.CancelUrl">Cancelar</a>
@@ -383,6 +386,16 @@
                     <span class="gallery-card-caption gallery-description-tooltip gallery-tooltip-trigger" data-create-preview-description tabindex="0"><span></span></span>
                 </div>
             </article>
+            @if (Model.IsPaidSiteEnabled && Model.ShowPublicationChargeEstimator && !Model.IsCompanyAccount)
+            {
+                <section class="status-banner civic-banner create-pricing-estimator create-pricing-estimator-desktop" data-publication-charge-estimator
+                         data-company="@Model.IsCompanyAccount.ToString().ToLowerInvariant()"
+                         data-exempt="@Model.IsBillingExempt.ToString().ToLowerInvariant()"
+                         data-active-count="@Model.ActivePublicationCount">
+                    <strong data-charge-estimator-title>Calculando costo…</strong>
+                    <span data-charge-estimator-detail></span>
+                </section>
+            }
         </aside>
         </div>
     }
