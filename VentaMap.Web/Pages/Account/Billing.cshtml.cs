@@ -22,6 +22,8 @@ public class BillingModel(CurrentUserAccessor currentUserAccessor, VentaMapDbCon
 
         UserAccount = await db.Users.FirstOrDefaultAsync(x => x.Id == userId);
         if (UserAccount is null) return RedirectToPage("/Account/Login");
+        if (!UserAccount.IsCompany) return RedirectToPage("/MyPublications");
+
         await billingService.EnsureCompanyCurrentMonthChargeAsync(UserAccount);
         Charges = await billingService.GetChargesAsync(userId);
         IsMercadoPagoConfigured = !string.IsNullOrWhiteSpace(HttpContext.RequestServices.GetRequiredService<IConfiguration>()["MercadoPago:AccessToken"]);

@@ -21,7 +21,10 @@ public class CompanyProfileModel(VentaMapDbContext db, IConfiguration configurat
     public async Task<IActionResult> OnGetAsync(string companySlug)
     {
         var normalizedSlug = (companySlug ?? string.Empty).Trim().ToLowerInvariant();
-        DebugEnabled = string.Equals(Request.Query["debug"], "1", StringComparison.Ordinal);
+        DebugEnabled = string.Equals(Request.Query["debug"], "1", StringComparison.Ordinal)
+            || (User.Identity?.IsAuthenticated == true
+                && int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var debugUserId)
+                && await db.Users.AsNoTracking().AnyAsync(x => x.Id == debugUserId && x.IsDebugUser));
         if (string.IsNullOrWhiteSpace(normalizedSlug))
         {
             return NotFound();

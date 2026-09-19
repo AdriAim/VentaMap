@@ -88,7 +88,7 @@ public class ReportService(
         }
 
         publication.IsActive = true;
-        publication.Status = "Activa";
+        publication.Status = PublicationStatus.Active;
         publication.ModerationStatus = "Restored";
         publication.TrashedAtUtc = null;
 
@@ -124,7 +124,7 @@ public class ReportService(
         }
 
         publication.IsActive = false;
-        publication.Status = "En papelera";
+        publication.Status = PublicationStatus.InTrash;
         publication.ModerationStatus = "Confirmed";
         publication.TrashedAtUtc ??= DateTime.UtcNow;
 
@@ -173,7 +173,7 @@ public class ReportService(
         if (distinctReportersCount >= TrashThreshold)
         {
             publication.IsActive = false;
-            publication.Status = "En papelera";
+            publication.Status = PublicationStatus.InTrash;
             publication.ModerationStatus = "PendingReview";
             publication.TrashedAtUtc ??= DateTime.UtcNow;
 

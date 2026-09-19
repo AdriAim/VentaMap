@@ -11,7 +11,7 @@ public class PublicationService(
     BillingService billingService,
     ILogger<PublicationService> logger)
 {
-    public const string OwnerDeletedStatus = "Eliminado por usuario";
+    public const PublicationStatus OwnerDeletedStatus = PublicationStatus.OwnerDeleted;
 
     public Task<List<Publication>> SearchActivePublicationsAsync(PublicationGroup? group, string? query, bool includeDebug = false)
         => SearchActivePublicationsAsync(group, query, null, includeDebug);
@@ -220,7 +220,10 @@ public class PublicationService(
         }).ToList();
     }
 
-    public async Task<(Publication Publication, string? AnonymousPassword)> CreateAsync(PublicationCreateRequest input, int? userId)
+    public async Task<(Publication Publication, string? AnonymousPassword)> CreateAsync(
+        PublicationCreateRequest input,
+        int? userId,
+        PublicationStatus status = PublicationStatus.Active)
     {
         var category = await db.PublicationCategories
             .AsNoTracking()
@@ -249,13 +252,14 @@ public class PublicationService(
             ContactName = input.ContactName ?? string.Empty,
             ContactPhone = input.ContactPhone ?? string.Empty,
             ContactEmail = input.ContactEmail,
-            Status = "Activa",
+            Status = status,
             Featured = input.Featured,
             InternalNotes = input.InternalNotes,
             Latitude = input.Latitude,
             Longitude = input.Longitude,
             HideFromMap = input.NoLocation,
             UserId = userId,
+            IsActive = status == PublicationStatus.Active,
             ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
         };
 
@@ -401,7 +405,7 @@ public class PublicationService(
         }
 
         publication.IsActive = false;
-        publication.Status = "Baja solicitada";
+        publication.Status = PublicationStatus.DeactivationRequested;
         publication.DeactivationReason = string.IsNullOrWhiteSpace(reason) ? "Sin motivo" : reason.Trim();
         publication.DeactivationComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
         publication.DeactivatedAtUtc = DateTime.UtcNow;
@@ -469,13 +473,26 @@ public class PublicationService(
         }
 
         publication.IsActive = true;
-        publication.Status = "Activa";
+        publication.Status = PublicationStatus.Active;
         publication.CreatedAtUtc = DateTime.UtcNow;
         publication.ExpiresAtUtc = DateTime.UtcNow.AddDays(30);
         publication.ExpirationNoticeSentAtUtc = null;
         publication.DeactivationReason = null;
         publication.DeactivationComment = null;
         publication.DeactivatedAtUtc = null;
+        await db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> ActivatePendingPaymentAsync(int publicationId, int userId)
+    {
+        var publication = await db.Publications.FirstOrDefaultAsync(x =>
+            x.Id == publicationId && x.UserId == userId && x.Status == PublicationStatus.PendingPayment);
+        if (publication is null) return false;
+
+        publication.Status = PublicationStatus.Active;
+        publication.IsActive = true;
+        publication.ExpiresAtUtc = DateTime.UtcNow.AddDays(30);
         await db.SaveChangesAsync();
         return true;
     }
@@ -498,7 +515,7 @@ public class PublicationService(
             cancellationToken.ThrowIfCancellationRequested();
 
             publication.IsActive = false;
-            publication.Status = "Vencida";
+            publication.Status = PublicationStatus.Expired;
             publication.DeactivatedAtUtc = now;
 
             var email = publication.User?.Email ?? publication.ContactEmail;

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using VentaMap.Data;
+using VentaMap.Models;
 using VentaMap.Services;
 
 namespace VentaMap.Controllers;
@@ -39,6 +40,18 @@ public class MercadoPagoController(VentaMapDbContext db, CurrentUserAccessor cur
         charge.Status = "Paid";
         charge.PaidAtUtc = DateTime.UtcNow;
         charge.MercadoPagoPaymentId = order.PaymentId ?? orderId;
+        if (charge.PublicationId is int publicationId)
+        {
+            var publication = await db.Publications.FirstOrDefaultAsync(x =>
+                x.Id == publicationId && x.UserId == charge.UserId && x.Status == PublicationStatus.PendingPayment);
+            if (publication is not null)
+            {
+                publication.Status = PublicationStatus.Active;
+                publication.IsActive = true;
+                publication.ExpiresAtUtc = DateTime.UtcNow.AddDays(30);
+                charge.Status = "Used";
+            }
+        }
         await db.SaveChangesAsync();
         return Ok();
     }

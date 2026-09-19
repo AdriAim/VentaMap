@@ -33,6 +33,7 @@ public class CreatePublicationContentViewModel
     public bool IsPaidSiteEnabled { get; set; }
     public bool IsCompanyAccount { get; set; }
     public bool IsBillingExempt { get; set; }
+    public bool IsBillingForced { get; set; }
     public bool ShowPublicationChargeEstimator { get; set; }
     public int ActivePublicationCount { get; set; }
     public int SharedListCount { get; set; }

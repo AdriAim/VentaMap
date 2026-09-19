@@ -64,7 +64,14 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
 
         modelBuilder.Entity<ApplicationUser>()
             .Property(x => x.IsBillingExempt)
+            .HasColumnType("tinyint")
             .HasDefaultValue(0);
+
+        modelBuilder.Entity<Publication>()
+            .Property(x => x.Status)
+            .HasConversion<string>()
+            .HasMaxLength(30)
+            .HasDefaultValue(PublicationStatus.Active);
 
         modelBuilder.Entity<BillingCharge>()
             .Property(x => x.Amount)

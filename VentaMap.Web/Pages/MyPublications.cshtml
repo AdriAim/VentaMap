@@ -47,7 +47,7 @@
         else
         {
             <strong>Anuncio básico: hasta 2 activos, 3 fotos y sin video.</strong>
-            <span>Anuncio completo: hasta 10 fotos, video incluido y $3.000. @(Model.PendingChargeCount > 0 ? "Tenés un pago pendiente." : "No tenés pagos pendientes.") <a href="/Account/Billing">Ver facturación</a></span>
+            <span>Anuncio completo: hasta 10 fotos, video incluido y $3.000. @(Model.PendingChargeCount > 0 ? "Tenés un anuncio pendiente de pago: abonalo desde esta lista para publicarlo." : "No tenés anuncios pendientes de pago.")</span>
         }
     </section>
 }
@@ -59,7 +59,7 @@
              style="@myAdsHeaderStyle">
         <div class="favorites-strip-copy">
             <span class="eyebrow">Mis anuncios</span>
-            <h2>Anuncios publicados</h2>
+            <h2>Mis anuncios</h2>
         </div>
         <div class="company-catalog-toolbar-controls">
             <label class="company-catalog-search">
@@ -72,6 +72,10 @@
             <div class="company-catalog-view-switch" role="group" aria-label="Filtrar anuncios por estado">
                 <button type="button" class="is-active" data-my-publications-status="all" aria-pressed="true">Todos</button>
                 <button type="button" data-my-publications-status="active" aria-pressed="false">Activos</button>
+                @if (!Model.IsCompany)
+                {
+                    <button type="button" data-my-publications-status="pending" aria-pressed="false">Pendientes de pago</button>
+                }
                 <button type="button" data-my-publications-status="inactive" aria-pressed="false">De baja</button>
             </div>
             <label class="my-publications-sort">
@@ -144,7 +148,9 @@ else
             var ownerPreviewUrl = $"{detailUrl}?ownerView=1";
             var ownerPreviewApiUrl = $"/api/content/details/{publication.Id}?ownerView=1";
             var imageUrl = publication.ImageList.FirstOrDefault();
-            var statusLabel = publication.IsActive ? publication.Status : "Inactiva";
+            var isPendingPayment = publication.Status == PublicationStatus.PendingPayment;
+            var publicationListStatus = isPendingPayment ? "pending" : publication.IsActive ? "active" : "inactive";
+            var statusLabel = publication.IsActive ? publication.Status.ToDisplayName() : isPendingPayment ? publication.Status.ToDisplayName() : "Inactiva";
             var operationLabel = publication.OperationType?.ToDisplayName();
             var operationLetter = !string.IsNullOrWhiteSpace(operationLabel)
                 ? operationLabel[0].ToString().ToUpperInvariant()
@@ -160,7 +166,7 @@ else
             var priceTooltipLabel = string.Join(" · ", new[] { operationLabel, categoryLabel, formattedPrice }.Where(x => !string.IsNullOrWhiteSpace(x)));
             <article class="publication-admin-card"
                      data-my-publication-item="true"
-                     data-my-publication-status="@(publication.IsActive ? "active" : "inactive")"
+                     data-my-publication-status="@publicationListStatus"
                      data-my-publication-created-at="@publication.CreatedAtUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture)"
                      data-my-publication-title="@publication.Title"
                      data-my-publication-short-description="@publication.ShortDescription"
@@ -209,13 +215,17 @@ else
                     <p class="publication-admin-price">@formattedPrice</p>
                     <div class="publication-admin-meta">
                         <span>@(string.IsNullOrWhiteSpace(publication.Locality) ? "Sin ubicacion publica" : publication.Locality)</span>
-                        <span>Creada: @publication.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy")</span>
+                        <span>Fecha de publicación: @publication.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy")</span>
                         @if (publication.ExpiresAtUtc.HasValue)
                         {
                             <span>Vence: @publication.ExpiresAtUtc.Value.ToLocalTime().ToString("dd/MM/yyyy")</span>
                         }
                     </div>
                     <div class="publication-admin-actions">
+                        @if (isPendingPayment && Model.PendingChargeIdsByPublicationId.TryGetValue(publication.Id, out var chargeId))
+                        {
+                            <button type="button" class="primary-pill" data-mercadopago-checkout="@chargeId">Pagar con Mercado Pago</button>
+                        }
                         <a class="ghost-pill" asp-page="/Publications/Edit" asp-route-id="@publication.Id">Editar datos</a>
                         <a class="ghost-pill publication-preview-trigger" href="@ownerPreviewUrl" data-details-url="@ownerPreviewApiUrl">Ver anuncio</a>
                         <button type="button"
@@ -567,6 +577,23 @@ else
                         setLabel(originalLabel);
                     }, 1800);
                 }
+            });
+        })();
+
+        (() => {
+            document.querySelectorAll("[data-mercadopago-checkout]").forEach(button => {
+                button.addEventListener("click", async () => {
+                    if (button.disabled) return;
+                    button.disabled = true;
+                    const response = await fetch(`/api/payments/mercadopago/checkout/${button.dataset.mercadopagoCheckout}`, { method: "POST" });
+                    const result = await response.json().catch(() => ({}));
+                    if (response.ok && result.checkoutUrl) {
+                        window.location.assign(result.checkoutUrl);
+                        return;
+                    }
+                    button.disabled = false;
+                    window.alert(result.message || "No se pudo iniciar el pago.");
+                });
             });
         })();
 

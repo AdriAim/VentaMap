@@ -671,7 +671,8 @@
 
     try {
       const response = await fetch(host.dataset.apiEndpoint, {
-        headers: { "X-Requested-With": "fetch" }
+        headers: { "X-Requested-With": "fetch" },
+        cache: "no-store"
       });
 
       host.innerHTML = await response.text();
@@ -704,6 +705,7 @@
       wireCreateForm();
       wireBrowseSearchFilters(host);
       wireChatExperience(host);
+      restoreCreatePublicationCompletion(host);
       scrollToRequestedAnchor(host);
     } finally {
       endSystemLoading(loadingTicket);
@@ -5244,13 +5246,26 @@
           result,
           payload
         });
+        // Only a 402 with a charge id means this submission actually created a
+        // publication pending payment. A 403 also contains billingUrl when an
+        // older charge blocks publishing, and must not be presented as a new
+        // pending publication.
+        if (response.status === 402 && Number.isInteger(result.chargeId) && result.chargeId > 0 && result.billingUrl) {
+          completeCreatePublication({
+            title: "Publicación pendiente de pago",
+            message: "Para completar la publicación debe abonar el anuncio desde Mis anuncios.",
+            actionLabel: "Ir a Mis anuncios",
+            actionUrl: result.billingUrl
+          });
+          return;
+        }
         const fieldErrors = normalizeCreateFieldErrors(result.errors);
         renderCreateFormErrors(form, fieldErrors);
 
         if (feedback) {
           const errorMessage = result.message || "No se pudo crear la publicacion.";
           const billingAction = result.billingUrl
-            ? ` <a href="${escapeHtml(result.billingUrl)}">Ir a Mi facturación</a>`
+            ? ` <a href="${escapeHtml(result.billingUrl)}">Ir a Mis anuncios</a>`
             : "";
           feedback.innerHTML = `<div class="status-banner warning">${escapeHtml(errorMessage)}${billingAction}</div>`;
         }
@@ -5265,7 +5280,12 @@
 
       uploader.markPersisted();
       if (result.redirectUrl) {
-        window.location.href = result.redirectUrl;
+        completeCreatePublication({
+          title: "Anuncio publicado",
+          message: "Su anuncio se publicó correctamente.",
+          actionLabel: "Ver anuncio",
+          actionUrl: result.redirectUrl
+        });
       }
     });
 
@@ -5275,6 +5295,50 @@
         enhanceSearchableSelects(form);
         syncCreateDescriptionExamples(form);
       });
+  }
+
+  function completeCreatePublication(completion) {
+    sessionStorage.setItem("ventamap.create-publication-completion", JSON.stringify(completion));
+    window.location.href = "/Publications/Create";
+  }
+
+  function restoreCreatePublicationCompletion(host) {
+    if (host?.dataset.pageKind !== "create") return;
+
+    let completion;
+    try {
+      const serialized = sessionStorage.getItem("ventamap.create-publication-completion");
+      if (!serialized) return;
+      sessionStorage.removeItem("ventamap.create-publication-completion");
+      completion = JSON.parse(serialized);
+    } catch {
+      return;
+    }
+
+    if (!completion?.title || !completion?.message || !completion?.actionLabel || !completion?.actionUrl) return;
+
+    const overlay = document.createElement("div");
+    overlay.className = "preview-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", completion.title);
+    overlay.innerHTML = '<div class="preview-backdrop" data-create-completion-close></div><div class="preview-dialog preview-dialog-compact"><div class="modal-content ventamap-modal preview-modal-shell report-modal-shell create-completion-modal"><div class="modal-header"><div class="preview-modal-title"><h5 class="modal-title"></h5></div><button type="button" class="btn-close" data-create-completion-close aria-label="Cerrar"></button></div><div class="preview-modal-body auth-required-body"><div class="auth-required-login-shell"><div class="section-heading auth-required-heading"><p></p></div><div class="hero-actions create-completion-actions"></div></div></div></div></div>';
+
+    overlay.querySelector("h5").textContent = completion.title;
+    overlay.querySelector("p").textContent = completion.message;
+    const action = document.createElement("a");
+    action.className = "primary-pill";
+    action.textContent = completion.actionLabel;
+    action.href = completion.actionUrl;
+    overlay.querySelector(".create-completion-actions")?.append(action);
+
+    const close = () => {
+      overlay.remove();
+      document.body.classList.remove("preview-open");
+    };
+    overlay.querySelectorAll("[data-create-completion-close]").forEach(element => element.addEventListener("click", close));
+    document.body.append(overlay);
+    document.body.classList.add("preview-open");
   }
 
   function wireCreateSectionToggles(form) {
@@ -6822,7 +6886,7 @@
 
       if (isCompany) {
         const exceedsAds = activeCount + 1 > 50;
-        setEstimate(exceedsAds ? "Límite de anuncios alcanzado" : "Plan empresa", exceedsAds
+        setEstimate(exceedsAds ? "Límite de anuncios alcanzado" : "Plan empresa · $50.000/mes", exceedsAds
           ? "Tu cuenta puede tener hasta 50 anuncios activos simultáneos."
           : `Con este anuncio quedarás con ${activeCount + 1} de 50 anuncios activos simultáneos.`);
         return;

@@ -80,6 +80,8 @@ services:
       Cloudflare__R2__WatermarkScale: ${R2_WATERMARK_SCALE:-0.14}
       Cloudflare__R2__WatermarkOpacity: ${R2_WATERMARK_OPACITY:-0.45}
       Cloudflare__R2__MaxVideoBytes: ${R2_MAX_VIDEO_BYTES:-83886080}
+      MercadoPago__AccessToken: ${MERCADOPAGO_ACCESS_TOKEN}
+      MercadoPago__WebhookSecret: ${MERCADOPAGO_WEBHOOK_SECRET}
       Database__ApplyMigrationsOnStartup: ${DATABASE_APPLY_MIGRATIONS_ON_STARTUP:-false}
       Database__RunSeedDataOnStartup: ${DATABASE_RUN_SEED_DATA_ON_STARTUP:-false}
     volumes:

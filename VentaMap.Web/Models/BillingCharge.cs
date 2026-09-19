@@ -7,6 +7,7 @@ public class BillingCharge
     public int Id { get; set; }
     public int UserId { get; set; }
     public ApplicationUser? User { get; set; }
+    public int? PublicationId { get; set; }
 
     [StringLength(40)]
     public string Type { get; set; } = string.Empty; // PersonPublication | CompanyMonthlyPlan

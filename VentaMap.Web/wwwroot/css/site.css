@@ -6326,6 +6326,11 @@ textarea:focus {
   margin-top: 0.35rem;
 }
 
+.create-completion-actions {
+  justify-content: center;
+}
+
+
 .login-welcome {
   max-width: 760px;
   margin: 2.5rem auto;

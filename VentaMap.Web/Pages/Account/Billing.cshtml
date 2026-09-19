@@ -1,13 +1,13 @@
 @page
 @model VentaMap.Pages.Account.BillingModel
 @{
-    ViewData["Title"] = "Mi facturación";
+    ViewData["Title"] = "Facturación de empresa";
 }
 
 <section class="form-shell narrow">
     <div class="section-heading">
         <span class="eyebrow">Cuenta</span>
-        <h1>Mi facturación</h1>
+        <h1>Facturación de empresa</h1>
         @if (Model.UserAccount?.IsBillingExempt == 1)
         {
             <p>Tu cuenta está marcada como gratuita: no se generan cargos por anuncios ni catálogo.</p>

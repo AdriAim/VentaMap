@@ -79,7 +79,7 @@ public class ReviewService(
         };
 
         publication.IsActive = false;
-        publication.Status = "Baja solicitada";
+        publication.Status = PublicationStatus.DeactivationRequested;
         publication.DeactivationReason = "Ya se vendio / alquilo";
         publication.DeactivationComment = $"Contraparte: {normalizedEmail}";
         publication.DeactivatedAtUtc = now;

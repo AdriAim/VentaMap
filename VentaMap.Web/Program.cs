@@ -553,7 +553,22 @@ static async Task EnsurePublicationExpirationSchemaAsync(System.Data.Common.DbCo
 
 static async Task EnsureBillingSchemaAsync(System.Data.Common.DbConnection connection)
 {
-    await EnsureColumnAsync(connection, "Users", "IsBillingExempt", "tinyint(1) NOT NULL DEFAULT 0");
+    await EnsureColumnAsync(connection, "Users", "IsBillingExempt", "tinyint NOT NULL DEFAULT 0");
+    await ExecuteNonQueryAsync(connection,
+        "ALTER TABLE `Users` MODIFY `IsBillingExempt` tinyint NOT NULL DEFAULT 0;");
+    await ExecuteNonQueryAsync(connection,
+        """
+        UPDATE `Publications`
+        SET `Status` = CASE `Status`
+            WHEN 'Activa' THEN 'Active'
+            WHEN 'Pendiente de pago' THEN 'PendingPayment'
+            WHEN 'Baja solicitada' THEN 'DeactivationRequested'
+            WHEN 'Eliminado por usuario' THEN 'OwnerDeleted'
+            WHEN 'Vencida' THEN 'Expired'
+            WHEN 'En papelera' THEN 'InTrash'
+            ELSE `Status`
+        END;
+        """);
 
     await ExecuteNonQueryAsync(connection,
         """
@@ -575,6 +590,7 @@ static async Task EnsureBillingSchemaAsync(System.Data.Common.DbConnection conne
         ) CHARACTER SET=utf8mb4;
         """);
 
+    await EnsureColumnAsync(connection, "BillingCharges", "PublicationId", "int NULL");
     await EnsureIndexAsync(connection, "BillingCharges", "IX_BillingCharges_UserId_Type_Month_Reference", "CREATE UNIQUE INDEX `IX_BillingCharges_UserId_Type_Month_Reference` ON `BillingCharges` (`UserId`, `Type`, `BillingMonthUtc`, `Reference`)");
     await EnsureIndexAsync(connection, "BillingCharges", "IX_BillingCharges_UserId_Status_Month", "CREATE INDEX `IX_BillingCharges_UserId_Status_Month` ON `BillingCharges` (`UserId`, `Status`, `BillingMonthUtc`)");
 }

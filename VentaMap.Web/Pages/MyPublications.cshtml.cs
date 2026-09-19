@@ -36,6 +36,7 @@ public class MyPublicationsModel(
     public bool ReviewsEnabled { get; private set; }
     public bool BillingEnabled { get; private set; }
     public int PendingChargeCount { get; private set; }
+    public Dictionary<int, int> PendingChargeIdsByPublicationId { get; private set; } = [];
 
     [TempData]
     public string? SuccessMessage { get; set; }
@@ -70,7 +71,15 @@ public class MyPublicationsModel(
         if (BillingEnabled)
         {
             await billingService.EnsureCompanyCurrentMonthChargeAsync(user);
-            PendingChargeCount = (await billingService.GetChargesAsync(userId)).Count(x => x.Status == "Pending");
+            var charges = await billingService.GetChargesAsync(userId);
+            PendingChargeCount = charges.Count(x => x.Status == "Pending");
+            if (!user.IsCompany)
+            {
+                PendingChargeIdsByPublicationId = charges
+                    .Where(x => x.Status == "Pending" && x.PublicationId.HasValue)
+                    .GroupBy(x => x.PublicationId!.Value)
+                    .ToDictionary(x => x.Key, x => x.OrderByDescending(charge => charge.CreatedAtUtc).First().Id);
+            }
         }
         Publications = await publicationService.GetOwnedPublicationsAsync(userId);
         ReportReasons = await db.PublicationReportReasons
@@ -165,8 +174,8 @@ public class MyPublicationsModel(
 
         if (await billingService.IsPublishingBlockedAsync(user))
         {
-            if (isAjax) return StatusCode(403, new { message = "Tenés un pago pendiente. Regularizalo desde Mi facturación.", billingUrl = "/Account/Billing" });
-            ErrorMessage = "Tenés un pago pendiente. Regularizalo desde Mi facturación.";
+            if (isAjax) return StatusCode(403, new { message = "Tenés un pago pendiente. Regularizalo desde Mis anuncios.", billingUrl = "/MisAnuncios" });
+            ErrorMessage = "Tenés un pago pendiente. Regularizalo desde Mis anuncios.";
             return RedirectToPage();
         }
 
@@ -190,8 +199,8 @@ public class MyPublicationsModel(
         var charge = await billingService.RequirePersonRepublishPackAsync(user, publication);
         if (charge is not null)
         {
-            if (isAjax) return StatusCode(402, new { message = "La republicación requiere el anuncio completo de $3.000. Podés pagarlo desde Mi facturación.", billingUrl = "/Account/Billing", chargeId = charge.Id });
-            ErrorMessage = "La republicación requiere el anuncio completo de $3.000. Podés pagarlo desde Mi facturación.";
+            if (isAjax) return StatusCode(402, new { message = "La republicación requiere el anuncio completo de $3.000. Podés pagarlo desde Mis anuncios.", billingUrl = "/MisAnuncios", chargeId = charge.Id });
+            ErrorMessage = "La republicación requiere el anuncio completo de $3.000. Podés pagarlo desde Mis anuncios.";
             return RedirectToPage();
         }
 

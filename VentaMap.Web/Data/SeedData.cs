@@ -1589,7 +1589,7 @@ public static class SeedData
             ContactEmail = user.Email,
             User = user,
             Featured = price > 100000,
-            Status = "Activa",
+            Status = PublicationStatus.Active,
             Latitude = latitude,
             Longitude = longitude,
             MediaItems = PublicationMediaBuilder.Build(
@@ -1640,7 +1640,7 @@ public static class SeedData
             ContactEmail = user.Email,
             User = user,
             Featured = price > 18000,
-            Status = "Activa",
+            Status = PublicationStatus.Active,
             Latitude = latitude,
             Longitude = longitude,
             MediaItems = PublicationMediaBuilder.Build(
@@ -1687,7 +1687,7 @@ public static class SeedData
             ContactEmail = user.Email,
             User = user,
             Featured = price > 18000,
-            Status = "Activa",
+            Status = PublicationStatus.Active,
             Latitude = latitude,
             Longitude = longitude,
             MediaItems = PublicationMediaBuilder.Build(
@@ -1734,7 +1734,7 @@ public static class SeedData
             ContactEmail = user.Email,
             User = user,
             Featured = price > 700,
-            Status = "Activa",
+            Status = PublicationStatus.Active,
             Latitude = latitude,
             Longitude = longitude,
             MediaItems = PublicationMediaBuilder.Build(

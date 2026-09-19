@@ -41,7 +41,7 @@ public partial class ContentController(
     [HttpGet("home")]
     public async Task<IActionResult> Home([FromQuery] string? group = "Inmuebles", [FromQuery] string? mode = "Galeria", [FromQuery] string? query = null, [FromQuery] string? flash = null, [FromQuery] int? categoryId = null, [FromQuery] decimal? priceFrom = null, [FromQuery] decimal? priceTo = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
-        var includeDebug = IsDebugModeEnabled();
+        var includeDebug = await CanViewDebugPublicationsAsync();
         var selectedGroup = ParseGroupFilter(group);
         var selectedGroupName = selectedGroup?.ToDisplayName() ?? "Todos";
         var selectedMode = NormalizeBrowseMode(mode);
@@ -237,7 +237,7 @@ public partial class ContentController(
     [HttpGet("browse")]
     public async Task<IActionResult> Browse([FromQuery] string? group = "Inmuebles", [FromQuery] string? mode = "Galeria", [FromQuery] string? query = null, [FromQuery] string? flash = null, [FromQuery] int? categoryId = null, [FromQuery] decimal? priceFrom = null, [FromQuery] decimal? priceTo = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
-        var includeDebug = IsDebugModeEnabled();
+        var includeDebug = await CanViewDebugPublicationsAsync();
         var selectedGroup = ParseGroupFilter(group);
         var selectedGroupName = selectedGroup?.ToDisplayName() ?? "Todos";
         var selectedMode = NormalizeBrowseMode(mode);
@@ -433,7 +433,7 @@ public partial class ContentController(
     [HttpGet("gallery-items")]
     public async Task<IActionResult> GalleryItems([FromQuery] string? group = "Inmuebles", [FromQuery] string? query = null, [FromQuery] int? categoryId = null, [FromQuery] decimal? priceFrom = null, [FromQuery] decimal? priceTo = null, [FromQuery] int offset = 0, [FromQuery] int limit = 20)
     {
-        var includeDebug = IsDebugModeEnabled();
+        var includeDebug = await CanViewDebugPublicationsAsync();
         var effectiveLocality = await navigationLocalityService.GetEffectiveLocalityAsync(HttpContext);
         var selectedGroup = ParseGroupFilter(group);
         var safeOffset = Math.Max(0, offset);
@@ -499,7 +499,7 @@ public partial class ContentController(
     [HttpGet("map-markers")]
     public async Task<IActionResult> MapMarkers([FromQuery] string? group = "Inmuebles", [FromQuery] string? query = null, [FromQuery] int? categoryId = null, [FromQuery] decimal? priceFrom = null, [FromQuery] decimal? priceTo = null, [FromQuery] double? north = null, [FromQuery] double? south = null, [FromQuery] double? east = null, [FromQuery] double? west = null)
     {
-        var includeDebug = IsDebugModeEnabled();
+        var includeDebug = await CanViewDebugPublicationsAsync();
         var effectiveLocality = await navigationLocalityService.GetEffectiveLocalityAsync(HttpContext);
         var selectedGroup = ParseGroupFilter(group);
         var filters = BuildSearchFilters(priceFrom, priceTo, Request.Query);
@@ -568,7 +568,8 @@ public partial class ContentController(
             return Unauthorized(new { message = "Tenes que iniciar sesion para usar favoritos." });
         }
 
-        var result = await favoriteService.GetListContentAsync(userId, listId, IsDebugModeEnabled());
+        var includeDebug = await CanViewDebugPublicationsAsync();
+        var result = await favoriteService.GetListContentAsync(userId, listId, includeDebug);
         if (result is null)
         {
             return NotFound(new { message = "La lista no existe." });
@@ -578,7 +579,7 @@ public partial class ContentController(
         return Ok(new
         {
             list = summary,
-            items = publications.Select(item => MapGalleryItem(item, true, IsDebugModeEnabled())).ToList()
+            items = publications.Select(item => MapGalleryItem(item, true, includeDebug)).ToList()
         });
     }
 
@@ -664,7 +665,7 @@ public partial class ContentController(
     [HttpGet("details/{id:int}")]
     public async Task<IActionResult> Details(int id)
     {
-        var includeDebug = IsDebugModeEnabled();
+        var includeDebug = await CanViewDebugPublicationsAsync();
         var publication = await publicationService.GetByIdAsync(id, includeDebug);
         var isOwnerPreview = string.Equals(Request.Query["ownerView"], "1", StringComparison.Ordinal);
 
@@ -775,6 +776,7 @@ public partial class ContentController(
             IsPaidSiteEnabled = await parameters.GetBoolAsync(VentaMapParameterService.PaidSiteEnabled, fallback: false),
             IsCompanyAccount = user?.IsCompany == true,
             IsBillingExempt = user?.IsBillingExempt == 1,
+            IsBillingForced = user?.IsBillingExempt == 2,
             ShowPublicationChargeEstimator = user is not null,
             ActivePublicationCount = user is null ? 0 : await db.Publications.CountAsync(x => x.UserId == user.Id && x.IsActive),
             SharedListCount = user is null ? 0 : await db.SharedPublicationLists.CountAsync(x => x.UserId == user.Id),
@@ -783,7 +785,7 @@ public partial class ContentController(
             MapAttributionHtml = configuration["Map:AttributionHtml"] ?? string.Empty,
             MapGeocodingSearchUrlTemplate = configuration["Map:GeocodingSearchUrlTemplate"] ?? string.Empty,
             MapReverseGeocodingUrlTemplate = configuration["Map:ReverseGeocodingUrlTemplate"] ?? string.Empty,
-            SubmitEndpoint = AppendDebugFlag("/api/content/create", IsDebugModeEnabled()),
+            SubmitEndpoint = AppendDebugFlag("/api/content/create", IsDebugModeRequested() || user?.IsDebugUser == true),
             OperationOptions = []
         };
 
@@ -870,6 +872,7 @@ public partial class ContentController(
             IsPaidSiteEnabled = await parameters.GetBoolAsync(VentaMapParameterService.PaidSiteEnabled, fallback: false),
             IsCompanyAccount = user.IsCompany,
             IsBillingExempt = user.IsBillingExempt == 1,
+            IsBillingForced = user.IsBillingExempt == 2,
             ShowPublicationChargeEstimator = false,
             MapStyleUrl = configuration["Map:StyleUrl"] ?? string.Empty,
             MapTilesUrlTemplate = configuration["Map:TilesUrlTemplate"] ?? string.Empty,
@@ -881,7 +884,7 @@ public partial class ContentController(
             FormDescription = "Modifica los mismos datos que usas al crear un anuncio, incluyendo imagenes, video, ubicacion y ficha tecnica.",
             SubmitButtonText = "Guardar cambios",
             CancelUrl = "/MisAnuncios",
-            SubmitEndpoint = AppendDebugFlag($"/api/content/edit/{publication.Id}", IsDebugModeEnabled()),
+            SubmitEndpoint = AppendDebugFlag($"/api/content/edit/{publication.Id}", IsDebugModeRequested() || user.IsDebugUser),
             ShowLocationSection = !publication.HideFromMap,
             ShowTechnicalSection = hasTechnicalValues,
             OperationOptions = await GetOperationOptionsForCategoryAsync(publication.CategoryId),
@@ -994,7 +997,7 @@ public partial class ContentController(
 
         if (await billingService.IsPublishingBlockedAsync(user))
         {
-            return StatusCode(403, new { message = "Tenés un pago pendiente. Regularizalo desde Mi facturación para publicar o modificar anuncios.", billingUrl = "/Account/Billing" });
+            return StatusCode(403, new { message = "Tenés un pago pendiente. Regularizalo desde Mis anuncios para publicar o modificar anuncios.", billingUrl = "/MisAnuncios" });
         }
 
         if (await billingService.HasReachedCompanyPublicationLimitAsync(user))
@@ -1036,24 +1039,41 @@ public partial class ContentController(
         }
 
         var needsPersonPack = await billingService.IsPersonPublicationPackRequiredAsync(user, request);
-        var charge = await billingService.RequirePersonPublicationPackAsync(user, request);
-        if (charge is not null)
+        if (needsPersonPack)
         {
-            return StatusCode(402, new
+            var pendingResult = await publicationService.CreateAsync(request, user.Id, PublicationStatus.PendingPayment);
+            var charge = await billingService.RequirePersonPublicationPackAsync(user, request, pendingResult.Publication.Id);
+            if (charge is not null)
             {
-                message = "Este anuncio requiere el anuncio completo de $3.000. Podés pagarlo desde Mi facturación.",
-                billingUrl = "/Account/Billing",
-                chargeId = charge.Id
+                logger.LogInformation(
+                    "Publication {PublicationId} for user {UserId} is pending payment; billing charge {ChargeId} was created or reused.",
+                    pendingResult.Publication.Id,
+                    user.Id,
+                    charge.Id);
+
+                return StatusCode(402, new
+                {
+                    message = "Este anuncio requiere el anuncio completo de $3.000. Podés pagarlo desde Mis anuncios.",
+                    billingUrl = "/MisAnuncios",
+                    chargeId = charge.Id
+                });
+            }
+
+            await publicationService.ActivatePendingPaymentAsync(pendingResult.Publication.Id, user.Id);
+            await billingService.ConsumePaidPersonPublicationPackAsync(user.Id);
+            return Ok(new
+            {
+                message = "Anuncio creado.",
+                redirectUrl = BuildPublicationDetailsUrl(pendingResult.Publication.Id, IsDebugModeRequested() || user.IsDebugUser)
             });
         }
 
         var result = await publicationService.CreateAsync(request, user.Id);
-        if (needsPersonPack) await billingService.ConsumePaidPersonPublicationPackAsync(user.Id);
 
         return Ok(new
         {
             message = "Anuncio creado.",
-            redirectUrl = BuildPublicationDetailsUrl(result.Publication.Id, IsDebugModeEnabled() || user.IsDebugUser)
+            redirectUrl = BuildPublicationDetailsUrl(result.Publication.Id, IsDebugModeRequested() || user.IsDebugUser)
         });
     }
 
@@ -1085,7 +1105,7 @@ public partial class ContentController(
 
         if (await billingService.IsPublishingBlockedAsync(user))
         {
-            return StatusCode(403, new { message = "Tenés un pago pendiente. Regularizalo desde Mi facturación para modificar anuncios.", billingUrl = "/Account/Billing" });
+            return StatusCode(403, new { message = "Tenés un pago pendiente. Regularizalo desde Mis anuncios para modificar anuncios.", billingUrl = "/MisAnuncios" });
         }
 
         var publication = await publicationService.GetOwnedByIdAsync(id, userId);
@@ -1137,7 +1157,7 @@ public partial class ContentController(
         return Ok(new
         {
             message = "Anuncio actualizado.",
-            redirectUrl = BuildPublicationDetailsUrl(id, IsDebugModeEnabled() || user.IsDebugUser)
+            redirectUrl = BuildPublicationDetailsUrl(id, IsDebugModeRequested() || user.IsDebugUser)
         });
     }
 
@@ -1583,9 +1603,20 @@ public partial class ContentController(
         return $"/api/content/map-markers?{string.Join("&", parts)}";
     }
 
-    private bool IsDebugModeEnabled()
+    private bool IsDebugModeRequested()
     {
         return string.Equals(Request.Query["debug"], "1", StringComparison.Ordinal);
+    }
+
+    private async Task<bool> CanViewDebugPublicationsAsync()
+    {
+        if (IsDebugModeRequested())
+        {
+            return true;
+        }
+
+        return currentUserAccessor.UserId is int userId
+            && await db.Users.AsNoTracking().AnyAsync(x => x.Id == userId && x.IsDebugUser);
     }
 
     private static string AppendDebugFlag(string url, bool includeDebug)

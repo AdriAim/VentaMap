@@ -40,8 +40,7 @@ public class Publication
     [StringLength(160)]
     public string? ContactEmail { get; set; }
 
-    [StringLength(30)]
-    public string Status { get; set; } = "Activa";
+    public PublicationStatus Status { get; set; } = PublicationStatus.Active;
 
     [StringLength(40)]
     public string ModerationStatus { get; set; } = "None";

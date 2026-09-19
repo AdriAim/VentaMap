@@ -25,14 +25,14 @@ public class BillingService(VentaMapDbContext db, VentaMapParameterService param
         return user.IsCompany ? unpaid > 1 : unpaid > 0;
     }
 
-    public async Task<BillingCharge?> RequirePersonPublicationPackAsync(ApplicationUser user, PublicationCreateRequest input)
+    public async Task<BillingCharge?> RequirePersonPublicationPackAsync(ApplicationUser user, PublicationCreateRequest input, int? publicationId = null)
     {
         if (!await IsEnabledForAsync(user)) return null;
         if (user.IsCompany || user.IsBillingExempt == 1) return null;
 
         var photoCount = input.ImagesCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
         var activeCount = await db.Publications.CountAsync(x => x.UserId == user.Id && x.IsActive);
-        return await CreatePersonPackIfNeededAsync(user, activeCount >= 2, photoCount > 3, !string.IsNullOrWhiteSpace(input.VideoUrl));
+        return await CreatePersonPackIfNeededAsync(user, activeCount >= 2, photoCount > 3, !string.IsNullOrWhiteSpace(input.VideoUrl), publicationId);
     }
 
     public async Task<bool> IsPersonPublicationPackRequiredAsync(ApplicationUser user, PublicationCreateRequest input)
@@ -71,7 +71,7 @@ public class BillingService(VentaMapDbContext db, VentaMapParameterService param
         return await db.Publications.CountAsync(x => x.UserId == user.Id && x.IsActive) >= CompanyActivePublicationLimit;
     }
 
-    private async Task<BillingCharge?> CreatePersonPackIfNeededAsync(ApplicationUser user, bool exceedsActiveLimit, bool exceedsPhotoLimit, bool hasVideo)
+    private async Task<BillingCharge?> CreatePersonPackIfNeededAsync(ApplicationUser user, bool exceedsActiveLimit, bool exceedsPhotoLimit, bool hasVideo, int? publicationId = null)
     {
         if (!exceedsActiveLimit && !exceedsPhotoLimit && !hasVideo) return null;
 
@@ -93,6 +93,7 @@ public class BillingService(VentaMapDbContext db, VentaMapParameterService param
         var charge = new BillingCharge
         {
             UserId = user.Id,
+            PublicationId = publicationId,
             Type = PersonPublicationType,
             Amount = PersonPublicationAmount,
             BillingMonthUtc = FirstDayOfMonth(DateTime.UtcNow),

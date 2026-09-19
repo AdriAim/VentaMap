@@ -358,11 +358,12 @@
                 </div>
             </section>
 
-            @if (Model.IsPaidSiteEnabled && Model.ShowPublicationChargeEstimator && !Model.IsCompanyAccount)
+            @if ((Model.IsPaidSiteEnabled || Model.IsBillingForced) && Model.ShowPublicationChargeEstimator && (!Model.IsCompanyAccount || Model.IsBillingForced))
             {
                 <section class="status-banner civic-banner create-pricing-estimator create-pricing-estimator-mobile" data-publication-charge-estimator
                          data-company="@Model.IsCompanyAccount.ToString().ToLowerInvariant()"
                          data-exempt="@Model.IsBillingExempt.ToString().ToLowerInvariant()"
+                         data-forced="@Model.IsBillingForced.ToString().ToLowerInvariant()"
                          data-active-count="@Model.ActivePublicationCount">
                     <strong data-charge-estimator-title>Calculando costo…</strong>
                     <span data-charge-estimator-detail></span>
@@ -386,11 +387,12 @@
                     <span class="gallery-card-caption gallery-description-tooltip gallery-tooltip-trigger" data-create-preview-description tabindex="0"><span></span></span>
                 </div>
             </article>
-            @if (Model.IsPaidSiteEnabled && Model.ShowPublicationChargeEstimator && !Model.IsCompanyAccount)
+            @if ((Model.IsPaidSiteEnabled || Model.IsBillingForced) && Model.ShowPublicationChargeEstimator && (!Model.IsCompanyAccount || Model.IsBillingForced))
             {
                 <section class="status-banner civic-banner create-pricing-estimator create-pricing-estimator-desktop" data-publication-charge-estimator
                          data-company="@Model.IsCompanyAccount.ToString().ToLowerInvariant()"
                          data-exempt="@Model.IsBillingExempt.ToString().ToLowerInvariant()"
+                         data-forced="@Model.IsBillingForced.ToString().ToLowerInvariant()"
                          data-active-count="@Model.ActivePublicationCount">
                     <strong data-charge-estimator-title>Calculando costo…</strong>
                     <span data-charge-estimator-detail></span>

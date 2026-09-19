@@ -249,10 +249,13 @@
                                 <i class="fa-solid fa-star" aria-hidden="true"></i>
                                 <span>Mis favoritos</span>
                             </a>
-                            <a asp-page="/Account/Billing">
-                                <i class="fa-solid fa-receipt" aria-hidden="true"></i>
-                                <span>Mi facturación</span>
-                            </a>
+                            @if (currentUserIsCompany)
+                            {
+                                <a asp-page="/Account/Billing">
+                                    <i class="fa-solid fa-receipt" aria-hidden="true"></i>
+                                    <span>Facturación de empresa</span>
+                                </a>
+                            }
                             @if (await Parameters.GetBoolAsync(VentaMapParameterService.ReviewsEnabled))
                             {
                                 <a asp-page="/Reviews/Index">
