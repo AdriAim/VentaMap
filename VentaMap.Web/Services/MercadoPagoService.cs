@@ -23,6 +23,7 @@ public class MercadoPagoService(HttpClient httpClient, IConfiguration configurat
         {
             type = "online",
             processing_mode = "manual",
+            capture_mode = "automatic_async",
             total_amount = amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
             external_reference = chargeId.ToString(),
             description,
