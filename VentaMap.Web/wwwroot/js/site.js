@@ -5251,6 +5251,10 @@
         // older charge blocks publishing, and must not be presented as a new
         // pending publication.
         if (response.status === 402 && Number.isInteger(result.chargeId) && result.chargeId > 0 && result.billingUrl) {
+          // The API has already created the pending publication and linked its
+          // uploaded media. Prevent the pagehide cleanup from deleting those
+          // files when completeCreatePublication navigates away.
+          uploader.markPersisted();
           completeCreatePublication({
             title: "Publicación pendiente de pago",
             message: "Para completar la publicación debe abonar el anuncio desde Mis anuncios.",
