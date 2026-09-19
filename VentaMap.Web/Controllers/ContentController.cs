@@ -995,11 +995,6 @@ public partial class ContentController(
             return StatusCode(403, new { message = "No puedes publicar nuevos anuncios hasta que un administrador revise el anuncio denunciado." });
         }
 
-        if (await billingService.IsPublishingBlockedAsync(user))
-        {
-            return StatusCode(403, new { message = "Tenés un pago pendiente. Regularizalo desde Mis anuncios para publicar o modificar anuncios.", billingUrl = "/MisAnuncios" });
-        }
-
         if (await billingService.HasReachedCompanyPublicationLimitAsync(user))
         {
             return StatusCode(403, new { message = "Tu cuenta empresa ya tiene 50 anuncios activos simultáneos. Da de baja uno para publicar otro." });
@@ -1101,11 +1096,6 @@ public partial class ContentController(
         if (user is null)
         {
             return Unauthorized(new { message = "No se encontro el usuario autenticado." });
-        }
-
-        if (await billingService.IsPublishingBlockedAsync(user))
-        {
-            return StatusCode(403, new { message = "Tenés un pago pendiente. Regularizalo desde Mis anuncios para modificar anuncios.", billingUrl = "/MisAnuncios" });
         }
 
         var publication = await publicationService.GetOwnedByIdAsync(id, userId);

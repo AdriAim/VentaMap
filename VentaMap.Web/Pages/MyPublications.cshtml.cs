@@ -172,13 +172,6 @@ public class MyPublicationsModel(
             return RedirectToPage();
         }
 
-        if (await billingService.IsPublishingBlockedAsync(user))
-        {
-            if (isAjax) return StatusCode(403, new { message = "Tenés un pago pendiente. Regularizalo desde Mis anuncios.", billingUrl = "/MisAnuncios" });
-            ErrorMessage = "Tenés un pago pendiente. Regularizalo desde Mis anuncios.";
-            return RedirectToPage();
-        }
-
         var publication = await publicationService.GetOwnedByIdAsync(id, userId);
         if (publication is null)
         {
