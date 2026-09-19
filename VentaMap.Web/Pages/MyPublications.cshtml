@@ -604,14 +604,19 @@ else
                 button.addEventListener("click", async () => {
                     if (button.disabled) return;
                     button.disabled = true;
-                    const response = await fetch(`/api/payments/mercadopago/checkout/${button.dataset.mercadopagoCheckout}`, { method: "POST" });
-                    const result = await response.json().catch(() => ({}));
-                    if (response.ok && result.checkoutUrl) {
-                        window.location.assign(result.checkoutUrl);
-                        return;
+                    try {
+                        const response = await fetch(`/api/payments/mercadopago/checkout/${button.dataset.mercadopagoCheckout}`, { method: "POST" });
+                        const result = await response.json().catch(() => ({}));
+                        if (response.ok && result.checkoutUrl) {
+                            window.location.assign(result.checkoutUrl);
+                            return;
+                        }
+                        window.alert(result.message || "No se pudo iniciar el pago.");
+                    } catch {
+                        window.alert("No se pudo conectar con Mercado Pago. Intentá nuevamente.");
+                    } finally {
+                        button.disabled = false;
                     }
-                    button.disabled = false;
-                    window.alert(result.message || "No se pudo iniciar el pago.");
                 });
             });
         })();
