@@ -260,7 +260,7 @@ public class PublicationService(
             HideFromMap = input.NoLocation,
             UserId = userId,
             IsActive = status == PublicationStatus.Active,
-            ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
+            ExpiresAtUtc = status == PublicationStatus.Active ? DateTime.UtcNow.AddDays(30) : null
         };
 
         publication.MediaItems.AddRange(PublicationMediaBuilder.Build(

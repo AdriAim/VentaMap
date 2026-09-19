@@ -217,7 +217,11 @@ else
                     <div class="publication-admin-meta">
                         <span>@(string.IsNullOrWhiteSpace(publication.Locality) ? "Sin ubicacion publica" : publication.Locality)</span>
                         <span>Fecha de publicación: @publication.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy")</span>
-                        @if (publication.ExpiresAtUtc.HasValue)
+                        @if (isPendingPayment)
+                        {
+                            <span>Vigencia: 30 días desde la acreditación del pago</span>
+                        }
+                        else if (publication.ExpiresAtUtc.HasValue)
                         {
                             <span>Vence: @publication.ExpiresAtUtc.Value.ToLocalTime().ToString("dd/MM/yyyy")</span>
                         }
