@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace VentaMap.Services;
 
-public class MercadoPagoService(HttpClient httpClient, IConfiguration configuration)
+public class MercadoPagoService(HttpClient httpClient, IConfiguration configuration, ILogger<MercadoPagoService> logger)
 {
     public sealed record CheckoutResult(string? Url, bool IsConfigured);
 
@@ -41,7 +41,16 @@ public class MercadoPagoService(HttpClient httpClient, IConfiguration configurat
             }
         }), Encoding.UTF8, "application/json");
         using var response = await httpClient.SendAsync(request);
-        if (!response.IsSuccessStatusCode) return new(null, true);
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync();
+            logger.LogWarning(
+                "Mercado Pago rechazó la orden del cargo {ChargeId}. Estado: {StatusCode}. Respuesta: {Response}",
+                chargeId,
+                (int)response.StatusCode,
+                errorBody);
+            return new(null, true);
+        }
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         return new(document.RootElement.TryGetProperty("checkout_url", out var checkoutUrl) ? checkoutUrl.GetString() : null, true);
     }
