@@ -873,7 +873,11 @@ public partial class ContentController(
             IsCompanyAccount = user.IsCompany,
             IsBillingExempt = user.IsBillingExempt == 1,
             IsBillingForced = user.IsBillingExempt == 2,
-            ShowPublicationChargeEstimator = false,
+            // A pending ad can be upgraded to the complete format while it is
+            // being edited. Show the same live price calculation as Create so
+            // the owner knows what will be charged before paying.
+            ShowPublicationChargeEstimator = publication.Status == PublicationStatus.PendingPayment,
+            ActivePublicationCount = await db.Publications.CountAsync(x => x.UserId == user.Id && x.IsActive),
             MapStyleUrl = configuration["Map:StyleUrl"] ?? string.Empty,
             MapTilesUrlTemplate = configuration["Map:TilesUrlTemplate"] ?? string.Empty,
             MapAttributionHtml = configuration["Map:AttributionHtml"] ?? string.Empty,
