@@ -82,22 +82,6 @@ public class BillingService(VentaMapDbContext db, VentaMapParameterService param
             return null;
         }
 
-        var pending = await db.BillingCharges
-            .FirstOrDefaultAsync(x => x.UserId == user.Id && x.Type == PersonPublicationType && x.Status == "Pending");
-        if (pending is not null)
-        {
-            // Older pending charges (created before publications had a payment
-            // status) may not be linked to an ad. Attach one when it becomes
-            // available so the payment action is visible in Mis anuncios.
-            if (pending.PublicationId is null && publicationId.HasValue)
-            {
-                pending.PublicationId = publicationId.Value;
-                await db.SaveChangesAsync();
-            }
-
-            return pending;
-        }
-
         var reasons = new List<string>();
         if (exceedsActiveLimit) reasons.Add("más de 2 anuncios activos");
         if (exceedsPhotoLimit) reasons.Add("más de 3 fotos");
