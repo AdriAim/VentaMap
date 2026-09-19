@@ -67,7 +67,8 @@ public class MyPublicationsModel(
             ? $"/{user.CompanySlug}"
             : null;
         ReviewsEnabled = await reviewService.IsEnabledAsync();
-        BillingEnabled = await db.VentaMapParameters.AnyAsync(x => x.Key == VentaMapParameterService.PaidSiteEnabled && x.Value == "true");
+        BillingEnabled = user.IsBillingExempt == 2
+            || await db.VentaMapParameters.AnyAsync(x => x.Key == VentaMapParameterService.PaidSiteEnabled && x.Value == "true");
         if (BillingEnabled)
         {
             await billingService.EnsureCompanyCurrentMonthChargeAsync(user);

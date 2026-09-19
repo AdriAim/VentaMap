@@ -228,14 +228,17 @@ else
                         }
                         <a class="ghost-pill" asp-page="/Publications/Edit" asp-route-id="@publication.Id">Editar datos</a>
                         <a class="ghost-pill publication-preview-trigger" href="@ownerPreviewUrl" data-details-url="@ownerPreviewApiUrl">Ver anuncio</a>
-                        <button type="button"
-                                class="ghost-pill publication-admin-copy-link publication-share-link"
-                                data-copy-publication-link="true"
-                                data-copy-label="Copiar link para compartir"
-                                data-copy-url="@detailUrl">
-                            <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
-                            <span>Copiar link para compartir</span>
-                        </button>
+                        @if (!isPendingPayment)
+                        {
+                            <button type="button"
+                                    class="ghost-pill publication-admin-copy-link publication-share-link"
+                                    data-copy-publication-link="true"
+                                    data-copy-label="Copiar link para compartir"
+                                    data-copy-url="@detailUrl">
+                                <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
+                                <span>Copiar link para compartir</span>
+                            </button>
+                        }
                         @if (publication.IsActive)
                         {
                             <details class="publication-deactivate-panel">
@@ -295,15 +298,18 @@ else
                         }
                         else
                         {
-                            @if (!string.IsNullOrWhiteSpace(publication.DeactivationReason))
+                            @if (!isPendingPayment && !string.IsNullOrWhiteSpace(publication.DeactivationReason))
                             {
                                 <p class="publication-admin-deactivation-reason">
                                     Motivo de baja: <strong>@publication.DeactivationReason</strong>
                                 </p>
                             }
-                            <form method="post" asp-page-handler="Republish" asp-route-id="@publication.Id" data-republish-form>
-                                <button type="submit" class="primary-pill">Republicar 30 dias</button>
-                            </form>
+                            @if (!isPendingPayment)
+                            {
+                                <form method="post" asp-page-handler="Republish" asp-route-id="@publication.Id" data-republish-form>
+                                    <button type="submit" class="primary-pill">Republicar 30 dias</button>
+                                </form>
+                            }
                             <form method="post" asp-page-handler="DeletePermanent" asp-route-id="@publication.Id" onsubmit="return confirm('Esta accion eliminara el anuncio de Mis anuncios y borrara sus archivos multimedia de Cloudflare R2.');">
                                 <button type="submit" class="danger-pill">Eliminar anuncio</button>
                             </form>
