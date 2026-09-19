@@ -1209,6 +1209,15 @@ textarea:focus {
   box-shadow: 0 14px 30px rgba(255, 75, 95, 0.24);
 }
 
+.mercadopago-pill {
+  background: linear-gradient(135deg, #009ee3, #0078bd);
+  box-shadow: 0 14px 30px rgba(0, 158, 227, 0.28);
+}
+
+.mercadopago-pill:hover {
+  background: linear-gradient(135deg, #00a8ed, #0087d1);
+}
+
 .ghost-pill {
   background: rgba(255,255,255,0.76);
   border: 1px solid var(--line);
