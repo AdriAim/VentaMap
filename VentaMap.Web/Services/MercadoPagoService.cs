@@ -7,13 +7,15 @@ namespace VentaMap.Services;
 
 public class MercadoPagoService(HttpClient httpClient, IConfiguration configuration)
 {
+    public sealed record CheckoutResult(string? Url, bool IsConfigured);
+
     public bool IsConfigured => !string.IsNullOrWhiteSpace(configuration["MercadoPago:AccessToken"]);
     public bool IsWebhookConfigured => !string.IsNullOrWhiteSpace(configuration["MercadoPago:WebhookSecret"]);
 
-    public async Task<string?> CreateCheckoutUrlAsync(int chargeId, string description, decimal amount, string? payerEmail)
+    public async Task<CheckoutResult> CreateCheckoutUrlAsync(int chargeId, string description, decimal amount, string? payerEmail)
     {
         var token = configuration["MercadoPago:AccessToken"];
-        if (string.IsNullOrWhiteSpace(token)) return null;
+        if (string.IsNullOrWhiteSpace(token)) return new(null, false);
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.mercadopago.com/v1/orders");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Add("X-Idempotency-Key", Guid.NewGuid().ToString());
@@ -21,7 +23,6 @@ public class MercadoPagoService(HttpClient httpClient, IConfiguration configurat
         {
             type = "online",
             processing_mode = "manual",
-            capture_mode = "automatic",
             total_amount = amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
             external_reference = chargeId.ToString(),
             description,
@@ -39,9 +40,9 @@ public class MercadoPagoService(HttpClient httpClient, IConfiguration configurat
             }
         }), Encoding.UTF8, "application/json");
         using var response = await httpClient.SendAsync(request);
-        if (!response.IsSuccessStatusCode) return null;
+        if (!response.IsSuccessStatusCode) return new(null, true);
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        return document.RootElement.TryGetProperty("checkout_url", out var checkoutUrl) ? checkoutUrl.GetString() : null;
+        return new(document.RootElement.TryGetProperty("checkout_url", out var checkoutUrl) ? checkoutUrl.GetString() : null, true);
     }
 
     public bool IsValidWebhook(string? xSignature, string? xRequestId, string? dataId)

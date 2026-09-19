@@ -20,8 +20,15 @@ public class MercadoPagoController(VentaMapDbContext db, CurrentUserAccessor cur
             .Include(x => x.User)
             .FirstOrDefaultAsync(x => x.Id == chargeId && x.UserId == userId && x.Status == "Pending");
         if (charge is null) return NotFound(new { message = "No se encontró el cargo pendiente." });
-        var url = await mercadoPagoService.CreateCheckoutUrlAsync(charge.Id, charge.Description, charge.Amount, charge.User?.Email);
-        return string.IsNullOrWhiteSpace(url) ? StatusCode(503, new { message = "Mercado Pago todavía no está configurado." }) : Ok(new { checkoutUrl = url });
+        var checkout = await mercadoPagoService.CreateCheckoutUrlAsync(charge.Id, charge.Description, charge.Amount, charge.User?.Email);
+        if (!checkout.IsConfigured)
+        {
+            return StatusCode(503, new { message = "Mercado Pago todavía no está configurado." });
+        }
+
+        return string.IsNullOrWhiteSpace(checkout.Url)
+            ? StatusCode(502, new { message = "Mercado Pago no pudo iniciar el pago. Intentá nuevamente en unos minutos." })
+            : Ok(new { checkoutUrl = checkout.Url });
     }
 
     [AllowAnonymous]
