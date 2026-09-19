@@ -626,6 +626,7 @@ public partial class ContentController(
     {
         if (!ModelState.IsValid)
         {
+            logger.LogWarning("CreatePublication rejected by model validation for user {UserId}. Errors: {@Errors}", currentUserAccessor.UserId, ModelStateToFieldErrors(ModelState));
             return BadRequest(new { message = "Escribe una sugerencia válida." });
         }
 
@@ -1060,6 +1061,7 @@ public partial class ContentController(
         var errors = await ValidateCreateRequestAsync(request);
         if (errors.Count > 0)
         {
+            logger.LogWarning("CreatePublication rejected by business validation for user {UserId}. Errors: {@Errors}", user.Id, errors);
             return BadRequest(new { message = "Revisa los datos del formulario.", errors });
         }
 
@@ -1093,7 +1095,16 @@ public partial class ContentController(
             });
         }
 
-        var result = await publicationService.CreateAsync(request, user.Id);
+        (Publication Publication, string? AnonymousPassword) result;
+        try
+        {
+            result = await publicationService.CreateAsync(request, user.Id);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "CreatePublication failed while persisting for user {UserId}, category {CategoryId}.", user.Id, request.CategoryId);
+            return StatusCode(500, new { message = "No se pudo guardar el anuncio. Intentá nuevamente." });
+        }
 
         return Ok(new
         {

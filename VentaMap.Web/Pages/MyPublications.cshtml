@@ -233,7 +233,11 @@ else
                         }
                         @if (isPendingPayment && Model.PendingChargeIdsByPublicationId.TryGetValue(publication.Id, out var chargeId))
                         {
-                            <button type="button" class="primary-pill mercadopago-pill" data-mercadopago-checkout="@chargeId">Pagar con Mercado Pago</button>
+                            var chargeAmount = Model.PendingChargeAmountsByPublicationId.TryGetValue(publication.Id, out var amount) ? amount : 0m;
+                            <div class="payment-action-stack">
+                                <button type="button" class="primary-pill mercadopago-pill" data-mercadopago-checkout="@chargeId">Pagar $@chargeAmount.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-AR")) con Mercado Pago</button>
+                                <span>para habilitar el anuncio.</span>
+                            </div>
                         }
                         <a class="ghost-pill" asp-page="/Publications/Edit" asp-route-id="@publication.Id">Editar datos</a>
                         <a class="ghost-pill publication-preview-trigger" href="@ownerPreviewUrl" data-details-url="@ownerPreviewApiUrl">Ver anuncio</a>

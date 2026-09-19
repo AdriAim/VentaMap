@@ -6352,6 +6352,17 @@ textarea:focus {
   width: min(100%, 560px);
 }
 
+.payment-action-stack {
+  display: grid;
+  justify-items: center;
+  gap: 0.3rem;
+}
+
+.payment-action-stack > span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 
 .login-welcome {
   max-width: 760px;
