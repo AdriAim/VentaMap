@@ -148,6 +148,7 @@ else
             var ownerPreviewUrl = $"{detailUrl}?ownerView=1";
             var ownerPreviewApiUrl = $"/api/content/details/{publication.Id}?ownerView=1";
             var imageUrl = publication.ImageList.FirstOrDefault();
+            var ownerImageUrl = string.IsNullOrWhiteSpace(imageUrl) ? null : $"/api/content/owner-media/{publication.Id}";
             var isPendingPayment = publication.Status == PublicationStatus.PendingPayment;
             var publicationListStatus = isPendingPayment ? "pending" : publication.IsActive ? "active" : "inactive";
             var statusLabel = publication.IsActive ? publication.Status.ToDisplayName() : isPendingPayment ? publication.Status.ToDisplayName() : "Inactiva";
@@ -175,9 +176,9 @@ else
                    href="@ownerPreviewUrl"
                    data-publication-id="@publication.Id"
                    data-details-url="@ownerPreviewApiUrl">
-                    @if (!string.IsNullOrWhiteSpace(imageUrl))
+                    @if (!string.IsNullOrWhiteSpace(ownerImageUrl))
                     {
-                        <img src="@imageUrl" alt="@publication.Title" />
+                        <img src="@ownerImageUrl" alt="@publication.Title" />
                     }
                     else
                     {

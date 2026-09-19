@@ -336,6 +336,36 @@ public sealed class CloudflareR2ImageStorageService
         }
     }
 
+    public async Task<(byte[] Content, string ContentType)?> GetManagedPublicObjectAsync(
+        string publicUrl,
+        CancellationToken cancellationToken = default)
+    {
+        var options = GetOptions();
+        ValidateConfiguration(options);
+        var key = TryExtractManagedObjectKey(publicUrl, options.PublicBaseUrl);
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var response = await _client.Value.GetObjectAsync(new GetObjectRequest
+            {
+                BucketName = options.Bucket,
+                Key = key
+            }, cancellationToken);
+            await using var content = new MemoryStream();
+            await response.ResponseStream.CopyToAsync(content, cancellationToken);
+            return (content.ToArray(), response.Headers.ContentType ?? "application/octet-stream");
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound || ex.ErrorCode == "NoSuchKey")
+        {
+            _logger.LogWarning("No se encontró el objeto R2 {ObjectKey}.", key);
+            return null;
+        }
+    }
+
     private async Task<string> ProcessAndUploadAsync(IFormFile file, R2Options options, CancellationToken cancellationToken)
     {
         await using var inputStream = file.OpenReadStream();

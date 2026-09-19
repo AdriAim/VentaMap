@@ -964,6 +964,32 @@ public partial class ContentController(
         return Ok(new { message = result.Message });
     }
 
+    [HttpGet("owner-media/{publicationId:int}")]
+    public async Task<IActionResult> OwnerMedia(int publicationId, CancellationToken cancellationToken)
+    {
+        if (!currentUserAccessor.IsAuthenticated || currentUserAccessor.UserId is not int userId)
+        {
+            return Unauthorized();
+        }
+
+        var imageUrl = await db.Publications
+            .AsNoTracking()
+            .Where(x => x.Id == publicationId && x.UserId == userId)
+            .SelectMany(x => x.MediaItems
+                .Where(media => media.MediaType == PublicationMediaType.Image && !string.IsNullOrWhiteSpace(media.Url))
+                .OrderByDescending(media => media.IsPrimary)
+                .ThenBy(media => media.SortOrder)
+                .Select(media => media.Url))
+            .FirstOrDefaultAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(imageUrl))
+        {
+            return NotFound();
+        }
+
+        var file = await imageStorageService.GetManagedPublicObjectAsync(imageUrl, cancellationToken);
+        return file is null ? NotFound() : File(file.Value.Content, file.Value.ContentType);
+    }
+
     [HttpPost("create")]
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> CreatePost([FromBody] CreatePublicationApiRequest request)
