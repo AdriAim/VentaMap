@@ -34,9 +34,7 @@ public class MercadoPagoService(HttpClient httpClient, IConfiguration configurat
                 {
                     title = description,
                     quantity = 1,
-                    unit_measure = "unit",
-                    unit_price = amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
-                    total_amount = amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
+                    unit_price = amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
                 }
             }
         }), Encoding.UTF8, "application/json");

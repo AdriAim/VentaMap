@@ -37,6 +37,7 @@ public class MyPublicationsModel(
     public bool BillingEnabled { get; private set; }
     public int PendingChargeCount { get; private set; }
     public Dictionary<int, int> PendingChargeIdsByPublicationId { get; private set; } = [];
+    public Dictionary<int, List<BillingCharge>> PaymentHistoryByPublicationId { get; private set; } = [];
 
     [TempData]
     public string? SuccessMessage { get; set; }
@@ -80,6 +81,10 @@ public class MyPublicationsModel(
                     .Where(x => x.Status == "Pending" && x.PublicationId.HasValue)
                     .GroupBy(x => x.PublicationId!.Value)
                     .ToDictionary(x => x.Key, x => x.OrderByDescending(charge => charge.CreatedAtUtc).First().Id);
+                PaymentHistoryByPublicationId = charges
+                    .Where(x => x.PublicationId.HasValue && x.Type == BillingService.PersonPublicationType && x.PaidAtUtc.HasValue && x.Status is "Paid" or "Used")
+                    .GroupBy(x => x.PublicationId!.Value)
+                    .ToDictionary(x => x.Key, x => x.OrderByDescending(charge => charge.PaidAtUtc).ToList());
             }
         }
         Publications = await publicationService.GetOwnedPublicationsAsync(userId);
