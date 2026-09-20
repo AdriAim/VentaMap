@@ -107,9 +107,9 @@ public class SettingsModel(
             return Page();
         }
 
-        if (Input.PhoneCountry == "AR" && !Regex.IsMatch(Input.Phone.Trim(), @"^\+54 9 \d{10}$"))
+        if (Input.PhoneCountry == "AR" && !Regex.IsMatch(Input.Phone.Trim(), @"^\+54 9 \d{9,11}$"))
         {
-            ModelState.AddModelError(PhoneField, "Ingresa el telefono argentino como +54 9 seguido de 10 digitos.");
+            ModelState.AddModelError(PhoneField, "Ingresa el telefono argentino como +54 9 seguido de 9, 10 u 11 digitos.");
         }
 
         if (!Input.PublishEmail && !Input.AcceptsCalls && !Input.RespondsWhatsApp && !Input.AllowSiteChat)
@@ -269,7 +269,7 @@ public class SettingsModel(
             digits = digits[1..];
         }
 
-        return digits.Length == 10 ? $"+54 9 {digits}" : trimmed;
+        return digits.Length is >= 9 and <= 11 ? $"+54 9 {digits}" : trimmed;
     }
 
     private static string NormalizeMessageBubbleColor(string? color)

@@ -183,6 +183,14 @@ public class MyPublicationsModel(
             return RedirectToPage();
         }
 
+        if (await billingService.IsPublishingBlockedAsync(user))
+        {
+            const string billingMessage = "Tenés un pago mensual pendiente vencido. Regularizalo desde Pagos mensuales para republicar anuncios.";
+            if (isAjax) return StatusCode(403, new { message = billingMessage, billingUrl = "/Account/Billing" });
+            ErrorMessage = billingMessage;
+            return RedirectToPage();
+        }
+
         var publication = await publicationService.GetOwnedByIdAsync(id, userId);
         if (publication is null)
         {
@@ -203,7 +211,7 @@ public class MyPublicationsModel(
         var charge = await billingService.RequirePersonRepublishPackAsync(user, publication);
         if (charge is not null)
         {
-            if (isAjax) return StatusCode(402, new { message = "La republicación requiere el anuncio completo de $3.000. Podés pagarlo desde Mis anuncios.", billingUrl = "/MisAnuncios", chargeId = charge.Id });
+            if (isAjax) return StatusCode(402, new { message = "La republicación requiere el anuncio completo de $3.000. Podés pagarlo desde Mis anuncios.", billingUrl = "/MisAnuncios?status=pending", chargeId = charge.Id });
             ErrorMessage = "La republicación requiere el anuncio completo de $3.000. Podés pagarlo desde Mis anuncios.";
             return RedirectToPage();
         }

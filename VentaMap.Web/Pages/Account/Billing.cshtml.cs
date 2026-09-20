@@ -13,7 +13,9 @@ public class BillingModel(CurrentUserAccessor currentUserAccessor, VentaMapDbCon
 {
     public ApplicationUser? UserAccount { get; private set; }
     public List<BillingCharge> Charges { get; private set; } = [];
+    public List<CompanyMonthlyPeriod> MonthlyPeriods { get; private set; } = [];
     public bool IsMercadoPagoConfigured { get; private set; }
+    public bool HasOverdueMonthlyDebt { get; private set; }
 
     public async Task<IActionResult> OnGetAsync()
     {
@@ -24,8 +26,9 @@ public class BillingModel(CurrentUserAccessor currentUserAccessor, VentaMapDbCon
         if (UserAccount is null) return RedirectToPage("/Account/Login");
         if (!UserAccount.IsCompany) return RedirectToPage("/MyPublications");
 
-        await billingService.EnsureCompanyCurrentMonthChargeAsync(UserAccount);
+        MonthlyPeriods = await billingService.GetCompanyMonthlyPeriodsAsync(UserAccount);
         Charges = await billingService.GetChargesAsync(userId);
+        HasOverdueMonthlyDebt = await billingService.IsPublishingBlockedAsync(UserAccount);
         IsMercadoPagoConfigured = !string.IsNullOrWhiteSpace(HttpContext.RequestServices.GetRequiredService<IConfiguration>()["MercadoPago:AccessToken"]);
         return Page();
     }

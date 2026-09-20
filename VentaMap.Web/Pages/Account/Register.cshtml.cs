@@ -92,9 +92,9 @@ public class RegisterModel(
             ModelState.AddModelError($"{nameof(Input)}.{nameof(InputModel.Name)}", "Ingresa tu nombre.");
         }
 
-        if (Input.PhoneCountry == "AR" && !Regex.IsMatch(Input.Phone.Trim(), @"^\+54 9 \d{10}$"))
+        if (Input.PhoneCountry == "AR" && !Regex.IsMatch(Input.Phone.Trim(), @"^\+54 9 \d{9,11}$"))
         {
-            ModelState.AddModelError(PhoneField, "Ingresa el telefono argentino como +54 9 seguido de 10 digitos.");
+            ModelState.AddModelError(PhoneField, "Ingresa el telefono argentino como +54 9 seguido de 9, 10 u 11 digitos.");
             LogFailedRegistrationAttempt("Invalid Argentine phone format.");
             return Page();
         }
@@ -136,14 +136,9 @@ public class RegisterModel(
                 ModelState.AddModelError(CompanyLogoField, "Sube un logo cuadrado para la empresa.");
             }
 
-            if (!Input.RespondsWhatsApp)
+            if (!Input.RespondsWhatsApp && !Input.RespondsEmails)
             {
-                ModelState.AddModelError(string.Empty, "Las cuentas empresa deben ofrecer contacto por WhatsApp.");
-            }
-
-            if (!Input.RespondsEmails)
-            {
-                ModelState.AddModelError(string.Empty, "Las cuentas empresa deben ofrecer contacto por email.");
+                ModelState.AddModelError(string.Empty, "Las cuentas empresa deben ofrecer contacto por WhatsApp o email.");
             }
 
             if (!string.IsNullOrWhiteSpace(normalizedCompanyName)

@@ -4989,13 +4989,22 @@ textarea:focus {
 
 .my-publications-view-gallery .publication-admin-actions .primary-pill,
 .my-publications-view-gallery .publication-admin-actions .ghost-pill,
-.my-publications-view-gallery .publication-admin-actions .danger-pill {
-  width: 100%;
-  min-height: 2.25rem;
-  justify-content: center;
-  padding: 0.48rem 0.65rem;
-  font-size: 0.78rem;
-}
+  .my-publications-view-gallery .publication-admin-actions .danger-pill {
+    width: 100%;
+    min-height: 2.25rem;
+    justify-content: center;
+    padding: 0.48rem 0.65rem;
+    font-size: 0.78rem;
+  }
+
+  .my-publications-view-gallery .publication-admin-actions > .payment-action-stack {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .my-publications-view-gallery .payment-action-stack > .mercadopago-pill {
+    width: 100%;
+  }
 
 .publication-admin-copy-link {
   margin-left: auto;
@@ -7012,6 +7021,17 @@ textarea.input-validation-error,
   .map-card,
   .site-footer {
     grid-template-columns: 1fr;
+  }
+
+  /* La ficha técnica usa etiquetas e inputs en línea en escritorio. En móvil,
+     esa división deja muy poco espacio para completar valores y ver las unidades. */
+  .form-grid[data-dynamic-optional-fields-container] label.dynamic-field-inline {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.45rem;
+  }
+
+  .form-grid[data-dynamic-optional-fields-container] label.dynamic-field-inline.checkline {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .site-nav {

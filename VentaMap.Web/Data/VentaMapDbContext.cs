@@ -70,8 +70,7 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
         modelBuilder.Entity<Publication>()
             .Property(x => x.Status)
             .HasConversion<string>()
-            .HasMaxLength(30)
-            .HasDefaultValue(PublicationStatus.Active);
+            .HasMaxLength(30);
 
         modelBuilder.Entity<BillingCharge>()
             .Property(x => x.Amount)

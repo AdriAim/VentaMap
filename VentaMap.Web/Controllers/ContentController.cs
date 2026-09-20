@@ -1026,6 +1026,15 @@ public partial class ContentController(
             return StatusCode(403, new { message = "No puedes publicar nuevos anuncios hasta que un administrador revise el anuncio denunciado." });
         }
 
+        if (await billingService.IsPublishingBlockedAsync(user))
+        {
+            return StatusCode(403, new
+            {
+                message = "Tenés un pago mensual pendiente vencido. Regularizalo desde Pagos mensuales para dar de alta nuevos anuncios.",
+                billingUrl = "/Account/Billing"
+            });
+        }
+
         if (await billingService.HasReachedCompanyPublicationLimitAsync(user))
         {
             return StatusCode(403, new { message = "Tu cuenta empresa ya tiene 50 anuncios activos simultáneos. Da de baja uno para publicar otro." });
@@ -1081,7 +1090,7 @@ public partial class ContentController(
                 return StatusCode(402, new
                 {
                     message = "Este anuncio requiere el anuncio completo de $3.000. Podés pagarlo desde Mis anuncios.",
-                    billingUrl = "/MisAnuncios",
+                    billingUrl = "/MisAnuncios?status=pending",
                     chargeId = charge.Id
                 });
             }

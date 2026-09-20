@@ -290,9 +290,9 @@ public class AuthService(
             digits = digits[1..];
         }
 
-        if (digits.Length >= 10)
+        if (digits.Length is >= 9 and <= 11)
         {
-            return $"+54 9 {digits[..10]}";
+            return $"+54 9 {digits}";
         }
 
         return trimmed;

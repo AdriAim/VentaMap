@@ -360,6 +360,11 @@ else
             let selectedView = "list";
             let selectedSort = "date-asc";
 
+            const requestedStatus = new URLSearchParams(window.location.search).get("status");
+            if (requestedStatus && statusButtons.some(button => button.dataset.myPublicationsStatus === requestedStatus)) {
+                selectedStatus = requestedStatus;
+            }
+
             const separators = document.createElement("div");
             separators.className = "my-publications-row-separators";
             separators.setAttribute("aria-hidden", "true");
@@ -490,6 +495,12 @@ else
                     });
                     applyFilters();
                 });
+            });
+
+            statusButtons.forEach(button => {
+                const isActive = button.dataset.myPublicationsStatus === selectedStatus;
+                button.classList.toggle("is-active", isActive);
+                button.setAttribute("aria-pressed", isActive ? "true" : "false");
             });
 
             sortItems();

@@ -2394,11 +2394,11 @@
       digits = digits.slice(1);
     }
 
-    return digits.slice(0, 10);
+    return digits.slice(0, 11);
   }
 
   function formatArgPhoneDigits(digits) {
-    const value = String(digits || "").slice(0, 10);
+    const value = String(digits || "").slice(0, 11);
     if (!value) {
       return "";
     }
@@ -5230,16 +5230,26 @@
       }
 
       const submitEndpoint = form.dataset.submitEndpoint || "/api/content/create";
-      const response = await fetch(submitEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Requested-With": "fetch"
-        },
-        body: JSON.stringify(payload)
-      });
+      let response;
+      let result;
+      try {
+        response = await fetch(submitEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "fetch"
+          },
+          body: JSON.stringify(payload)
+        });
+        result = await readJsonResponse(response);
+      } catch (error) {
+        console.error("create publication request failed", { error, payload });
+        if (feedback) {
+          feedback.innerHTML = '<div class="status-banner warning">No se pudo conectar para publicar el anuncio. Verificá tu conexión e intentá nuevamente.</div>';
+        }
+        return;
+      }
 
-      const result = await readJsonResponse(response);
       if (!response.ok) {
         console.log("create publication failed", {
           status: response.status,
@@ -5356,7 +5366,7 @@
       const technicalPanel = form.querySelector("[data-technical-panel]");
       if (!body) return;
 
-      const sync = () => {
+      const sync = ({ focusLocationSearch = false } = {}) => {
         if (heading) {
           heading.hidden = false;
           heading.querySelectorAll(":scope > *").forEach(node => {
@@ -5370,6 +5380,13 @@
           if (toggle.checked) {
             const mapElement = body.querySelector("[data-create-map]");
             requestCreateMapResize(mapElement);
+            if (focusLocationSearch) {
+              const searchInput = body.querySelector('input[name="locationSearch"]');
+              requestAnimationFrame(() => {
+                searchInput?.focus();
+                searchInput?.select();
+              });
+            }
           }
         }
         if (sectionKey === "technical") {
@@ -5377,7 +5394,7 @@
         }
       };
 
-      toggle.addEventListener("change", sync);
+      toggle.addEventListener("change", () => sync({ focusLocationSearch: true }));
       sync();
     });
   }

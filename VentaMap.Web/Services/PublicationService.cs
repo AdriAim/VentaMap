@@ -481,6 +481,11 @@ public class PublicationService(
         publication.DeactivationComment = null;
         publication.DeactivatedAtUtc = null;
         await db.SaveChangesAsync();
+        var user = await db.Users.FindAsync(userId);
+        if (user is not null)
+        {
+            await billingService.EnsureCompanyCurrentMonthChargeAsync(user);
+        }
         return true;
     }
 

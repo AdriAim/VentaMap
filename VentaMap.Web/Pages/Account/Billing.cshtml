@@ -1,20 +1,25 @@
 @page
 @model VentaMap.Pages.Account.BillingModel
+@using VentaMap.Services
 @{
-    ViewData["Title"] = "Facturación de empresa";
+    ViewData["Title"] = "Pagos mensuales";
 }
 
 <section class="form-shell narrow">
     <div class="section-heading">
         <span class="eyebrow">Cuenta</span>
-        <h1>Facturación de empresa</h1>
+        <h1>Pagos mensuales</h1>
         @if (Model.UserAccount?.IsBillingExempt == 1)
         {
             <p>Tu cuenta está marcada como gratuita: no se generan cargos por anuncios ni catálogo.</p>
         }
+        else if (Model.UserAccount?.Id == BillingService.CompanyWithoutTrialUserId)
+        {
+            <p>El plan empresa cuesta $50.000 por cada mes con anuncios activos.</p>
+        }
         else if (Model.UserAccount?.IsCompany == true)
         {
-            <p>Los primeros 3 meses desde el alta son gratuitos. Desde el cuarto mes, el plan empresa cuesta $50.000 por mes e incluye hasta 50 anuncios activos simultáneos, estadísticas de vistas y listas personalizadas.</p>
+            <p>Los primeros 3 meses desde tu primera publicación son gratuitos. Desde el cuarto mes, el plan empresa cuesta $50.000 por cada mes con anuncios activos.</p>
         }
         else
         {
@@ -22,9 +27,9 @@
         }
     </div>
 
-    @if (!Model.Charges.Any())
+    @if (!Model.MonthlyPeriods.Any())
     {
-        <section class="empty-state"><h2>No tenés cargos pendientes ni pagos registrados.</h2></section>
+        <section class="empty-state"><h2>Tu historial mensual aparecerá desde que publiques tu primer anuncio.</h2></section>
     }
     else
     {
@@ -32,17 +37,17 @@
             <div class="table-responsive"><table class="table">
                 <thead><tr><th>Período</th><th>Concepto</th><th>Importe</th><th>Estado</th><th></th></tr></thead>
                 <tbody>
-                @foreach (var charge in Model.Charges)
+                @foreach (var period in Model.MonthlyPeriods)
                 {
                     <tr>
-                        <td>@charge.BillingMonthUtc.ToLocalTime().ToString("MMMM yyyy", new System.Globalization.CultureInfo("es-AR"))</td>
-                        <td>@charge.Description</td>
-                        <td>$@charge.Amount.ToString("N0", new System.Globalization.CultureInfo("es-AR"))</td>
-                        <td>@(charge.Status switch { "Paid" => "Pagado", "Used" => "Pagado y aplicado", _ => "Pendiente" })</td>
+                        <td>@period.MonthUtc.ToString("MMMM yyyy", new System.Globalization.CultureInfo("es-AR"))</td>
+                        <td>@(period.HasActivePublication || period.Charge is not null ? "Plan empresa mensual" : "Sin anuncios activos")</td>
+                        <td>@(period.Charge is not null ? $"${period.Charge.Amount.ToString("N0", new System.Globalization.CultureInfo("es-AR"))}" : period.IsFree ? "GRATIS" : "SIN CARGO")</td>
+                        <td>@(period.Charge?.Status switch { "Paid" => "Pagado", "Used" => "Pagado y aplicado", null when period.IsFree => "GRATIS", null => "Sin cargo", _ => "Pendiente" })</td>
                         <td>
-                            @if (charge.Status == "Pending")
+                            @if (period.Charge?.Status == "Pending")
                             {
-                                <button type="button" class="primary-pill compact" data-mercadopago-checkout="@charge.Id">Pagar con Mercado Pago</button>
+                                <button type="button" class="primary-pill compact" data-mercadopago-checkout="@period.Charge.Id">Pagar con Mercado Pago</button>
                             }
                         </td>
                     </tr>
@@ -63,6 +68,13 @@
             {
                 <span>Los cargos ya están registrados. Falta conectar Mercado Pago para mostrar el QR y el botón de pago.</span>
             }
+        </section>
+    }
+
+    @if (Model.HasOverdueMonthlyDebt)
+    {
+        <section class="status-banner warning">
+            Tenés un pago mensual pendiente vencido. Hasta regularizarlo no podrás dar de alta ni republicar anuncios.
         </section>
     }
 </section>
