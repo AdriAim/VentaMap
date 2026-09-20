@@ -26,6 +26,7 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
     public DbSet<VerifiedOperation> VerifiedOperations => Set<VerifiedOperation>();
     public DbSet<OperationReview> OperationReviews => Set<OperationReview>();
     public DbSet<BillingCharge> BillingCharges => Set<BillingCharge>();
+    public DbSet<BillingRate> BillingRates => Set<BillingRate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -83,6 +84,14 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
 
         modelBuilder.Entity<BillingCharge>()
             .HasIndex(x => new { x.UserId, x.Type, x.BillingMonthUtc, x.Reference })
+            .IsUnique();
+
+        modelBuilder.Entity<BillingRate>()
+            .Property(x => x.Amount)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<BillingRate>()
+            .HasIndex(x => new { x.ChargeType, x.EffectiveFromUtc })
             .IsUnique();
 
         modelBuilder.Entity<ApplicationUser>()

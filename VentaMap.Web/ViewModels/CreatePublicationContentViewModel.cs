@@ -37,6 +37,8 @@ public class CreatePublicationContentViewModel
     public bool ShowPublicationChargeEstimator { get; set; }
     public int ActivePublicationCount { get; set; }
     public int SharedListCount { get; set; }
+    public decimal PersonPublicationAmount { get; set; }
+    public decimal CompanyMonthlyAmount { get; set; }
     public List<CreatePublicationDynamicFieldValueSeed> InitialDynamicFieldValues { get; set; } = [];
     public List<string> OperationOptions { get; set; } = [];
 }

@@ -6891,6 +6891,8 @@
     const isCompany = panel.dataset.company === "true";
     const isExempt = panel.dataset.exempt === "true";
     const activeCount = Number(panel.dataset.activeCount || 0);
+    const personAmount = panel.dataset.personAmount || "el importe vigente";
+    const companyAmount = panel.dataset.companyAmount || "el importe vigente";
 
     const setEstimate = (titleText, detailText) => {
       panels.forEach(currentPanel => {
@@ -6907,7 +6909,7 @@
 
       if (isCompany) {
         const exceedsAds = activeCount + 1 > 50;
-        setEstimate(exceedsAds ? "Límite de anuncios alcanzado" : "Plan empresa · $50.000/mes", exceedsAds
+        setEstimate(exceedsAds ? "Límite de anuncios alcanzado" : `Plan empresa · ${companyAmount}/mes`, exceedsAds
           ? "Tu cuenta puede tener hasta 50 anuncios activos simultáneos."
           : `Con este anuncio quedarás con ${activeCount + 1} de 50 anuncios activos simultáneos.`);
         return;
@@ -6920,7 +6922,7 @@
       if (photoCount > 3) reasons.push("incluye más de 3 fotos");
       if (hasVideo) reasons.push("incluye video");
       const isPaid = reasons.length > 0;
-      setEstimate(isPaid ? "Anuncio completo · $3.000" : "Anuncio básico · gratis", isPaid
+      setEstimate(isPaid ? `Anuncio completo · ${personAmount}` : "Anuncio básico · gratis", isPaid
         ? `Incluye hasta 10 fotos y video. Se aplica porque ${reasons.join(" y ")}.`
         : `Incluye hasta 3 fotos y no incluye video. Llevás ${activeCount} de 2 anuncios activos gratuitos.`);
     };

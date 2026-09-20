@@ -22,6 +22,7 @@ public class RegisterModel(
     PublicationGroupPreferenceService publicationGroupPreferenceService,
     PublicationGroupTypeService publicationGroupTypeService,
     VentaMapParameterService parameters,
+    PricingService pricingService,
     ILogger<RegisterModel> logger) : PageModel
 {
     private const string EmailField = $"{nameof(Input)}.{nameof(InputModel.Email)}";
@@ -63,6 +64,8 @@ public class RegisterModel(
     public bool IsGoogleEnabled => !string.IsNullOrWhiteSpace(configuration["Authentication:Google:ClientId"]);
 
     public bool IsPaidSiteEnabled { get; private set; }
+    public string PersonPublicationAmountText { get; private set; } = string.Empty;
+    public string CompanyMonthlyAmountText { get; private set; } = string.Empty;
 
     public IReadOnlyList<PublicationGroupType> HeaderGroupOptions { get; private set; } = [];
 
@@ -368,6 +371,8 @@ public class RegisterModel(
     {
         await LoadHeaderGroupOptionsAsync();
         IsPaidSiteEnabled = await parameters.GetBoolAsync(VentaMapParameterService.PaidSiteEnabled, fallback: false);
+        PersonPublicationAmountText = PricingService.FormatAmount(await pricingService.GetCurrentPersonPublicationAmountAsync());
+        CompanyMonthlyAmountText = PricingService.FormatAmount(await pricingService.GetCurrentCompanyMonthlyAmountAsync());
     }
 
     public class InputModel

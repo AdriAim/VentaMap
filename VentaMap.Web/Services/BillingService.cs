@@ -4,10 +4,8 @@ using VentaMap.Models;
 
 namespace VentaMap.Services;
 
-public class BillingService(VentaMapDbContext db, VentaMapParameterService parameters)
+public class BillingService(VentaMapDbContext db, VentaMapParameterService parameters, PricingService pricingService)
 {
-    public const decimal PersonPublicationAmount = 3000m;
-    public const decimal CompanyMonthlyAmount = 50000m;
     public const int CompanyActivePublicationLimit = 50;
     public const int CompanyTrialMonths = 3;
     public const string PersonPublicationType = "PersonPublication";
@@ -102,7 +100,7 @@ public class BillingService(VentaMapDbContext db, VentaMapParameterService param
             UserId = user.Id,
             PublicationId = publicationId,
             Type = PersonPublicationType,
-            Amount = PersonPublicationAmount,
+            Amount = await pricingService.GetCurrentPersonPublicationAmountAsync(),
             BillingMonthUtc = FirstDayOfMonth(DateTime.UtcNow),
             Description = $"Anuncio completo ({string.Join(", ", reasons)})",
             Reference = $"person-pack-{Guid.NewGuid():N}",
@@ -139,11 +137,13 @@ public class BillingService(VentaMapDbContext db, VentaMapParameterService param
 
             if (monthsWithCharge.Contains(month)) continue;
 
+            var rateEffectiveAt = month == currentMonth ? now : month.AddMonths(1).AddTicks(-1);
+
             db.BillingCharges.Add(new BillingCharge
             {
                 UserId = user.Id,
                 Type = CompanyMonthlyPlanType,
-                Amount = CompanyMonthlyAmount,
+                Amount = await pricingService.GetCompanyMonthlyAmountAsync(rateEffectiveAt),
                 BillingMonthUtc = month,
                 Description = $"Plan empresa mensual (hasta {CompanyActivePublicationLimit} anuncios activos)",
                 Reference = $"company-{month:yyyy-MM}",

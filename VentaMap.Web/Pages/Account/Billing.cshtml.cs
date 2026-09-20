@@ -9,13 +9,15 @@ using VentaMap.Services;
 namespace VentaMap.Pages.Account;
 
 [Authorize]
-public class BillingModel(CurrentUserAccessor currentUserAccessor, VentaMapDbContext db, BillingService billingService) : PageModel
+public class BillingModel(CurrentUserAccessor currentUserAccessor, VentaMapDbContext db, BillingService billingService, PricingService pricingService) : PageModel
 {
     public ApplicationUser? UserAccount { get; private set; }
     public List<BillingCharge> Charges { get; private set; } = [];
     public List<CompanyMonthlyPeriod> MonthlyPeriods { get; private set; } = [];
     public bool IsMercadoPagoConfigured { get; private set; }
     public bool HasOverdueMonthlyDebt { get; private set; }
+    public string CurrentPersonPublicationAmountText { get; private set; } = string.Empty;
+    public string CurrentCompanyMonthlyAmountText { get; private set; } = string.Empty;
 
     public async Task<IActionResult> OnGetAsync()
     {
@@ -29,6 +31,8 @@ public class BillingModel(CurrentUserAccessor currentUserAccessor, VentaMapDbCon
         MonthlyPeriods = await billingService.GetCompanyMonthlyPeriodsAsync(UserAccount);
         Charges = await billingService.GetChargesAsync(userId);
         HasOverdueMonthlyDebt = await billingService.IsPublishingBlockedAsync(UserAccount);
+        CurrentPersonPublicationAmountText = PricingService.FormatAmount(await pricingService.GetCurrentPersonPublicationAmountAsync());
+        CurrentCompanyMonthlyAmountText = PricingService.FormatAmount(await pricingService.GetCurrentCompanyMonthlyAmountAsync());
         IsMercadoPagoConfigured = !string.IsNullOrWhiteSpace(HttpContext.RequestServices.GetRequiredService<IConfiguration>()["MercadoPago:AccessToken"]);
         return Page();
     }

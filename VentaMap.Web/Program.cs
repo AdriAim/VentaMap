@@ -133,6 +133,7 @@ builder.Services.AddSingleton<CloudflareR2ImageStorageService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PublicationService>();
 builder.Services.AddScoped<BillingService>();
+builder.Services.AddScoped<PricingService>();
 builder.Services.AddHttpClient<MercadoPagoService>();
 builder.Services.AddScoped<PublicationAnalyticsService>();
 builder.Services.AddScoped<PublicationGroupTypeService>();
@@ -593,6 +594,31 @@ static async Task EnsureBillingSchemaAsync(System.Data.Common.DbConnection conne
     await EnsureColumnAsync(connection, "BillingCharges", "PublicationId", "int NULL");
     await EnsureIndexAsync(connection, "BillingCharges", "IX_BillingCharges_UserId_Type_Month_Reference", "CREATE UNIQUE INDEX `IX_BillingCharges_UserId_Type_Month_Reference` ON `BillingCharges` (`UserId`, `Type`, `BillingMonthUtc`, `Reference`)");
     await EnsureIndexAsync(connection, "BillingCharges", "IX_BillingCharges_UserId_Status_Month", "CREATE INDEX `IX_BillingCharges_UserId_Status_Month` ON `BillingCharges` (`UserId`, `Status`, `BillingMonthUtc`)");
+
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `BillingRates` (
+            `Id` int NOT NULL AUTO_INCREMENT,
+            `ChargeType` varchar(40) CHARACTER SET utf8mb4 NOT NULL,
+            `Amount` decimal(18,2) NOT NULL,
+            `EffectiveFromUtc` datetime(6) NOT NULL,
+            `CreatedAtUtc` datetime(6) NOT NULL,
+            CONSTRAINT `PK_BillingRates` PRIMARY KEY (`Id`),
+            UNIQUE KEY `IX_BillingRates_ChargeType_EffectiveFromUtc` (`ChargeType`, `EffectiveFromUtc`)
+        ) CHARACTER SET=utf8mb4;
+        """);
+    await ExecuteNonQueryAsync(connection,
+        """
+        INSERT INTO `BillingRates` (`ChargeType`, `Amount`, `EffectiveFromUtc`, `CreatedAtUtc`)
+        SELECT 'PersonPublication', 3000.00, '2026-09-01 00:00:00', UTC_TIMESTAMP(6)
+        WHERE NOT EXISTS (SELECT 1 FROM `BillingRates` WHERE `ChargeType` = 'PersonPublication');
+        """);
+    await ExecuteNonQueryAsync(connection,
+        """
+        INSERT INTO `BillingRates` (`ChargeType`, `Amount`, `EffectiveFromUtc`, `CreatedAtUtc`)
+        SELECT 'CompanyMonthlyPlan', 50000.00, '2026-09-01 00:00:00', UTC_TIMESTAMP(6)
+        WHERE NOT EXISTS (SELECT 1 FROM `BillingRates` WHERE `ChargeType` = 'CompanyMonthlyPlan');
+        """);
 }
 
 static async Task EnsureCompanyAndSuggestionsSchemaAsync(System.Data.Common.DbConnection connection)

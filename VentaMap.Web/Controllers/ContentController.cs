@@ -29,6 +29,7 @@ public partial class ContentController(
     ReviewService reviewService,
     VentaMapParameterService parameters,
     BillingService billingService,
+    PricingService pricingService,
     VentaMapDbContext db,
     ILogger<ContentController> logger,
     IConfiguration configuration) : Controller
@@ -781,6 +782,8 @@ public partial class ContentController(
             ShowPublicationChargeEstimator = user is not null,
             ActivePublicationCount = user is null ? 0 : await db.Publications.CountAsync(x => x.UserId == user.Id && x.IsActive),
             SharedListCount = user is null ? 0 : await db.SharedPublicationLists.CountAsync(x => x.UserId == user.Id),
+            PersonPublicationAmount = await pricingService.GetCurrentPersonPublicationAmountAsync(),
+            CompanyMonthlyAmount = await pricingService.GetCurrentCompanyMonthlyAmountAsync(),
             MapStyleUrl = configuration["Map:StyleUrl"] ?? string.Empty,
             MapTilesUrlTemplate = configuration["Map:TilesUrlTemplate"] ?? string.Empty,
             MapAttributionHtml = configuration["Map:AttributionHtml"] ?? string.Empty,
@@ -879,6 +882,8 @@ public partial class ContentController(
             // the owner knows what will be charged before paying.
             ShowPublicationChargeEstimator = publication.Status == PublicationStatus.PendingPayment,
             ActivePublicationCount = await db.Publications.CountAsync(x => x.UserId == user.Id && x.IsActive),
+            PersonPublicationAmount = await pricingService.GetCurrentPersonPublicationAmountAsync(),
+            CompanyMonthlyAmount = await pricingService.GetCurrentCompanyMonthlyAmountAsync(),
             MapStyleUrl = configuration["Map:StyleUrl"] ?? string.Empty,
             MapTilesUrlTemplate = configuration["Map:TilesUrlTemplate"] ?? string.Empty,
             MapAttributionHtml = configuration["Map:AttributionHtml"] ?? string.Empty,
@@ -1081,6 +1086,7 @@ public partial class ContentController(
             var charge = await billingService.RequirePersonPublicationPackAsync(user, request, pendingResult.Publication.Id);
             if (charge is not null)
             {
+                var amountText = PricingService.FormatAmount(await pricingService.GetCurrentPersonPublicationAmountAsync());
                 logger.LogInformation(
                     "Publication {PublicationId} for user {UserId} is pending payment; billing charge {ChargeId} was created or reused.",
                     pendingResult.Publication.Id,
@@ -1089,7 +1095,7 @@ public partial class ContentController(
 
                 return StatusCode(402, new
                 {
-                    message = "Este anuncio requiere el anuncio completo de $3.000. Podés pagarlo desde Mis anuncios.",
+                    message = $"Este anuncio requiere el anuncio completo de {amountText}. Podés pagarlo desde Mis anuncios.",
                     billingUrl = "/MisAnuncios?status=pending",
                     chargeId = charge.Id
                 });

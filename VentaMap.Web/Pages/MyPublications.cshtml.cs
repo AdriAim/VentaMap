@@ -15,7 +15,8 @@ public class MyPublicationsModel(
     CurrentUserAccessor currentUserAccessor,
     VentaMapDbContext db,
     ReviewService reviewService,
-    BillingService billingService) : PageModel
+    BillingService billingService,
+    PricingService pricingService) : PageModel
 {
     public static readonly IReadOnlyList<string> DeactivationReasons =
     [
@@ -39,6 +40,8 @@ public class MyPublicationsModel(
     public Dictionary<int, int> PendingChargeIdsByPublicationId { get; private set; } = [];
     public Dictionary<int, decimal> PendingChargeAmountsByPublicationId { get; private set; } = [];
     public Dictionary<int, List<BillingCharge>> PaymentHistoryByPublicationId { get; private set; } = [];
+    public string PersonPublicationAmountText { get; private set; } = string.Empty;
+    public string CompanyMonthlyAmountText { get; private set; } = string.Empty;
 
     [TempData]
     public string? SuccessMessage { get; set; }
@@ -69,8 +72,11 @@ public class MyPublicationsModel(
             ? $"/{user.CompanySlug}"
             : null;
         ReviewsEnabled = await reviewService.IsEnabledAsync();
-        BillingEnabled = user.IsBillingExempt == 2
+        BillingEnabled = user.IsCompany
+            || user.IsBillingExempt == 2
             || await db.VentaMapParameters.AnyAsync(x => x.Key == VentaMapParameterService.PaidSiteEnabled && x.Value == "true");
+        PersonPublicationAmountText = PricingService.FormatAmount(await pricingService.GetCurrentPersonPublicationAmountAsync());
+        CompanyMonthlyAmountText = PricingService.FormatAmount(await pricingService.GetCurrentCompanyMonthlyAmountAsync());
         if (BillingEnabled)
         {
             await billingService.EnsureCompanyCurrentMonthChargeAsync(user);
@@ -211,8 +217,9 @@ public class MyPublicationsModel(
         var charge = await billingService.RequirePersonRepublishPackAsync(user, publication);
         if (charge is not null)
         {
-            if (isAjax) return StatusCode(402, new { message = "La republicación requiere el anuncio completo de $3.000. Podés pagarlo desde Mis anuncios.", billingUrl = "/MisAnuncios?status=pending", chargeId = charge.Id });
-            ErrorMessage = "La republicación requiere el anuncio completo de $3.000. Podés pagarlo desde Mis anuncios.";
+            var amountText = PricingService.FormatAmount(await pricingService.GetCurrentPersonPublicationAmountAsync());
+            if (isAjax) return StatusCode(402, new { message = $"La republicación requiere el anuncio completo de {amountText}. Podés pagarlo desde Mis anuncios.", billingUrl = "/MisAnuncios?status=pending", chargeId = charge.Id });
+            ErrorMessage = $"La republicación requiere el anuncio completo de {amountText}. Podés pagarlo desde Mis anuncios.";
             return RedirectToPage();
         }
 

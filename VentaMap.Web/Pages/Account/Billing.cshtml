@@ -15,15 +15,15 @@
         }
         else if (Model.UserAccount?.Id == BillingService.CompanyWithoutTrialUserId)
         {
-            <p>El plan empresa cuesta $50.000 por cada mes con anuncios activos.</p>
+            <p>El plan empresa cuesta @Model.CurrentCompanyMonthlyAmountText por cada mes con anuncios activos.</p>
         }
         else if (Model.UserAccount?.IsCompany == true)
         {
-            <p>Los primeros 3 meses desde tu primera publicación son gratuitos. Desde el cuarto mes, el plan empresa cuesta $50.000 por cada mes con anuncios activos.</p>
+            <p>Los primeros 3 meses desde tu primera publicación son gratuitos. Desde el cuarto mes, el plan empresa cuesta @Model.CurrentCompanyMonthlyAmountText por cada mes con anuncios activos.</p>
         }
         else
         {
-            <p>Anuncio básico: hasta 3 fotos y sin video. Anuncio completo: hasta 10 fotos, video incluido y $3.000.</p>
+            <p>Anuncio básico: hasta 3 fotos y sin video. Anuncio completo: hasta 10 fotos, video incluido y @Model.CurrentPersonPublicationAmountText.</p>
         }
     </div>
 

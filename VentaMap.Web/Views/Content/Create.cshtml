@@ -1,4 +1,5 @@
 @using System.Globalization
+@using VentaMap.Services
 @model CreatePublicationContentViewModel
 @{
     ViewData["Title"] = "Crear anuncio";
@@ -364,6 +365,8 @@
                          data-company="@Model.IsCompanyAccount.ToString().ToLowerInvariant()"
                          data-exempt="@Model.IsBillingExempt.ToString().ToLowerInvariant()"
                          data-forced="@Model.IsBillingForced.ToString().ToLowerInvariant()"
+                         data-person-amount="@PricingService.FormatAmount(Model.PersonPublicationAmount)"
+                         data-company-amount="@PricingService.FormatAmount(Model.CompanyMonthlyAmount)"
                          data-active-count="@Model.ActivePublicationCount">
                     <strong data-charge-estimator-title>Calculando costo…</strong>
                     <span data-charge-estimator-detail></span>
@@ -393,6 +396,8 @@
                          data-company="@Model.IsCompanyAccount.ToString().ToLowerInvariant()"
                          data-exempt="@Model.IsBillingExempt.ToString().ToLowerInvariant()"
                          data-forced="@Model.IsBillingForced.ToString().ToLowerInvariant()"
+                         data-person-amount="@PricingService.FormatAmount(Model.PersonPublicationAmount)"
+                         data-company-amount="@PricingService.FormatAmount(Model.CompanyMonthlyAmount)"
                          data-active-count="@Model.ActivePublicationCount">
                     <strong data-charge-estimator-title>Calculando costo…</strong>
                     <span data-charge-estimator-detail></span>

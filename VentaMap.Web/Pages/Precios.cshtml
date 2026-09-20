@@ -30,18 +30,18 @@
                 <p>Dos opciones claras para publicaciones particulares.</p>
                 <ul class="pricing-list">
                     <li class="pricing-list-highlight"><strong>Gratis:</strong> hasta 2 anuncios básicos activos simultáneos, con 3 fotos y sin video.</li>
-                    <li><strong>Pago:</strong> los anuncios con más de 3 fotos y/o video cuestan $3000.</li>
-                    <li>A partir del tercer anuncio activo, cada anuncio cuesta $3000 e incluye hasta 10 fotos y video.</li>
+                    <li><strong>Pago:</strong> los anuncios con más de 3 fotos y/o video cuestan @Model.PersonPublicationAmountText.</li>
+                    <li>A partir del tercer anuncio activo, cada anuncio cuesta @Model.PersonPublicationAmountText e incluye hasta 10 fotos y video.</li>
                 </ul>
             </article>
 
             <article class="pricing-card pricing-card-company">
                 <span class="pricing-card-tag">Empresas</span>
-                <h3>3 meses gratis y luego $50000 por mes</h3>
+                <h3>3 meses gratis y luego @Model.CompanyMonthlyAmountText por mes</h3>
                 <p>Orientado a empresas que necesitan continuidad, más volumen y herramientas comerciales.</p>
                 <ul class="pricing-list">
                     <li class="pricing-list-highlight"><strong>Gratis:</strong> los primeros 3 meses.</li>
-                    <li><strong>Pago:</strong> a partir del cuarto mes, $50000 por mes.</li>
+                    <li><strong>Pago:</strong> a partir del cuarto mes, @Model.CompanyMonthlyAmountText por mes.</li>
                     <li>Incluye hasta 50 anuncios activos simultáneos, estadísticas de vistas y listas personalizadas para compartir.</li>
                 </ul>
             </article>
@@ -52,9 +52,9 @@
         <h2>Qué se considera un extra pago en cuentas persona</h2>
         <p>En cuentas persona, el cobro se activa al necesitar más recursos que el esquema gratuito base o al publicar un tercer anuncio mientras ya hay dos activos.</p>
         <ul>
-            <li>Agregar video convierte ese anuncio en pago: $3000.</li>
-            <li>Agregar más de 3 fotos convierte ese anuncio en pago: $3000.</li>
-            <li>A partir del tercer anuncio activo simultáneo, cada anuncio cuesta $3000 e incluye hasta 10 fotos y video.</li>
+            <li>Agregar video convierte ese anuncio en pago: @Model.PersonPublicationAmountText.</li>
+            <li>Agregar más de 3 fotos convierte ese anuncio en pago: @Model.PersonPublicationAmountText.</li>
+            <li>A partir del tercer anuncio activo simultáneo, cada anuncio cuesta @Model.PersonPublicationAmountText e incluye hasta 10 fotos y video.</li>
         </ul>
     </div>
 
@@ -63,14 +63,14 @@
         <p>La modalidad empresa está pensada para quienes publican de manera profesional y necesitan mostrar catálogo, ordenar mejor su oferta y compartir material con clientes.</p>
         <ul>
             <li>Los primeros 3 meses desde el alta son gratis.</li>
-            <li>Desde el cuarto mes, $50000 por mes con hasta 50 anuncios activos simultáneos, estadísticas de vistas y listas personalizadas para compartir.</li>
+            <li>Desde el cuarto mes, @Model.CompanyMonthlyAmountText por mes con hasta 50 anuncios activos simultáneos, estadísticas de vistas y listas personalizadas para compartir.</li>
             <li>Web pública de empresa dentro de VentaMap.</li>
         </ul>
     </div>
 
     <section class="status-banner promo-banner">
         <strong>Promoción vigente para aprovechar.</strong>
-        <span>Las personas tienen hasta 2 anuncios básicos activos simultáneos gratis. Las empresas tienen los primeros 3 meses gratis y luego un plan de $50000 por mes.</span>
+        <span>Las personas tienen hasta 2 anuncios básicos activos simultáneos gratis. Las empresas tienen los primeros 3 meses gratis y luego un plan de @Model.CompanyMonthlyAmountText por mes.</span>
     </section>
     }
 </section>
