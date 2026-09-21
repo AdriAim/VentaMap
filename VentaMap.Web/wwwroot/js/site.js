@@ -2251,7 +2251,7 @@
         .replace(/[^\p{L}\p{N}]+/gu, "-")
         .replace(/^-+|-+$/g, "");
 
-      companyPublicUrlInput.value = slug ? `/${slug}` : "/tuempresa";
+      companyPublicUrlInput.value = slug ? `/catalogo/${slug}` : "/catalogo/tuempresa";
     };
 
     const sync = () => {

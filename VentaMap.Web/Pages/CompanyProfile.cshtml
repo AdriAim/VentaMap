@@ -1,4 +1,4 @@
-@page "/{companySlug}"
+@page "/catalogo/{companySlug}"
 @model VentaMap.Pages.CompanyProfileModel
 @using VentaMap.Models
 @{
@@ -23,7 +23,7 @@ else
     {
         currentViewerUserId = signedInUserId;
     }
-    var companyCatalogReturnUrl = Uri.EscapeDataString($"/{company.CompanySlug}{debugSuffix}");
+    var companyCatalogReturnUrl = Uri.EscapeDataString($"/catalogo/{company.CompanySlug}{debugSuffix}");
     string FormatMapPrice(VentaMap.Models.Publication publication)
     {
         var period = publication.OperationType?.ToDisplayName() switch
@@ -43,7 +43,7 @@ else
         : new string(company.Phone.Where(char.IsDigit).ToArray());
     var companyWhatsAppUrl = string.IsNullOrWhiteSpace(companyPhoneDigits)
         ? string.Empty
-        : $"https://wa.me/{companyPhoneDigits}";
+        : $"https://web.whatsapp.com/send?phone={companyPhoneDigits}";
     var galleryItems = Model.Publications
         .Select(publication => new
         {

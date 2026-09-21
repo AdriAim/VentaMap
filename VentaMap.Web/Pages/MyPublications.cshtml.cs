@@ -70,7 +70,7 @@ public class MyPublicationsModel(
         CompanyName = user.CompanyName;
         CompanyHeroBackgroundUrl = user.CompanyHeroBackgroundUrl;
         CompanyPublicUrl = user.IsCompany && !string.IsNullOrWhiteSpace(user.CompanySlug)
-            ? $"/{user.CompanySlug}"
+            ? $"/catalogo/{user.CompanySlug}"
             : null;
         ReviewsEnabled = await reviewService.IsEnabledAsync();
         BillingEnabled = user.IsBillingExempt == 2

@@ -32,12 +32,6 @@ public class RegisterModel(
     private const string CompanyIndustryField = $"{nameof(Input)}.{nameof(InputModel.CompanyIndustry)}";
     private const string CompanyLogoField = nameof(CompanyLogo);
     private const string CompanyHeroBackgroundField = nameof(CompanyHeroBackground);
-    private static readonly HashSet<string> ReservedCompanySlugs = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "account", "api", "browse", "contacto", "favorites", "index", "legales", "messages", "mispublicaciones",
-        "privacy", "publications", "reglas", "trash", "empresa", "contact", "settings", "login", "register"
-    };
-
     [BindProperty]
     public InputModel Input { get; set; } = new();
 
@@ -129,9 +123,9 @@ public class RegisterModel(
             }
 
             companySlug = AuthService.NormalizeCompanySlug(Input.CompanyName);
-            if (string.IsNullOrWhiteSpace(companySlug) || ReservedCompanySlugs.Contains(companySlug))
+            if (string.IsNullOrWhiteSpace(companySlug))
             {
-                ModelState.AddModelError(CompanyNameField, "El nombre de la empresa genera una dirección no disponible. Usa otro nombre.");
+                ModelState.AddModelError(CompanyNameField, "El nombre de la empresa genera una dirección no válida. Usa otro nombre.");
             }
 
             if (CompanyLogo is null || CompanyLogo.Length <= 0)

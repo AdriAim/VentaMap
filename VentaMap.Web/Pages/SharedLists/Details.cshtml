@@ -64,7 +64,7 @@
             TextViewUrl = ModeUrl("Lista"),
             GalleryViewUrl = ModeUrl("Galeria"),
             MapViewUrl = ModeUrl("Mapa"),
-            ActionUrl = Model.SharedList.User is null ? null : $"/{Model.SharedList.User.CompanySlug}",
+            ActionUrl = Model.SharedList.User is null ? null : $"/catalogo/{Model.SharedList.User.CompanySlug}",
             ActionLabel = Model.SharedList.User is null ? null : $"Ver catálogo de {Model.SharedList.User.CompanyName}",
             ShowOpenModeSelector = true,
             MapStyleUrl = Configuration["Map:StyleUrl"] ?? string.Empty,
@@ -94,7 +94,7 @@ else
         : new string(company.Phone.Where(char.IsDigit).ToArray());
     var companyWhatsAppUrl = string.IsNullOrWhiteSpace(companyPhoneDigits)
         ? string.Empty
-        : $"https://wa.me/{companyPhoneDigits}";
+        : $"https://web.whatsapp.com/send?phone={companyPhoneDigits}";
 
     <section class="company-hero">
         <div class="company-hero-card" style="@companyHeaderBackgroundStyle">

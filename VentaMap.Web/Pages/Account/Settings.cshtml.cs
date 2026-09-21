@@ -236,7 +236,7 @@ public class SettingsModel(
         IsCompany = user.IsCompany;
         CompanyName = user.CompanyName;
         CompanyPublicUrl = user.IsCompany && !string.IsNullOrWhiteSpace(user.CompanySlug)
-            ? $"/{user.CompanySlug}"
+            ? $"/catalogo/{user.CompanySlug}"
             : null;
         CurrentCompanyLogoUrl = user.CompanyLogoUrl;
         CurrentCompanyHeroBackgroundUrl = user.CompanyHeroBackgroundUrl;
