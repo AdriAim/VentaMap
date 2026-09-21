@@ -56,6 +56,7 @@
     var reportLoginUrl = $"/Account/Login?returnUrl={Uri.EscapeDataString(Context.Request.Path + Context.Request.QueryString)}";
     var currentUserIsAdmin = false;
     var currentUserIsCompany = false;
+    var currentUserBillingForced = false;
     var isGoogleLoginEnabled = !string.IsNullOrWhiteSpace(Configuration["Authentication:Google:ClientId"]);
     var isPaidSiteEnabled = await Parameters.GetBoolAsync(VentaMapParameterService.PaidSiteEnabled, fallback: false);
     var defaultMapStyleUrl = Configuration["Map:StyleUrl"] ?? string.Empty;
@@ -69,6 +70,7 @@
             .FirstOrDefaultAsync(x => x.Id == layoutUserId);
         currentUserIsAdmin = layoutUser?.IsAdmin ?? false;
         currentUserIsCompany = layoutUser?.IsCompany ?? false;
+        currentUserBillingForced = layoutUser?.IsBillingExempt == 2;
 
         if (layoutUser is null)
         {
@@ -249,7 +251,7 @@
                                 <i class="fa-solid fa-star" aria-hidden="true"></i>
                                 <span>Mis favoritos</span>
                             </a>
-                            @if (currentUserIsCompany)
+                            @if (currentUserIsCompany && (currentUserBillingForced || isPaidSiteEnabled))
                             {
                                 <a asp-page="/Account/Billing">
                                     <i class="fa-solid fa-receipt" aria-hidden="true"></i>

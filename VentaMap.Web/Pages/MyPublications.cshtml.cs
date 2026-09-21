@@ -16,7 +16,8 @@ public class MyPublicationsModel(
     VentaMapDbContext db,
     ReviewService reviewService,
     BillingService billingService,
-    PricingService pricingService) : PageModel
+    PricingService pricingService,
+    VentaMapParameterService parameters) : PageModel
 {
     public static readonly IReadOnlyList<string> DeactivationReasons =
     [
@@ -72,9 +73,8 @@ public class MyPublicationsModel(
             ? $"/{user.CompanySlug}"
             : null;
         ReviewsEnabled = await reviewService.IsEnabledAsync();
-        BillingEnabled = user.IsCompany
-            || user.IsBillingExempt == 2
-            || await db.VentaMapParameters.AnyAsync(x => x.Key == VentaMapParameterService.PaidSiteEnabled && x.Value == "true");
+        BillingEnabled = user.IsBillingExempt == 2
+            || await parameters.GetBoolAsync(VentaMapParameterService.PaidSiteEnabled, fallback: false);
         PersonPublicationAmountText = PricingService.FormatAmount(await pricingService.GetCurrentPersonPublicationAmountAsync());
         CompanyMonthlyAmountText = PricingService.FormatAmount(await pricingService.GetCurrentCompanyMonthlyAmountAsync());
         if (BillingEnabled)

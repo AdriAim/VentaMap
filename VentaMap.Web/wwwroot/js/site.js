@@ -479,6 +479,7 @@
 
   document.addEventListener("DOMContentLoaded", async () => {
     wireSystemNavigationLoading();
+    wireMobileWhatsAppLinks();
     wirePublicationOpenModePreference(document);
     scheduleMapWarmup();
     wirePhoneMasks(document);
@@ -5309,6 +5310,31 @@
         enhanceSearchableSelects(form);
         syncCreateDescriptionExamples(form);
       });
+  }
+
+  function wireMobileWhatsAppLinks() {
+    const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (!isMobileDevice) return;
+
+    document.addEventListener("click", event => {
+      const link = event.target.closest("a[data-whatsapp-number]");
+      if (!link) return;
+
+      const phone = String(link.dataset.whatsappNumber || "").replace(/\D/g, "");
+      if (!phone) return;
+
+      event.preventDefault();
+      let appOpened = document.visibilityState === "hidden";
+      const markAppOpened = () => {
+        if (document.visibilityState === "hidden") appOpened = true;
+      };
+      document.addEventListener("visibilitychange", markAppOpened, { once: true });
+
+      window.location.href = `whatsapp://send?phone=${encodeURIComponent(phone)}`;
+      window.setTimeout(() => {
+        if (!appOpened) window.location.assign(link.href);
+      }, 1200);
+    });
   }
 
   function completeCreatePublication(completion) {

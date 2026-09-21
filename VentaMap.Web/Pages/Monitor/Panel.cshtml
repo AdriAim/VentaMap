@@ -1,0 +1,26 @@
+@page "/Monitor/Panel"
+@model VentaMap.Pages.Monitor.PanelModel
+@{
+    ViewData["Title"] = "Monitor";
+}
+
+<section class="form-shell">
+    <div class="section-heading">
+        <span class="eyebrow">Monitor</span>
+        <h1>Métricas diarias</h1>
+        <p>Últimos 30 días. Se excluyen cuentas y anuncios de depuración.</p>
+    </div>
+    <section class="detail-panel">
+        <div class="table-responsive">
+            <table class="table">
+                <thead><tr><th>Día</th><th>Usuarios registrados</th><th>Anuncios nuevos</th><th>Visitantes</th></tr></thead>
+                <tbody>
+                @foreach (var item in Model.Metrics)
+                {
+                    <tr><td>@item.Day.ToString("dd/MM/yyyy")</td><td>@item.RegisteredUsers</td><td>@item.NewPublications</td><td>@item.Visitors</td></tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
+</section>

@@ -1,0 +1,21 @@
+@page "/Monitor"
+@model VentaMap.Pages.Monitor.IndexModel
+@{
+    ViewData["Title"] = "Monitor";
+}
+
+<section class="form-shell narrow">
+    <div class="section-heading">
+        <span class="eyebrow">VentaMap</span>
+        <h1>Monitor</h1>
+        <p>Acceso a las métricas del sitio.</p>
+    </div>
+    <form method="post" class="stack-form">
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+        <div class="register-row"><label><span>Usuario</span><input asp-for="Input.Username" autocomplete="username" /><span asp-validation-for="Input.Username" class="text-danger"></span></label></div>
+        <div class="register-row"><label><span>Contraseña</span><input asp-for="Input.Password" type="password" autocomplete="current-password" /><span asp-validation-for="Input.Password" class="text-danger"></span></label></div>
+        <div class="hero-actions"><button type="submit" class="primary-pill">Ingresar</button></div>
+    </form>
+</section>
+
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

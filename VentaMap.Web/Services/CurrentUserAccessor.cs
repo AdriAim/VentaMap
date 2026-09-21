@@ -17,4 +17,7 @@ public class CurrentUserAccessor(IHttpContextAccessor httpContextAccessor)
 
     public bool IsAdmin
         => string.Equals(httpContextAccessor.HttpContext?.User.FindFirstValue("is-admin"), "true", StringComparison.OrdinalIgnoreCase);
+
+    public bool IsDebugUser
+        => string.Equals(httpContextAccessor.HttpContext?.User.FindFirstValue("is-debug"), "true", StringComparison.OrdinalIgnoreCase);
 }

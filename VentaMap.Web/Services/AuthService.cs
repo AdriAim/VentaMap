@@ -182,7 +182,8 @@ public class AuthService(
             new("phone", user.Phone ?? string.Empty),
             new("contact-preference", BuildContactPreference(user.AllowsSiteChat, user.RespondsEmails, user.AcceptsCalls, user.RespondsWhatsApp)),
             new("provider", user.AuthProvider),
-            new("is-admin", user.IsAdmin ? "true" : "false")
+            new("is-admin", user.IsAdmin ? "true" : "false"),
+            new("is-debug", user.IsDebugUser ? "true" : "false")
         };
 
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);

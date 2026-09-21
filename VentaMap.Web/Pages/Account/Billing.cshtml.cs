@@ -9,7 +9,7 @@ using VentaMap.Services;
 namespace VentaMap.Pages.Account;
 
 [Authorize]
-public class BillingModel(CurrentUserAccessor currentUserAccessor, VentaMapDbContext db, BillingService billingService, PricingService pricingService) : PageModel
+public class BillingModel(CurrentUserAccessor currentUserAccessor, VentaMapDbContext db, BillingService billingService, PricingService pricingService, VentaMapParameterService parameters) : PageModel
 {
     public ApplicationUser? UserAccount { get; private set; }
     public List<BillingCharge> Charges { get; private set; } = [];
@@ -27,6 +27,9 @@ public class BillingModel(CurrentUserAccessor currentUserAccessor, VentaMapDbCon
         UserAccount = await db.Users.FirstOrDefaultAsync(x => x.Id == userId);
         if (UserAccount is null) return RedirectToPage("/Account/Login");
         if (!UserAccount.IsCompany) return RedirectToPage("/MyPublications");
+        var billingEnabled = UserAccount.IsBillingExempt == 2
+            || await parameters.GetBoolAsync(VentaMapParameterService.PaidSiteEnabled, fallback: false);
+        if (!billingEnabled) return RedirectToPage("/MyPublications");
 
         MonthlyPeriods = await billingService.GetCompanyMonthlyPeriodsAsync(UserAccount);
         Charges = await billingService.GetChargesAsync(userId);

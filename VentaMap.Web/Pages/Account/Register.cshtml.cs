@@ -414,11 +414,11 @@ public class RegisterModel(
 
         public bool AllowSiteChat { get; set; } = true;
 
-        [Required(ErrorMessage = "Ingresa una contrasena.")]
+        [Required(ErrorMessage = "Ingresá una contraseña.")]
         public string Password { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "Repite la contrasena.")]
-        [Compare(nameof(Password), ErrorMessage = "Las contrasenas no coinciden.")]
+        [Required(ErrorMessage = "Repetí la contraseña.")]
+        [Compare(nameof(Password), ErrorMessage = "Las contraseñas no coinciden.")]
         public string ConfirmPassword { get; set; } = string.Empty;
     }
 }

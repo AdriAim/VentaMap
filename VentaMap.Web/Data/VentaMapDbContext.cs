@@ -21,6 +21,7 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
     public DbSet<SharedPublicationListItem> SharedPublicationListItems => Set<SharedPublicationListItem>();
     public DbSet<PublicationFavorite> PublicationFavorites => Set<PublicationFavorite>();
     public DbSet<PublicationView> PublicationViews => Set<PublicationView>();
+    public DbSet<SiteVisit> SiteVisits => Set<SiteVisit>();
     public DbSet<SiteSuggestion> SiteSuggestions => Set<SiteSuggestion>();
     public DbSet<VentaMapParameter> VentaMapParameters => Set<VentaMapParameter>();
     public DbSet<VerifiedOperation> VerifiedOperations => Set<VerifiedOperation>();
@@ -54,6 +55,10 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
         modelBuilder.Entity<ApplicationUser>()
             .Property(x => x.IsDebugUser)
             .HasDefaultValue(false);
+
+        modelBuilder.Entity<SiteVisit>()
+            .HasIndex(x => new { x.VisitorHash, x.VisitedOn })
+            .IsUnique();
 
         modelBuilder.Entity<ApplicationUser>()
             .Property(x => x.CanPublish)

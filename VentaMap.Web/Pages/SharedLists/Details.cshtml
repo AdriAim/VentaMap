@@ -136,7 +136,7 @@ else
                 }
                 @if (!string.IsNullOrWhiteSpace(companyWhatsAppUrl))
                 {
-                    <a class="company-contact-pill is-whatsapp" href="@companyWhatsAppUrl" target="_blank" rel="noopener noreferrer">
+                    <a class="company-contact-pill is-whatsapp" href="@companyWhatsAppUrl" data-whatsapp-number="@companyPhoneDigits" target="_blank" rel="noopener noreferrer">
                         <i class="fa-brands fa-whatsapp" aria-hidden="true"></i>
                         <span>Whatsapp: @company.Phone</span>
                     </a>

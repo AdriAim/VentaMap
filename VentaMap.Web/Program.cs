@@ -98,7 +98,8 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
                     new("phone", user.Phone ?? string.Empty),
                     new("contact-preference", BuildContactPreference(user.RespondsEmails, user.AcceptsCalls, user.RespondsWhatsApp)),
                     new("provider", user.AuthProvider),
-                    new("is-admin", user.IsAdmin ? "true" : "false")
+                    new("is-admin", user.IsAdmin ? "true" : "false"),
+                    new("is-debug", user.IsDebugUser ? "true" : "false")
                 };
 
                 context.Principal = new ClaimsPrincipal(
@@ -136,6 +137,9 @@ builder.Services.AddScoped<BillingService>();
 builder.Services.AddScoped<PricingService>();
 builder.Services.AddHttpClient<MercadoPagoService>();
 builder.Services.AddScoped<PublicationAnalyticsService>();
+builder.Services.AddScoped<SiteAnalyticsService>();
+builder.Services.AddSingleton<SiteVisitQueue>();
+builder.Services.AddHostedService<SiteVisitBackgroundService>();
 builder.Services.AddScoped<PublicationGroupTypeService>();
 builder.Services.AddScoped<PublicationCategoryService>();
 builder.Services.AddScoped<PublicationCategoryFieldService>();
@@ -159,6 +163,7 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<VentaMapDbContext>();
     await EnsureDatabaseSchemaAsync(db, app.Environment, applyMigrationsOnStartup);
     await EnsureUserCompatibilityColumnsAsync(db);
+    await EnsureMonitorUserAsync(db);
     await SeedArgentineLocalitiesAsync(db);
 
     if (runSeedDataOnStartup)
@@ -184,6 +189,21 @@ app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
+app.Use(async (context, next) =>
+{
+    var acceptsHtml = context.Request.Headers.Accept.Any(value =>
+        value?.Contains("text/html", StringComparison.OrdinalIgnoreCase) == true);
+    var shouldTrack = HttpMethods.IsGet(context.Request.Method)
+        && acceptsHtml
+        && !context.Request.Path.StartsWithSegments("/Monitor");
+
+    if (shouldTrack)
+    {
+        context.RequestServices.GetRequiredService<SiteAnalyticsService>().TrackVisit(context);
+    }
+
+    await next();
+});
 app.MapControllers();
 app.MapRazorPages();
 app.MapGet("/MisPublicaciones", () => Results.Redirect("/MisAnuncios", permanent: true));
@@ -279,6 +299,7 @@ static async Task EnsureDatabaseSchemaAsync(VentaMapDbContext db, IWebHostEnviro
         await EnsureBillingSchemaAsync(connection);
         await EnsurePublicationFavoritesSchemaAsync(connection);
         await EnsurePublicationAnalyticsSchemaAsync(connection);
+        await EnsureSiteAnalyticsSchemaAsync(connection);
         await EnsurePublicationCountersSchemaAsync(connection);
         await EnsureCompanyAndSuggestionsSchemaAsync(connection);
         await EnsureReviewSchemaAsync(connection);
@@ -550,6 +571,31 @@ static async Task EnsurePublicationExpirationSchemaAsync(System.Data.Common.DbCo
         SET `ExpiresAtUtc` = DATE_ADD(`CreatedAtUtc`, INTERVAL 30 DAY)
         WHERE `ExpiresAtUtc` IS NULL;
         """);
+}
+
+static async Task EnsureMonitorUserAsync(VentaMapDbContext db)
+{
+    if (await db.Users.AnyAsync(x => x.Email == MonitorAccess.Email))
+    {
+        return;
+    }
+
+    db.Users.Add(new ApplicationUser
+    {
+        Name = MonitorAccess.Username,
+        Email = MonitorAccess.Email,
+        PasswordHash = MonitorAccess.PasswordHash,
+        AuthProvider = "Local",
+        Phone = string.Empty,
+        ContactPreference = "None",
+        AllowsSiteChat = false,
+        AcceptsCalls = false,
+        RespondsEmails = false,
+        RespondsWhatsApp = false,
+        CanPublish = false,
+        CanReport = false
+    });
+    await db.SaveChangesAsync();
 }
 
 static async Task EnsureBillingSchemaAsync(System.Data.Common.DbConnection connection)
@@ -884,6 +930,22 @@ static async Task EnsurePublicationAnalyticsSchemaAsync(System.Data.Common.DbCon
     await EnsureIndexAsync(connection, "PublicationViews", "IX_PublicationViews_PublicationId_ViewerUserId", "CREATE UNIQUE INDEX `IX_PublicationViews_PublicationId_ViewerUserId` ON `PublicationViews` (`PublicationId`, `ViewerUserId`)");
     await EnsureIndexAsync(connection, "PublicationViews", "IX_PublicationViews_PublicationId_AnonymousFingerprint", "CREATE UNIQUE INDEX `IX_PublicationViews_PublicationId_AnonymousFingerprint` ON `PublicationViews` (`PublicationId`, `AnonymousFingerprint`)");
     await EnsureIndexAsync(connection, "PublicationViews", "IX_PublicationViews_ViewerUserId", "CREATE INDEX `IX_PublicationViews_ViewerUserId` ON `PublicationViews` (`ViewerUserId`)");
+}
+
+static async Task EnsureSiteAnalyticsSchemaAsync(System.Data.Common.DbConnection connection)
+{
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `SiteVisits` (
+            `Id` int NOT NULL AUTO_INCREMENT,
+            `VisitorHash` varchar(64) CHARACTER SET utf8mb4 NOT NULL,
+            `VisitedOn` datetime(6) NOT NULL,
+            CONSTRAINT `PK_SiteVisits` PRIMARY KEY (`Id`)
+        ) CHARACTER SET=utf8mb4;
+        """);
+
+    await EnsureIndexAsync(connection, "SiteVisits", "IX_SiteVisits_VisitorHash_VisitedOn", "CREATE UNIQUE INDEX `IX_SiteVisits_VisitorHash_VisitedOn` ON `SiteVisits` (`VisitorHash`, `VisitedOn`)");
+    await EnsureIndexAsync(connection, "SiteVisits", "IX_SiteVisits_VisitedOn", "CREATE INDEX `IX_SiteVisits_VisitedOn` ON `SiteVisits` (`VisitedOn`)");
 }
 
 static async Task EnsureColumnAsync(System.Data.Common.DbConnection connection, string tableName, string columnName, string definition)

@@ -18,7 +18,7 @@ public class BillingService(VentaMapDbContext db, VentaMapParameterService param
     {
         if (user.IsCompany)
         {
-            if (user.IsBillingExempt == 1) return false;
+            if (!await IsEnabledForAsync(user) || user.IsBillingExempt == 1) return false;
 
             await EnsureCompanyCurrentMonthChargeAsync(user);
             var argentinaNow = DateTime.UtcNow.AddHours(ArgentinaUtcOffsetHours);
@@ -113,7 +113,7 @@ public class BillingService(VentaMapDbContext db, VentaMapParameterService param
 
     public async Task EnsureCompanyCurrentMonthChargeAsync(ApplicationUser user)
     {
-        if (!user.IsCompany || user.IsBillingExempt == 1) return;
+        if (!await IsEnabledForAsync(user) || !user.IsCompany || user.IsBillingExempt == 1) return;
 
         var now = DateTime.UtcNow;
         var firstMonth = await GetCompanyFirstBillingMonthAsync(user);
