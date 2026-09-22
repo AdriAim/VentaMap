@@ -207,6 +207,43 @@ app.Use(async (context, next) =>
 app.MapControllers();
 app.MapRazorPages();
 app.MapGet("/MisPublicaciones", () => Results.Redirect("/MisAnuncios", permanent: true));
+app.MapGet("/sitemap.xml", async (HttpContext context, VentaMapDbContext db) =>
+{
+    var baseUrl = $"{context.Request.Scheme}://{context.Request.Host}".TrimEnd('/');
+    var urls = new List<(string Location, DateTime? LastModified)>
+    {
+        ($"{baseUrl}/", null),
+        ($"{baseUrl}/Browse", null),
+        ($"{baseUrl}/Precios", null)
+    };
+
+    var categories = await db.PublicationCategories
+        .AsNoTracking()
+        .Where(category => category.IsActive)
+        .Select(category => category.Id)
+        .ToListAsync();
+    urls.AddRange(categories.Select(categoryId => ($"{baseUrl}/Browse?categoryId={categoryId}", (DateTime?)null)));
+
+    var publications = await db.Publications
+        .AsNoTracking()
+        .Where(publication => publication.IsActive && publication.Status == PublicationStatus.Active)
+        .Select(publication => new { publication.Id, publication.CreatedAtUtc })
+        .ToListAsync();
+    urls.AddRange(publications.Select(publication => ($"{baseUrl}/Publications/Details/{publication.Id}", (DateTime?)publication.CreatedAtUtc)));
+
+    var document = new System.Xml.Linq.XDocument(
+        new System.Xml.Linq.XDeclaration("1.0", "utf-8", null),
+        new System.Xml.Linq.XElement(
+            System.Xml.Linq.XName.Get("urlset", "http://www.sitemaps.org/schemas/sitemap/0.9"),
+            urls.Select(url => new System.Xml.Linq.XElement(
+                System.Xml.Linq.XName.Get("url", "http://www.sitemaps.org/schemas/sitemap/0.9"),
+                new System.Xml.Linq.XElement(System.Xml.Linq.XName.Get("loc", "http://www.sitemaps.org/schemas/sitemap/0.9"), url.Location),
+                url.LastModified is null
+                    ? null
+                    : new System.Xml.Linq.XElement(System.Xml.Linq.XName.Get("lastmod", "http://www.sitemaps.org/schemas/sitemap/0.9"), url.LastModified.Value.ToString("yyyy-MM-dd"))))));
+
+    return Results.Content(document.ToString(), "application/xml; charset=utf-8");
+});
 app.Run();
 
 static async Task SeedArgentineLocalitiesAsync(VentaMapDbContext db)

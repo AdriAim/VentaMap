@@ -5010,6 +5010,27 @@ textarea:focus {
   margin-left: auto;
 }
 
+.publication-whatsapp-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-color: rgba(37, 211, 102, 0.4);
+  background: rgba(37, 211, 102, 0.1);
+  color: #168a43;
+  font-weight: 800;
+}
+
+.publication-whatsapp-status i {
+  color: #25d366;
+  font-size: 1.15em;
+}
+
+.publication-whatsapp-status:hover,
+.publication-whatsapp-status:focus-visible {
+  background: rgba(37, 211, 102, 0.18);
+  color: #0b6b31;
+}
+
 .publication-share-link {
   display: inline-flex;
   align-items: center;
@@ -6345,7 +6366,9 @@ textarea:focus {
 }
 
 .create-completion-actions {
+  display: grid;
   justify-content: center;
+  gap: 0.7rem;
 }
 
 .create-completion-modal .auth-required-body {

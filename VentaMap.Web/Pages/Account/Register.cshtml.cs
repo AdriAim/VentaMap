@@ -335,9 +335,10 @@ public class RegisterModel(
             .ToArray();
 
         logger.LogWarning(
-            "Failed register attempt. Reason={Reason} AccountType={AccountType} EmailHash={EmailHash} PhoneCountry={PhoneCountry} PhoneLength={PhoneLength} HasLocalityId={HasLocalityId} HasLocalityLabel={HasLocalityLabel} HasExternalLocalityId={HasExternalLocalityId} HeaderGroupsCount={HeaderGroupsCount} AllowSiteChat={AllowSiteChat} RespondsEmails={RespondsEmails} AcceptsCalls={AcceptsCalls} RespondsWhatsApp={RespondsWhatsApp} HasCompanyName={HasCompanyName} CompanyIndustry={CompanyIndustry} CompanyLogoProvided={CompanyLogoProvided} CompanyHeroBackgroundProvided={CompanyHeroBackgroundProvided} Errors={Errors}",
+            "Failed register attempt. Reason={Reason} AccountType={AccountType} Email={Email} EmailHash={EmailHash} PhoneCountry={PhoneCountry} PhoneLength={PhoneLength} HasLocalityId={HasLocalityId} HasLocalityLabel={HasLocalityLabel} HasExternalLocalityId={HasExternalLocalityId} HeaderGroupsCount={HeaderGroupsCount} AllowSiteChat={AllowSiteChat} RespondsEmails={RespondsEmails} AcceptsCalls={AcceptsCalls} RespondsWhatsApp={RespondsWhatsApp} HasCompanyName={HasCompanyName} CompanyIndustry={CompanyIndustry} CompanyLogoProvided={CompanyLogoProvided} CompanyHeroBackgroundProvided={CompanyHeroBackgroundProvided} Errors={Errors}",
             reason,
             Input.AccountType,
+            Input.Email.Trim().ToLowerInvariant(),
             AuthService.HashPassword(Input.Email.Trim().ToLowerInvariant()),
             Input.PhoneCountry,
             Input.Phone?.Trim().Length ?? 0,

@@ -997,7 +997,8 @@ public partial class ContentController(
         }
 
         var file = await imageStorageService.GetManagedPublicObjectAsync(imageUrl, cancellationToken);
-        return file is null ? NotFound() : File(file.Value.Content, file.Value.ContentType);
+        if (file is not null) return File(file.Value.Content, file.Value.ContentType);
+        return Redirect(imageUrl);
     }
 
     [HttpPost("create")]
@@ -1124,7 +1125,8 @@ public partial class ContentController(
         return Ok(new
         {
             message = "Anuncio creado.",
-            redirectUrl = BuildPublicationDetailsUrl(result.Publication.Id, IsDebugModeRequested() || user.IsDebugUser)
+            redirectUrl = BuildPublicationDetailsUrl(result.Publication.Id, IsDebugModeRequested() || user.IsDebugUser),
+            shareTitle = result.Publication.Title
         });
     }
 

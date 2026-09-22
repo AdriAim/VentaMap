@@ -480,6 +480,7 @@
   document.addEventListener("DOMContentLoaded", async () => {
     wireSystemNavigationLoading();
     wireMobileWhatsAppLinks();
+    wirePublicationWhatsAppStatusLinks();
     wirePublicationOpenModePreference(document);
     scheduleMapWarmup();
     wirePhoneMasks(document);
@@ -5299,7 +5300,8 @@
           title: "Anuncio publicado",
           message: "Su anuncio se publicó correctamente.",
           actionLabel: "Ver anuncio",
-          actionUrl: result.redirectUrl
+          actionUrl: result.redirectUrl,
+          shareTitle: result.shareTitle
         });
       }
     });
@@ -5337,6 +5339,30 @@
     });
   }
 
+  function wirePublicationWhatsAppStatusLinks() {
+    document.addEventListener("click", async event => {
+      const button = event.target.closest("[data-share-publication-whatsapp='true']");
+      if (!button) return;
+
+      event.preventDefault();
+      const rawUrl = button.getAttribute("data-share-url") || "";
+      if (!rawUrl) return;
+
+      const url = new URL(rawUrl, window.location.origin).href;
+      const title = button.getAttribute("data-share-title") || "Anuncio en VentaMap";
+      const text = `Mirá este anuncio en VentaMap: ${url}`;
+      try {
+        if (navigator.share) {
+          await navigator.share({ title, text, url });
+          return;
+        }
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+      }
+
+      window.location.assign(`https://wa.me/?text=${encodeURIComponent(text)}`);
+    });
+  }
   function completeCreatePublication(completion) {
     sessionStorage.setItem("ventamap.create-publication-completion", JSON.stringify(completion));
     window.location.href = "/Publications/Create";
@@ -5371,6 +5397,33 @@
     action.textContent = completion.actionLabel;
     action.href = completion.actionUrl;
     overlay.querySelector(".create-completion-actions")?.append(action);
+
+    // The Web Share API hands the content to the phone's native share sheet.
+    // There, WhatsApp can be selected and the user can choose to post it as a
+    // Status. WhatsApp intentionally does not offer a public web URL that can
+    // force publishing directly to a Status.
+    if (completion.title === "Anuncio publicado") {
+      const whatsappShare = document.createElement("button");
+      whatsappShare.type = "button";
+      whatsappShare.className = "ghost-pill publication-whatsapp-status";
+      whatsappShare.innerHTML = '<i class="fa-brands fa-whatsapp" aria-hidden="true"></i><span>Compartir en estado de WhatsApp</span>';
+      whatsappShare.addEventListener("click", async () => {
+        const url = new URL(completion.actionUrl, window.location.origin).href;
+        const text = `Mirá mi anuncio en VentaMap: ${url}`;
+        try {
+          if (navigator.share) {
+            await navigator.share({ title: completion.shareTitle || "Anuncio en VentaMap", text, url });
+            return;
+          }
+        } catch (error) {
+          // Closing the native share sheet is an expected cancellation.
+          if (error?.name === "AbortError") return;
+        }
+
+        window.location.assign(`https://wa.me/?text=${encodeURIComponent(text)}`);
+      });
+      overlay.querySelector(".create-completion-actions")?.append(whatsappShare);
+    }
 
     const close = () => {
       overlay.remove();
