@@ -707,6 +707,25 @@ static async Task EnsureBillingSchemaAsync(System.Data.Common.DbConnection conne
 static async Task EnsureCompanyAndSuggestionsSchemaAsync(System.Data.Common.DbConnection connection)
 {
     await EnsureColumnAsync(connection, "Users", "CompanyIndustry", "varchar(120) CHARACTER SET utf8mb4 NULL");
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `CompanyIndustries` (
+            `Id` int NOT NULL AUTO_INCREMENT,
+            `Name` varchar(120) CHARACTER SET utf8mb4 NOT NULL,
+            `IsActive` tinyint(1) NOT NULL DEFAULT 1,
+            `SortOrder` int NOT NULL DEFAULT 0,
+            CONSTRAINT `PK_CompanyIndustries` PRIMARY KEY (`Id`),
+            CONSTRAINT `IX_CompanyIndustries_Name` UNIQUE (`Name`)
+        ) CHARACTER SET=utf8mb4;
+        """);
+
+    await ExecuteNonQueryAsync(connection,
+        """
+        INSERT IGNORE INTO `CompanyIndustries` (`Name`, `IsActive`, `SortOrder`) VALUES
+            ('Inmobiliaria', 1, 10), ('Constructora', 1, 20), ('Aberturas', 1, 30),
+            ('Corralon', 1, 40), ('Ferreteria', 1, 50), ('Materiales de construcción', 1, 60),
+            ('Rodados', 1, 70), ('Muebles y decoración', 1, 80), ('Servicios', 1, 90), ('Otro', 1, 100);
+        """);
     await EnsureColumnAsync(connection, "Users", "CompanyHeroBackgroundUrl", "varchar(260) CHARACTER SET utf8mb4 NULL");
     await EnsureColumnAsync(connection, "Users", "CompanyLogoUrl", "varchar(260) CHARACTER SET utf8mb4 NULL");
     await EnsureColumnAsync(connection, "Users", "CompanyName", "varchar(160) CHARACTER SET utf8mb4 NULL");

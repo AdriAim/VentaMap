@@ -41,19 +41,7 @@ public class RegisterModel(
     [BindProperty]
     public IFormFile? CompanyHeroBackground { get; set; }
 
-    public IReadOnlyList<string> CompanyIndustryOptions { get; } =
-    [
-        "Inmobiliaria",
-        "Constructora",
-        "Aberturas",
-        "Corralon",
-        "Ferreteria",
-        "Materiales de construcción",
-        "Rodados",
-        "Muebles y decoración",
-        "Servicios",
-        "Otro"
-    ];
+    public IReadOnlyList<string> CompanyIndustryOptions { get; private set; } = [];
 
     public bool IsGoogleEnabled => !string.IsNullOrWhiteSpace(configuration["Authentication:Google:ClientId"]);
 
@@ -365,6 +353,11 @@ public class RegisterModel(
     private async Task LoadPageOptionsAsync()
     {
         await LoadHeaderGroupOptionsAsync();
+        CompanyIndustryOptions = await db.CompanyIndustries.AsNoTracking()
+            .Where(x => x.IsActive)
+            .OrderBy(x => x.SortOrder).ThenBy(x => x.Name)
+            .Select(x => x.Name)
+            .ToListAsync();
         IsPaidSiteEnabled = await parameters.GetBoolAsync(VentaMapParameterService.PaidSiteEnabled, fallback: false);
         PersonPublicationAmountText = PricingService.FormatAmount(await pricingService.GetCurrentPersonPublicationAmountAsync());
         CompanyMonthlyAmountText = PricingService.FormatAmount(await pricingService.GetCurrentCompanyMonthlyAmountAsync());

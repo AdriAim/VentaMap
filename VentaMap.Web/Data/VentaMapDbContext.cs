@@ -28,6 +28,7 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
     public DbSet<OperationReview> OperationReviews => Set<OperationReview>();
     public DbSet<BillingCharge> BillingCharges => Set<BillingCharge>();
     public DbSet<BillingRate> BillingRates => Set<BillingRate>();
+    public DbSet<CompanyIndustry> CompanyIndustries => Set<CompanyIndustry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -102,6 +103,10 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
         modelBuilder.Entity<ApplicationUser>()
             .Property(x => x.IsCompany)
             .HasDefaultValue(false);
+
+        modelBuilder.Entity<CompanyIndustry>()
+            .HasIndex(x => x.Name)
+            .IsUnique();
 
         modelBuilder.Entity<ApplicationUser>()
             .Property(x => x.CompanyHeroBackgroundUrl)

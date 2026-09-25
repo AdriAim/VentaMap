@@ -1,0 +1,46 @@
+@page "/Admin/RubrosEmpresa"
+@model VentaMap.Pages.Admin.CompanyIndustriesModel
+@{
+    ViewData["Title"] = "Rubros de empresa";
+}
+<section class="form-shell">
+    <div class="section-heading">
+        <span class="eyebrow">Administración</span>
+        <h1>Rubros de empresa</h1>
+        <p>Estos rubros aparecen como opciones al crear una cuenta de empresa.</p>
+    </div>
+
+    <form method="post" asp-page-handler="Create" class="stack-form">
+        <label>
+            <span>Nuevo rubro</span>
+            <div class="inline-actions">
+                <input asp-for="NewIndustryName" maxlength="120" placeholder="Ejemplo: Electricidad" />
+                <button class="primary-pill" type="submit">Agregar rubro</button>
+            </div>
+            <span asp-validation-for="NewIndustryName" class="text-danger"></span>
+        </label>
+    </form>
+
+    <section class="detail-panel">
+        <div class="table-responsive">
+            <table class="table">
+                <thead><tr><th>Rubro</th><th>Estado</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var industry in Model.Industries)
+                {
+                    <tr>
+                        <td>@industry.Name</td>
+                        <td>@(industry.IsActive ? "Activo" : "Oculto")</td>
+                        <td>
+                            <form method="post" asp-page-handler="Toggle">
+                                <input type="hidden" name="id" value="@industry.Id" />
+                                <button class="ghost-pill" type="submit">@(industry.IsActive ? "Ocultar" : "Activar")</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
+</section>

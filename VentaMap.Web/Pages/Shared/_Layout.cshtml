@@ -14,6 +14,8 @@
     var canonicalUrl = $"{Context.Request.Scheme}://{Context.Request.Host}{Context.Request.PathBase}{Context.Request.Path}";
     var ogImageUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/images/logo5.png";
     var hideSiteHeader = string.Equals(ViewData["HideSiteHeader"]?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+    var isHomePage = string.Equals(Context.Request.Path, "/", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Context.Request.Path, "/Index", StringComparison.OrdinalIgnoreCase);
 }
 <!DOCTYPE html>
 <html lang="es">
@@ -39,8 +41,7 @@
     <meta name="twitter:description" content="@metaDescription" />
     <meta name="twitter:image" content="@ogImageUrl" />
     <link rel="icon" type="image/svg+xml" href="~/favicon.svg" asp-append-version="true" />
-    <link rel="icon" type="image/png" href="~/images/logo5.png" asp-append-version="true" />
-    <link rel="shortcut icon" href="~/favicon.svg" asp-append-version="true" />
+    <link rel="shortcut icon" type="image/svg+xml" href="~/favicon.svg" asp-append-version="true" />
     <link rel="apple-touch-icon" href="~/images/logo5.png" asp-append-version="true" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -189,10 +190,13 @@
                 </div>
                 <div class="site-nav-divider" aria-hidden="true"></div>
                 <div class="nav-links">
-                    <a class="nav-main-link" href="@BuildHeaderSearchUrl("Todos")">
-                        <i class="fa-solid fa-compass fa-fw" aria-hidden="true"></i>
-                        <span>Explorar</span>
-                    </a>
+                    @if (!isHomePage)
+                    {
+                        <a class="nav-main-link" href="@BuildHeaderSearchUrl("Todos")">
+                            <i class="fa-solid fa-compass fa-fw" aria-hidden="true"></i>
+                            <span>Explorar</span>
+                        </a>
+                    }
                     <a class="nav-main-link" asp-page="/Publications/Create">
                         <i class="fa-solid fa-circle-plus fa-fw" aria-hidden="true"></i>
                         <span>Publicar</span>
@@ -281,6 +285,10 @@
                                 <a asp-page="/Admin/Billing">
                                     <i class="fa-solid fa-receipt" aria-hidden="true"></i>
                                     <span>Cuentas gratuitas</span>
+                                </a>
+                                <a asp-page="/Admin/CompanyIndustries">
+                                    <i class="fa-solid fa-building" aria-hidden="true"></i>
+                                    <span>Rubros de empresa</span>
                                 </a>
                                 <a asp-page="/Trash">
                                     <i class="fa-solid fa-box-archive" aria-hidden="true"></i>

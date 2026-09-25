@@ -598,6 +598,85 @@ img {
     radial-gradient(circle at top right, rgba(255, 75, 95, 0.14), transparent 28%);
 }
 
+.explore-launcher {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 2rem;
+  padding: 1.5rem 1.75rem;
+  border: 1px solid var(--line);
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at 0% 100%, rgba(255, 75, 95, 0.1), transparent 28%),
+    rgba(255, 253, 252, 0.78);
+  box-shadow: var(--shadow);
+}
+
+.explore-launcher-heading .eyebrow {
+  margin-bottom: 0.3rem;
+}
+
+.explore-launcher-heading h2 {
+  font-size: clamp(1.85rem, 3vw, 2.45rem);
+}
+
+.explore-launcher-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.explore-launcher-button {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid rgba(34, 48, 71, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--ink);
+  font-family: var(--ui-sans);
+  font-size: 0.88rem;
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: 0 8px 18px rgba(34, 48, 71, 0.07);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.explore-launcher-button:hover,
+.explore-launcher-button:focus-visible {
+  color: var(--ink);
+  transform: translateY(-2px);
+  border-color: rgba(227, 55, 78, 0.35);
+  box-shadow: 0 13px 24px rgba(34, 48, 71, 0.12);
+}
+
+.explore-launcher-icon {
+  display: inline-grid;
+  width: 2.4rem;
+  height: 2.4rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 13px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-deep), #ff7180);
+}
+
+.explore-launcher-button-vehicle .explore-launcher-icon {
+  background: linear-gradient(135deg, var(--accent-navy), #465b80);
+}
+
+.explore-launcher-button-all .explore-launcher-icon {
+  background: linear-gradient(135deg, #e98a22, #f2b742);
+}
+
+.explore-launcher-arrow {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .eyebrow {
   display: inline-block;
   text-transform: uppercase;
@@ -3976,7 +4055,7 @@ textarea:focus {
   border: 1px solid var(--line);
   border-radius: 26px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.82)),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.38)),
     var(--company-profile-cover-image, radial-gradient(circle at top right, rgba(255, 214, 102, 0.2), transparent 28%));
   background-size: cover;
   background-position: center;
@@ -4087,7 +4166,7 @@ textarea:focus {
   border-radius: 30px;
   border: 1px solid var(--line);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.84)),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.38)),
     var(--company-profile-cover-image, radial-gradient(circle at top right, rgba(255, 214, 102, 0.2), transparent 28%));
   background-size: cover;
   background-position: center;
@@ -4347,7 +4426,7 @@ textarea:focus {
 .company-publications-strip {
   margin-top: 1.5rem;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.82)),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.38)),
     var(--company-profile-cover-image, radial-gradient(circle at top right, rgba(255, 214, 102, 0.2), transparent 28%));
   background-size: cover;
   background-position: center;
@@ -6966,6 +7045,11 @@ textarea.input-validation-error,
 }
 
 @media (max-width: 1200px) and (min-width: 781px) {
+  .explore-launcher {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
   .site-nav {
     grid-template-columns: minmax(150px, 0.58fr) minmax(0, 1.75fr) minmax(150px, 0.67fr);
   }
@@ -7033,6 +7117,7 @@ textarea.input-validation-error,
 
   .site-nav,
   .hero-shell,
+  .explore-launcher,
   .search-grid,
   .form-grid,
   .radio-grid,
@@ -7294,8 +7379,18 @@ textarea.input-validation-error,
   }
 
   .hero-shell,
-  .form-shell {
+  .form-shell,
+  .explore-launcher {
     padding: 1.4rem;
+  }
+
+  .explore-launcher-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .explore-launcher-button {
+    min-height: 3.8rem;
+    font-size: 0.95rem;
   }
 
   .brand-text small {
