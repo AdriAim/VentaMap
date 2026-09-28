@@ -1,0 +1,20 @@
+@page "/RepublicarAnuncio/{id:int}"
+@model VentaMap.Pages.Publications.RepublishModel
+@{
+    ViewData["Title"] = "Republicar anuncio";
+}
+
+<section class="favorites-strip">
+    <h1>Republicando tu anuncio…</h1>
+    <p>Si no continúa automáticamente, pulsa el botón.</p>
+    <form id="email-republish-form" method="post" asp-page="/MyPublications" asp-page-handler="Republish">
+        <input type="hidden" name="id" value="@Model.PublicationId" />
+        <button type="submit" class="primary-pill">Republicar este anuncio</button>
+    </form>
+</section>
+
+@section Scripts {
+    <script>
+        document.getElementById('email-republish-form').requestSubmit();
+    </script>
+}

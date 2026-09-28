@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Serilog;
 using System.Security.Claims;
 using System.Data;
 using VentaMap.Data;
@@ -10,6 +11,15 @@ using VentaMap.Models;
 using VentaMap.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog((context, _, loggerConfiguration) => loggerConfiguration
+    .ReadFrom.Configuration(context.Configuration)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File(
+        path: context.Configuration["Logging:File:Path"] ?? "/var/log/ventamap/web-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: context.Configuration.GetValue<int?>("Logging:File:RetainedFileCountLimit") ?? 90,
+        shared: true));
 var applyMigrationsOnStartup = GetBooleanSetting(builder.Configuration, "Database:ApplyMigrationsOnStartup");
 var runSeedDataOnStartup = GetBooleanSetting(builder.Configuration, "Database:RunSeedDataOnStartup");
 var configuredUrls = builder.Configuration["urls"]

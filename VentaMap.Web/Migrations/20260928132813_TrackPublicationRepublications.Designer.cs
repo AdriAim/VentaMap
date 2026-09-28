@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using VentaMap.Data;
 
@@ -11,9 +12,11 @@ using VentaMap.Data;
 namespace VentaMap.Migrations
 {
     [DbContext(typeof(VentaMapDbContext))]
-    partial class VentaMapDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260928132813_TrackPublicationRepublications")]
+    partial class TrackPublicationRepublications
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

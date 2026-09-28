@@ -13,11 +13,11 @@
     <section class="detail-panel">
         <div class="table-responsive">
             <table class="table">
-                <thead><tr><th>Día</th><th>Usuarios registrados</th><th>Anuncios nuevos</th><th>Visitantes</th></tr></thead>
+                <thead><tr><th>Día</th><th>Usuarios registrados</th><th>Anuncios nuevos</th><th>Anuncios republicados</th><th>Visitantes</th></tr></thead>
                 <tbody>
                 @foreach (var item in Model.Metrics)
                 {
-                    <tr><td>@item.Day.ToString("dd/MM/yyyy")</td><td>@item.RegisteredUsers</td><td>@item.NewPublications</td><td>@item.Visitors</td></tr>
+                    <tr><td>@item.Day.ToString("dd/MM/yyyy")</td><td>@item.RegisteredUsers</td><td>@item.NewPublications</td><td>@item.RepublishedPublications</td><td>@item.Visitors</td></tr>
                 }
                 </tbody>
             </table>

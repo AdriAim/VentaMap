@@ -205,6 +205,14 @@ public class MyPublicationsModel(
             return RedirectToPage();
         }
 
+        if (publication.IsActive)
+        {
+            const string activeMessage = "Este anuncio ya está activo.";
+            if (isAjax) return BadRequest(new { message = activeMessage });
+            SuccessMessage = activeMessage;
+            return RedirectToPage();
+        }
+
         if (await billingService.HasReachedCompanyPublicationLimitAsync(user))
         {
             const string limitMessage = "Tu cuenta empresa ya tiene 50 anuncios activos simultáneos. Da de baja uno para republicar este anuncio.";

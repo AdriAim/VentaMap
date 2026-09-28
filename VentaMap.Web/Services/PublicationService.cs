@@ -9,7 +9,8 @@ public class PublicationService(
     VentaMapDbContext db,
     CloudflareR2ImageStorageService imageStorageService,
     BillingService billingService,
-    ILogger<PublicationService> logger)
+    ILogger<PublicationService> logger,
+    IConfiguration configuration)
 {
     public const PublicationStatus OwnerDeletedStatus = PublicationStatus.OwnerDeleted;
 
@@ -474,8 +475,15 @@ public class PublicationService(
 
         publication.IsActive = true;
         publication.Status = PublicationStatus.Active;
-        publication.CreatedAtUtc = DateTime.UtcNow;
-        publication.ExpiresAtUtc = DateTime.UtcNow.AddDays(30);
+        var republishedAtUtc = DateTime.UtcNow;
+        publication.OriginalCreatedAtUtc ??= publication.CreatedAtUtc;
+        publication.CreatedAtUtc = republishedAtUtc;
+        publication.ExpiresAtUtc = republishedAtUtc.AddDays(30);
+        db.PublicationRepublications.Add(new PublicationRepublication
+        {
+            PublicationId = publication.Id,
+            RepublishedAtUtc = republishedAtUtc
+        });
         publication.ExpirationNoticeSentAtUtc = null;
         publication.DeactivationReason = null;
         publication.DeactivationComment = null;
@@ -530,14 +538,21 @@ public class PublicationService(
                 var publicationLabel = string.IsNullOrWhiteSpace(publication.ShortDescription)
                     ? publication.Title
                     : publication.ShortDescription.Trim();
+                var siteUrl = (configuration["Site:PublicBaseUrl"] ?? "https://ventamap.com.ar").TrimEnd('/');
+                var republishUrl = $"{siteUrl}/RepublicarAnuncio/{publication.Id}";
                 var html = $"""
                     <p>Tu anuncio <strong>{System.Net.WebUtility.HtmlEncode(publicationLabel)}</strong> finalizó luego de 30 días de estar activo.</p>
-                    <p>Si quieres republicarla, debes ingresar a <strong>Mis anuncios</strong> dentro de tu usuario y usar la opción de republicar.</p>
+                    <p>Para republicarlo por 30 días más, usa el siguiente enlace. Si no tienes sesión iniciada, te pediremos ingresar a tu cuenta.</p>
+                    <p><a href="{System.Net.WebUtility.HtmlEncode(republishUrl)}" style="display:inline-block;padding:12px 20px;background:#176b45;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;">Republicar este anuncio</a></p>
+                    <p>También puedes hacerlo desde <strong>Mis anuncios</strong>.</p>
                     """;
                 var text = $"""
                     Tu anuncio "{publicationLabel}" finalizó luego de 30 días de estar activo.
 
-                    Si quieres republicarla, debes ingresar a Mis anuncios dentro de tu usuario y usar la opción de republicar.
+                    Para republicarlo por 30 días más, abre este enlace:
+                    {republishUrl}
+
+                    Si no tienes sesión iniciada, te pediremos ingresar a tu cuenta. También puedes hacerlo desde Mis anuncios.
                     """;
 
                 try

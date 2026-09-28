@@ -53,6 +53,7 @@ public class Publication
     public int UniqueViewCount { get; set; }
     public int UniqueFavoriteCount { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime? OriginalCreatedAtUtc { get; set; }
     public DateTime? ExpiresAtUtc { get; set; }
     public DateTime? ExpirationNoticeSentAtUtc { get; set; }
     public DateTime? ReportWarningSentAtUtc { get; set; }

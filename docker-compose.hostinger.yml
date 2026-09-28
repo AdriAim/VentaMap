@@ -84,8 +84,16 @@ services:
       MercadoPago__WebhookSecret: ${MERCADOPAGO_WEBHOOK_SECRET}
       Database__ApplyMigrationsOnStartup: ${DATABASE_APPLY_MIGRATIONS_ON_STARTUP:-false}
       Database__RunSeedDataOnStartup: ${DATABASE_RUN_SEED_DATA_ON_STARTUP:-false}
+      Logging__File__Path: /var/log/ventamap/web-.log
+      Logging__File__RetainedFileCountLimit: ${LOG_RETENTION_DAYS:-90}
     volumes:
       - dataprotection_keys:/keys/dataprotection
+      - ventamap_logs:/var/log/ventamap
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   ventamap-chat:
     build:
@@ -132,8 +140,16 @@ services:
       Email__FromName: ${SMTP_FROM_NAME:-VentaMap}
       Email__UseSsl: ${SMTP_USE_SSL:-true}
       Email__TimeoutSeconds: ${SMTP_TIMEOUT_SECONDS:-25}
+      Logging__File__Path: /var/log/ventamap/chat-.log
+      Logging__File__RetainedFileCountLimit: ${LOG_RETENTION_DAYS:-90}
     volumes:
       - dataprotection_keys:/keys/dataprotection
+      - ventamap_logs:/var/log/ventamap
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   mysql_data:
@@ -145,3 +161,6 @@ volumes:
     # Keep authentication/data-protection keys stable across the migration.
     name: ${DATAPROTECTION_KEYS_VOLUME:-ventamap-local_dataprotection_keys}
     external: ${DATAPROTECTION_KEYS_VOLUME_EXTERNAL:-false}
+  ventamap_logs:
+    # Application logs are retained across web/chat container recreations.
+    name: ${VENTAMAP_LOGS_VOLUME:-ventamap-local_logs}

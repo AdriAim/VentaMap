@@ -3977,7 +3977,9 @@ textarea:focus {
 
 .register-account-kind-card {
   position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr);
+  min-width: 0;
   gap: 0.8rem;
   align-items: flex-start;
   padding: 1rem;
@@ -3987,12 +3989,24 @@ textarea:focus {
   cursor: pointer;
 }
 
-.register-account-kind-card input {
-  margin-top: 0.2rem;
+.register-account-kind-card input[type="radio"] {
+  width: 1.25rem;
+  height: 1.25rem;
+  min-width: 0;
+  padding: 0;
+  margin: 0.2rem 0 0;
+  accent-color: var(--accent-deep);
+}
+
+.register-account-kind-card input[type="radio"]:focus-visible {
+  outline: 2px solid var(--accent-deep);
+  outline-offset: 3px;
 }
 
 .register-account-kind-copy {
   display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
   gap: 0.22rem;
 }
 
@@ -4041,6 +4055,37 @@ textarea:focus {
 .register-company-shell {
   display: grid;
   gap: 1rem;
+}
+
+.register-company-shell .status-banner code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Touch devices show pricing in the document flow, never over form fields. */
+@media (max-width: 640px), (hover: none) {
+  .register-account-kind-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .register-account-kind-card .register-pricing-tooltip {
+    display: none;
+    position: static;
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    opacity: 1;
+    transform: none;
+    transition: none;
+    pointer-events: auto;
+    box-shadow: none;
+    overflow-wrap: anywhere;
+  }
+
+  .register-account-kind-card input:checked ~ .register-pricing-tooltip {
+    display: block;
+  }
 }
 
 .company-hero {

@@ -7,6 +7,7 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
 {
     public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
     public DbSet<Publication> Publications => Set<Publication>();
+    public DbSet<PublicationRepublication> PublicationRepublications => Set<PublicationRepublication>();
     public DbSet<PublicationMedia> PublicationMedia => Set<PublicationMedia>();
     public DbSet<ArgentineLocality> ArgentineLocalities => Set<ArgentineLocality>();
     public DbSet<PublicationGroupType> PublicationGroupTypes => Set<PublicationGroupType>();
@@ -32,6 +33,9 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<PublicationRepublication>()
+            .HasIndex(x => x.RepublishedAtUtc);
+
         modelBuilder.Entity<ApplicationUser>()
             .HasIndex(x => x.Email)
             .IsUnique();

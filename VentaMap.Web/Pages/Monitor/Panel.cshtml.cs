@@ -30,8 +30,15 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
             .Select(x => x.CreatedAtUtc)
             .ToListAsync();
         var publications = await db.Publications.AsNoTracking()
-            .Where(x => (x.User == null || !x.User.IsDebugUser) && x.CreatedAtUtc >= utcFrom && x.CreatedAtUtc < utcUntil)
-            .Select(x => x.CreatedAtUtc)
+            .Where(x => (x.User == null || !x.User.IsDebugUser)
+                && (x.OriginalCreatedAtUtc ?? x.CreatedAtUtc) >= utcFrom
+                && (x.OriginalCreatedAtUtc ?? x.CreatedAtUtc) < utcUntil)
+            .Select(x => x.OriginalCreatedAtUtc ?? x.CreatedAtUtc)
+            .ToListAsync();
+        var republications = await db.PublicationRepublications.AsNoTracking()
+            .Where(x => (x.Publication.User == null || !x.Publication.User.IsDebugUser)
+                && x.RepublishedAtUtc >= utcFrom && x.RepublishedAtUtc < utcUntil)
+            .Select(x => x.RepublishedAtUtc)
             .ToListAsync();
         var visitors = await db.SiteVisits.AsNoTracking()
             .Where(x => x.VisitedOn >= from && x.VisitedOn < until)
@@ -41,14 +48,15 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
 
         var userCounts = users.GroupBy(ToArgentinaDay).ToDictionary(x => x.Key, x => x.Count());
         var publicationCounts = publications.GroupBy(ToArgentinaDay).ToDictionary(x => x.Key, x => x.Count());
+        var republicationCounts = republications.GroupBy(ToArgentinaDay).ToDictionary(x => x.Key, x => x.Count());
         Metrics = Enumerable.Range(0, 30)
             .Select(offset => today.AddDays(-offset))
-            .Select(day => new DailyMetric(day, userCounts.GetValueOrDefault(day), publicationCounts.GetValueOrDefault(day), visitors.GetValueOrDefault(day)))
+            .Select(day => new DailyMetric(day, userCounts.GetValueOrDefault(day), publicationCounts.GetValueOrDefault(day), republicationCounts.GetValueOrDefault(day), visitors.GetValueOrDefault(day)))
             .ToList();
         return Page();
     }
 
     private static DateTime ToArgentinaDay(DateTime utc) => utc.AddHours(-3).Date;
 
-    public sealed record DailyMetric(DateTime Day, int RegisteredUsers, int NewPublications, int Visitors);
+    public sealed record DailyMetric(DateTime Day, int RegisteredUsers, int NewPublications, int RepublishedPublications, int Visitors);
 }

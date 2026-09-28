@@ -3,11 +3,21 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using MySqlConnector;
+using Serilog;
 using VentaMap.ChatService.Data;
 using VentaMap.ChatService.Hubs;
 using VentaMap.ChatService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog((context, _, loggerConfiguration) => loggerConfiguration
+    .ReadFrom.Configuration(context.Configuration)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File(
+        path: context.Configuration["Logging:File:Path"] ?? "/var/log/ventamap/chat-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: context.Configuration.GetValue<int?>("Logging:File:RetainedFileCountLimit") ?? 90,
+        shared: true));
 var configuredUrls = builder.Configuration["urls"]
     ?? builder.Configuration["ASPNETCORE_URLS"]
     ?? Environment.GetEnvironmentVariable("ASPNETCORE_URLS")
