@@ -1446,7 +1446,7 @@
 
       const syncPhoneMode = () => {
         if (country?.value === "AR") {
-          input.placeholder = "+54 9 1145666454";
+          input.placeholder = "+54 9 3424566654";
           input.inputMode = "numeric";
           input.autocomplete = "tel-national";
           if (!input.value.trim()) {
@@ -8385,5 +8385,4 @@ document.addEventListener("keydown", event => {
     trigger?.blur();
   });
 });
-
 

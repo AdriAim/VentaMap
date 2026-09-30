@@ -1,4 +1,11 @@
 services:
+  ventamap-log-init:
+    image: busybox:1.36
+    restart: "no"
+    command: ["sh", "-c", "mkdir -p /var/log/ventamap && chown -R 1654:1654 /var/log/ventamap"]
+    volumes:
+      - ventamap_logs:/var/log/ventamap
+
   ventamap-mysql:
     image: mysql:8.0
     container_name: ventamap-mysql
@@ -31,6 +38,8 @@ services:
     container_name: ventamap-web
     restart: unless-stopped
     depends_on:
+      ventamap-log-init:
+        condition: service_completed_successfully
       ventamap-mysql:
         condition: service_healthy
     ports:
@@ -104,6 +113,8 @@ services:
     container_name: ventamap-chat
     restart: unless-stopped
     depends_on:
+      ventamap-log-init:
+        condition: service_completed_successfully
       ventamap-mysql:
         condition: service_healthy
     ports:

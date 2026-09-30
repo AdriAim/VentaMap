@@ -2749,17 +2749,11 @@ textarea:focus {
 
 .gallery-report-overlay {
   position: absolute;
-  top: 1rem;
   right: 3.45rem;
   z-index: 4;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  min-width: 2rem;
-  min-height: 2rem;
-  flex: 0 0 2rem;
   padding: 0;
   color: #7f8797;
   border-color: rgba(122, 86, 0, 0.16);
@@ -2798,8 +2792,17 @@ textarea:focus {
   place-items: center;
 }
 
-.gallery-favorite-corner {
+.gallery-favorite-corner,
+.gallery-report-overlay {
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
+  min-height: 2rem;
+  flex: 0 0 2rem;
   top: 1rem;
+}
+
+.gallery-favorite-corner {
   right: 1rem;
 }
 
