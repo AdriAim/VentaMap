@@ -64,7 +64,13 @@ else
             <span class="eyebrow">
                 @detailEyebrow
             </span>
-            <h1><span class="detail-title-text">@detailHeadline</span></h1>
+            <h1>
+                @if (publication.Status == PublicationStatus.Sold)
+                {
+                    <span class="detail-sold-label">VENDIDO</span>
+                }
+                <span class="detail-title-text">@detailHeadline</span>
+            </h1>
             <div class="detail-hero-actions">
                 @if (!hideReportActions)
                 {

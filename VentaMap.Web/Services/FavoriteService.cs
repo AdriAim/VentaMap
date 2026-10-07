@@ -43,7 +43,9 @@ public class FavoriteService(VentaMapDbContext db)
 
     public async Task<(FavoriteList List, bool Added)> AddFavoriteAsync(int userId, int publicationId, int? listId, string? newListName, string? suggestedListName)
     {
-        var publicationExists = await db.Publications.AnyAsync(x => x.Id == publicationId && x.IsActive);
+        var publicationExists = await db.Publications.AnyAsync(x => x.Id == publicationId
+            && x.IsActive
+            && x.Status != PublicationStatus.Sold);
         if (!publicationExists)
         {
             throw new InvalidOperationException("El anuncio ya no está disponible.");
@@ -123,6 +125,7 @@ public class FavoriteService(VentaMapDbContext db)
             .AsNoTracking()
             .Where(x => x.FavoriteListId == listId
                 && x.Publication.IsActive
+                && x.Publication.Status != PublicationStatus.Sold
                 && (includeDebug || x.Publication.UserId == null || x.Publication.User == null || !x.Publication.User.IsDebugUser))
             .OrderByDescending(x => x.CreatedAtUtc)
             .Include(x => x.Publication)

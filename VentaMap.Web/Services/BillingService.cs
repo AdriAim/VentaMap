@@ -77,7 +77,9 @@ public class BillingService(VentaMapDbContext db, VentaMapParameterService param
     {
         if (!await IsEnabledForAsync(user) || !user.IsCompany || user.IsBillingExempt == 1) return false;
 
-        return await db.Publications.CountAsync(x => x.UserId == user.Id && x.IsActive) >= CompanyActivePublicationLimit;
+        return await db.Publications.CountAsync(x => x.UserId == user.Id
+            && x.IsActive
+            && x.Status != PublicationStatus.Sold) >= CompanyActivePublicationLimit;
     }
 
     private async Task<BillingCharge?> CreatePersonPackIfNeededAsync(ApplicationUser user, bool exceedsActiveLimit, bool exceedsPhotoLimit, bool hasVideo, int? publicationId = null)

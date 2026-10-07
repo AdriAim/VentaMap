@@ -279,6 +279,10 @@ else
                         {
                             <div class="publication-admin-placeholder">Sin imagen</div>
                         }
+                        @if (publication.Status == PublicationStatus.Sold)
+                        {
+                            <span class="publication-sold-badge">Vendido</span>
+                        }
                     </a>
                     <div class="publication-admin-body">
                         <div class="publication-admin-head">

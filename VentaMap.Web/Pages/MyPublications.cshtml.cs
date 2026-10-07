@@ -251,6 +251,30 @@ public class MyPublicationsModel(
         return RedirectToPage();
     }
 
+    public async Task<IActionResult> OnPostSetCompanyStatusAsync(int id, PublicationStatus status)
+    {
+        if (currentUserAccessor.UserId is not int userId)
+        {
+            return RedirectToPage("/Account/Login", new { returnUrl = Url.Page("/MyPublications") });
+        }
+
+        var success = await publicationService.SetCompanyPublicationStatusAsync(id, userId, status);
+        if (!success)
+        {
+            ErrorMessage = "No se pudo actualizar el estado del anuncio.";
+            return RedirectToPage();
+        }
+
+        SuccessMessage = status switch
+        {
+            PublicationStatus.Active => "El anuncio quedó activo.",
+            PublicationStatus.Inactive => "El anuncio quedó inactivo.",
+            PublicationStatus.Sold => "El anuncio quedó marcado como vendido.",
+            _ => "El estado del anuncio fue actualizado."
+        };
+        return RedirectToPage();
+    }
+
     public async Task<IActionResult> OnPostDeletePermanentAsync(int id)
     {
         if (currentUserAccessor.UserId is not int userId)

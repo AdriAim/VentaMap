@@ -81,6 +81,10 @@
             <div class="company-catalog-view-switch" role="group" aria-label="Filtrar anuncios por estado">
                 <button type="button" class="is-active" data-my-publications-status="all" aria-pressed="true">Todos</button>
                 <button type="button" data-my-publications-status="active" aria-pressed="false">Activos</button>
+                @if (Model.IsCompany)
+                {
+                    <button type="button" data-my-publications-status="sold" aria-pressed="false">Vendidos</button>
+                }
                 @if (!Model.IsCompany)
                 {
                     <button type="button" data-my-publications-status="pending" aria-pressed="false">Pendientes de pago</button>
@@ -159,8 +163,14 @@ else
             var imageUrl = publication.ImageList.FirstOrDefault();
             var ownerImageUrl = string.IsNullOrWhiteSpace(imageUrl) ? null : $"/api/content/owner-media/{publication.Id}";
             var isPendingPayment = publication.Status == PublicationStatus.PendingPayment;
-            var publicationListStatus = isPendingPayment ? "pending" : publication.IsActive ? "active" : "inactive";
-            var statusLabel = publication.IsActive ? publication.Status.ToDisplayName() : isPendingPayment ? publication.Status.ToDisplayName() : "Inactiva";
+            var isSold = publication.Status == PublicationStatus.Sold;
+            var companyManualStatus = !Model.IsCompany
+                ? publication.Status
+                : isSold ? PublicationStatus.Sold
+                : publication.IsActive ? PublicationStatus.Active
+                : PublicationStatus.Inactive;
+            var publicationListStatus = isPendingPayment ? "pending" : companyManualStatus == PublicationStatus.Sold ? "sold" : companyManualStatus == PublicationStatus.Active ? "active" : "inactive";
+            var statusLabel = isPendingPayment ? publication.Status.ToDisplayName() : companyManualStatus.ToDisplayName();
             var operationLabel = publication.OperationType?.ToDisplayName();
             var operationLetter = !string.IsNullOrWhiteSpace(operationLabel)
                 ? operationLabel[0].ToString().ToUpperInvariant()
@@ -193,6 +203,10 @@ else
                     {
                         <div class="publication-admin-placeholder">Sin imagen</div>
                     }
+                    @if (isSold)
+                    {
+                        <span class="publication-sold-badge">Vendido</span>
+                    }
                     <span class="my-publication-gallery-price gallery-badge gallery-tooltip-trigger gallery-tooltip-bottom" data-tooltip-label="@priceTooltipLabel">
                         @if (!string.IsNullOrWhiteSpace(operationLetter))
                         {
@@ -209,7 +223,7 @@ else
                                 <span class="gallery-kicker">@categoryLabel</span>
                                 <h3>@(string.IsNullOrWhiteSpace(publication.ShortDescription) ? publication.Title : publication.ShortDescription)</h3>
                             </div>
-                            <span class="publication-admin-status @(publication.IsActive ? "is-active" : "is-inactive")" data-my-publication-status-label>@statusLabel</span>
+                            <span class="publication-admin-status @(companyManualStatus == PublicationStatus.Sold ? "is-sold" : companyManualStatus == PublicationStatus.Active ? "is-active" : "is-inactive")" data-my-publication-status-label>@statusLabel</span>
                         </div>
                         <aside class="publication-admin-stats" aria-label="Estadisticas del anuncio">
                             <div class="publication-admin-stat">
@@ -230,7 +244,7 @@ else
                         {
                             <span>Vigencia: 30 días desde la acreditación del pago</span>
                         }
-                        else if (publication.ExpiresAtUtc.HasValue)
+                        else if (!Model.IsCompany && publication.ExpiresAtUtc.HasValue)
                         {
                             <span>Vence: @publication.ExpiresAtUtc.Value.ToLocalTime().ToString("dd/MM/yyyy")</span>
                         }
@@ -269,7 +283,33 @@ else
                                 <span>Compartir en estado de WhatsApp</span>
                             </button>
                         }
-                        @if (publication.IsActive)
+                        @if (Model.IsCompany)
+                        {
+                            <div class="company-publication-status-actions">
+                                @if (companyManualStatus != PublicationStatus.Active)
+                                {
+                                    <form method="post" asp-page-handler="SetCompanyStatus" asp-route-id="@publication.Id">
+                                        <input type="hidden" name="status" value="Active" />
+                                        <button type="submit" class="primary-pill">Pasar a activa</button>
+                                    </form>
+                                }
+                                @if (companyManualStatus != PublicationStatus.Sold)
+                                {
+                                    <form method="post" asp-page-handler="SetCompanyStatus" asp-route-id="@publication.Id">
+                                        <input type="hidden" name="status" value="Sold" />
+                                        <button type="submit" class="ghost-pill">Pasar a vendida</button>
+                                    </form>
+                                }
+                                @if (companyManualStatus != PublicationStatus.Inactive)
+                                {
+                                    <form method="post" asp-page-handler="SetCompanyStatus" asp-route-id="@publication.Id">
+                                        <input type="hidden" name="status" value="Inactive" />
+                                        <button type="submit" class="danger-pill">Pasar a inactiva</button>
+                                    </form>
+                                }
+                            </div>
+                        }
+                        else if (publication.IsActive)
                         {
                             <details class="publication-deactivate-panel">
                                 <summary class="danger-pill">

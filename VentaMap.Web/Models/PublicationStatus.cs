@@ -7,7 +7,9 @@ public enum PublicationStatus
     DeactivationRequested,
     OwnerDeleted,
     Expired,
-    InTrash
+    InTrash,
+    Inactive,
+    Sold
 }
 
 public static class PublicationStatusExtensions
@@ -20,6 +22,8 @@ public static class PublicationStatusExtensions
         PublicationStatus.OwnerDeleted => "Eliminado por usuario",
         PublicationStatus.Expired => "Vencida",
         PublicationStatus.InTrash => "En papelera",
+        PublicationStatus.Inactive => "Inactiva",
+        PublicationStatus.Sold => "Vendida",
         _ => status.ToString()
     };
 }

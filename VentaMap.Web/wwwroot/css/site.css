@@ -747,6 +747,21 @@ h3,
   vertical-align: baseline;
 }
 
+.detail-sold-label {
+  display: inline-block;
+  margin-right: 0.38em;
+  padding: 0.18em 0.48em;
+  border-radius: 0.25em;
+  background: #d83a4d;
+  color: #fff;
+  font-family: var(--ui-sans);
+  font-size: 0.34em;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  vertical-align: 0.2em;
+}
+
 .hero-copy p,
 .section-heading p,
 .empty-state p,
@@ -4584,6 +4599,50 @@ textarea:focus {
 
 .company-publications-strip .favorites-strip-copy h2 {
   color: #142640;
+}
+
+.publication-admin-media {
+  position: relative;
+}
+
+.publication-sold-badge {
+  position: absolute;
+  top: 0.8rem;
+  left: -2.15rem;
+  z-index: 2;
+  min-width: 9rem;
+  padding: 0.35rem 0.75rem;
+  transform: rotate(-42deg);
+  background: #d83a4d;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+  box-shadow: 0 4px 12px rgba(126, 20, 35, 0.28);
+}
+
+.publication-admin-status.is-sold {
+  border-color: rgba(216, 58, 77, 0.35);
+  background: rgba(216, 58, 77, 0.12);
+  color: #ad2033;
+}
+
+.company-publication-status-actions {
+  display: grid;
+  width: 100%;
+  gap: 0.6rem;
+}
+
+.company-publication-status-actions form,
+.company-publication-status-actions button {
+  width: 100%;
+}
+
+.company-publication-status-actions button {
+  justify-content: center;
 }
 
 .company-publications-strip .favorites-strip-actions {

@@ -48,7 +48,9 @@ public class PublicationService(
         var now = DateTime.UtcNow;
         var items = db.Publications
             .AsNoTracking()
-            .Where(x => x.IsActive && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now));
+            .Where(x => x.IsActive
+                && x.Status != PublicationStatus.Sold
+                && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now));
 
         items = ApplyDebugVisibility(items, includeDebug);
 
@@ -88,7 +90,9 @@ public class PublicationService(
             .Include(x => x.MediaItems)
             .Include(x => x.FieldValues)
                 .ThenInclude(x => x.CategoryField)
-            .Where(x => x.IsActive && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now)), includeDebug)
+            .Where(x => x.IsActive
+                && x.Status != PublicationStatus.Sold
+                && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now)), includeDebug)
             .OrderByDescending(x => x.Featured)
             .ThenByDescending(x => x.CreatedAtUtc)
             .ToListAsync();
@@ -240,6 +244,11 @@ public class PublicationService(
             .ThenBy(x => x.Id)
             .ToListAsync();
 
+        var isCompany = userId.HasValue && await db.Users
+            .Where(user => user.Id == userId.Value)
+            .Select(user => user.IsCompany)
+            .FirstOrDefaultAsync();
+
         var publication = new Publication
         {
             Group = input.Group,
@@ -262,7 +271,7 @@ public class PublicationService(
             HideFromMap = input.NoLocation,
             UserId = userId,
             IsActive = status == PublicationStatus.Active,
-            ExpiresAtUtc = status == PublicationStatus.Active ? DateTime.UtcNow.AddDays(30) : null
+            ExpiresAtUtc = status == PublicationStatus.Active && !isCompany ? DateTime.UtcNow.AddDays(30) : null
         };
 
         publication.MediaItems.AddRange(PublicationMediaBuilder.Build(
@@ -484,7 +493,8 @@ public class PublicationService(
         var republishedAtUtc = DateTime.UtcNow;
         publication.OriginalCreatedAtUtc ??= publication.CreatedAtUtc;
         publication.CreatedAtUtc = republishedAtUtc;
-        publication.ExpiresAtUtc = republishedAtUtc.AddDays(30);
+        var user = await db.Users.FindAsync(userId);
+        publication.ExpiresAtUtc = user?.IsCompany == true ? null : republishedAtUtc.AddDays(30);
         db.PublicationRepublications.Add(new PublicationRepublication
         {
             PublicationId = publication.Id,
@@ -495,7 +505,6 @@ public class PublicationService(
         publication.DeactivationComment = null;
         publication.DeactivatedAtUtc = null;
         await db.SaveChangesAsync();
-        var user = await db.Users.FindAsync(userId);
         if (user is not null)
         {
             await billingService.EnsureCompanyCurrentMonthChargeAsync(user);
@@ -516,12 +525,44 @@ public class PublicationService(
         return true;
     }
 
+    public async Task<bool> SetCompanyPublicationStatusAsync(int publicationId, int userId, PublicationStatus status)
+    {
+        if (status is not (PublicationStatus.Active or PublicationStatus.Inactive or PublicationStatus.Sold))
+        {
+            return false;
+        }
+
+        var user = await db.Users.FindAsync(userId);
+        if (user?.IsCompany != true)
+        {
+            return false;
+        }
+
+        var publication = await db.Publications.FirstOrDefaultAsync(x => x.Id == publicationId && x.UserId == userId);
+        if (publication is null || publication.Status == OwnerDeletedStatus)
+        {
+            return false;
+        }
+
+        publication.Status = status;
+        publication.IsActive = status is PublicationStatus.Active or PublicationStatus.Sold;
+        publication.ExpiresAtUtc = null;
+        publication.ExpirationNoticeSentAtUtc = null;
+        publication.DeactivatedAtUtc = publication.IsActive ? null : DateTime.UtcNow;
+        publication.DeactivationReason = publication.IsActive ? null : "Desactivado por la empresa";
+        publication.DeactivationComment = null;
+        await db.SaveChangesAsync();
+        await billingService.EnsureCompanyCurrentMonthChargeAsync(user);
+        return true;
+    }
+
     public async Task<int> ExpirePublicationsAndSendNotificationsAsync(IEmailSender emailSender, ILogger logger, CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
         var expired = await db.Publications
             .Include(x => x.User)
             .Where(x => x.IsActive
+                && (x.User == null || !x.User.IsCompany)
                 && x.ExpiresAtUtc != null
                 && x.ExpiresAtUtc <= now
                 && x.ExpirationNoticeSentAtUtc == null)
@@ -702,7 +743,9 @@ public class PublicationService(
             .AsNoTracking()
             .Include(x => x.Category)
             .Include(x => x.MediaItems)
-            .Where(x => x.IsActive && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now)), includeDebug);
+            .Where(x => x.IsActive
+                && x.Status != PublicationStatus.Sold
+                && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now)), includeDebug);
 
         if (group is not null)
         {
