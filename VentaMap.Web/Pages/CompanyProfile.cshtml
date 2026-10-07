@@ -135,21 +135,47 @@ else
                         <span>Mail a: @company.Email</span>
                     </a>
                 }
-                @foreach (var contact in companyContacts)
+                @for (var contactIndex = 0; contactIndex < companyContacts.Count; contactIndex++)
                 {
+                    var contact = companyContacts[contactIndex];
                     var contactDigits = new string(contact.Phone.Where(char.IsDigit).ToArray());
                     var contactLabel = string.IsNullOrWhiteSpace(contact.Name) ? string.Empty : $" a {contact.Name}";
-                    <a class="company-contact-pill is-phone" href="tel:@contact.Phone">
+                    var extraContactClass = contactIndex > 0 ? " company-contact-extra" : string.Empty;
+                    <a class="@($"company-contact-pill is-phone{extraContactClass}")" href="tel:@contact.Phone">
                         <i class="fa-solid fa-phone-volume" aria-hidden="true"></i>
                         <span>Llamar@(contactLabel): @contact.Phone</span>
                     </a>
                     @if (!string.IsNullOrWhiteSpace(contactDigits))
                     {
-                        <a class="company-contact-pill is-whatsapp" href="https://web.whatsapp.com/send?phone=@contactDigits" data-whatsapp-number="@contactDigits" target="_blank" rel="noopener noreferrer">
+                        <a class="@($"company-contact-pill is-whatsapp{extraContactClass}")" href="https://web.whatsapp.com/send?phone=@contactDigits" data-whatsapp-number="@contactDigits" target="_blank" rel="noopener noreferrer">
                             <i class="fa-brands fa-whatsapp" aria-hidden="true"></i>
                             <span>Whatsapp@(contactLabel): @contact.Phone</span>
                         </a>
                     }
+                }
+                @if (companyContacts.Count > 1)
+                {
+                    <details class="company-mobile-extra-contacts">
+                        <summary>Ver más contactos</summary>
+                        <div class="company-mobile-extra-contacts-list">
+                            @foreach (var contact in companyContacts.Skip(1))
+                            {
+                                var contactDigits = new string(contact.Phone.Where(char.IsDigit).ToArray());
+                                var contactLabel = string.IsNullOrWhiteSpace(contact.Name) ? string.Empty : $" a {contact.Name}";
+                                <a class="company-contact-pill is-phone" href="tel:@contact.Phone">
+                                    <i class="fa-solid fa-phone-volume" aria-hidden="true"></i>
+                                    <span>Llamar@(contactLabel): @contact.Phone</span>
+                                </a>
+                                @if (!string.IsNullOrWhiteSpace(contactDigits))
+                                {
+                                    <a class="company-contact-pill is-whatsapp" href="https://web.whatsapp.com/send?phone=@contactDigits" data-whatsapp-number="@contactDigits" target="_blank" rel="noopener noreferrer">
+                                        <i class="fa-brands fa-whatsapp" aria-hidden="true"></i>
+                                        <span>Whatsapp@(contactLabel): @contact.Phone</span>
+                                    </a>
+                                }
+                            }
+                        </div>
+                    </details>
                 }
             </div>
         </div>
@@ -284,24 +310,6 @@ else
                             <span>Publicado: @publication.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy")</span>
                         </div>
                         <div class="publication-admin-actions">
-                            @if (company.AllowsSiteChat && publication.UserId.HasValue && publication.UserId.Value != currentViewerUserId)
-                            {
-                                if (isAuthenticated)
-                                {
-                                    <button type="button"
-                                            class="primary-pill"
-                                            data-start-chat="true"
-                                            data-publication-id="@publication.Id">
-                                        Chatear en VentaMap
-                                    </button>
-                                }
-                                else
-                                {
-                                    <a class="primary-pill" href="/Account/Login?returnUrl=@companyCatalogReturnUrl">
-                                        Chatear en VentaMap
-                                    </a>
-                                }
-                            }
                             <a class="primary-pill publication-preview-trigger"
                                href="@detailUrl"
                                data-publication-id="@publication.Id"
@@ -411,19 +419,6 @@ else
                     .replaceAll("'", "&#39;");
 
                 function buildCompanyCatalogChatAction(item) {
-                    const chatMode = String(item?.chatMode || "").trim().toLowerCase();
-                    if (!chatMode) {
-                        return "";
-                    }
-
-                    if (chatMode === "button") {
-                        return `<button type="button" class="primary-pill compact" data-start-chat="true" data-publication-id="${escapeHtml(item?.id || "")}">Chatear en VentaMap</button>`;
-                    }
-
-                    if (chatMode === "login") {
-                        return `<a class="primary-pill compact" href="${escapeHtml(item?.chatLoginUrl || "/Account/Login")}">Chatear en VentaMap</a>`;
-                    }
-
                     return "";
                 }
 

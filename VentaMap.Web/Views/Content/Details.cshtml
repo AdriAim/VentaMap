@@ -327,7 +327,7 @@ else
                     {
                         @foreach (var contact in companyExtraContacts)
                         {
-                            <a class="call-link" href="tel:@contact.Phone">
+                            <a class="call-link detail-contact-extra" href="tel:@contact.Phone">
                                 <span class="call-mark" aria-hidden="true"><i class="fa-solid fa-phone-volume"></i></span>
                                 <span class="detail-contact-label">Llamar a @(string.IsNullOrWhiteSpace(contact.Name) ? "contacto" : contact.Name): @contact.Phone</span>
                             </a>
@@ -351,12 +351,41 @@ else
                             var extraWhatsappNumber = NormalizeWhatsAppNumber(contact.Phone ?? string.Empty);
                             if (!string.IsNullOrWhiteSpace(extraWhatsappNumber))
                             {
-                                <a class="whatsapp-link" href="https://web.whatsapp.com/send?phone=@extraWhatsappNumber" data-whatsapp-number="@extraWhatsappNumber" target="_blank" rel="noopener noreferrer">
+                                <a class="whatsapp-link detail-contact-extra" href="https://web.whatsapp.com/send?phone=@extraWhatsappNumber" data-whatsapp-number="@extraWhatsappNumber" target="_blank" rel="noopener noreferrer">
                                     <span class="whatsapp-mark" aria-hidden="true"><i class="fa-brands fa-whatsapp"></i></span>
                                     <span class="detail-contact-label">Whatsapp de @(string.IsNullOrWhiteSpace(contact.Name) ? "contacto" : contact.Name): @contact.Phone</span>
                                 </a>
                             }
                         }
+                    }
+                    @if (companyExtraContacts.Count > 0 && (canCall || canWhatsApp))
+                    {
+                        <details class="detail-mobile-extra-contacts">
+                            <summary>Ver más contactos</summary>
+                            <div class="detail-mobile-extra-contacts-list">
+                                @foreach (var contact in companyExtraContacts)
+                                {
+                                    @if (canCall)
+                                    {
+                                        <a class="call-link" href="tel:@contact.Phone">
+                                            <span class="call-mark" aria-hidden="true"><i class="fa-solid fa-phone-volume"></i></span>
+                                            <span class="detail-contact-label">Llamar a @(string.IsNullOrWhiteSpace(contact.Name) ? "contacto" : contact.Name): @contact.Phone</span>
+                                        </a>
+                                    }
+                                    @if (canWhatsApp)
+                                    {
+                                        var extraWhatsappNumber = NormalizeWhatsAppNumber(contact.Phone ?? string.Empty);
+                                        if (!string.IsNullOrWhiteSpace(extraWhatsappNumber))
+                                        {
+                                            <a class="whatsapp-link" href="https://web.whatsapp.com/send?phone=@extraWhatsappNumber" data-whatsapp-number="@extraWhatsappNumber" target="_blank" rel="noopener noreferrer">
+                                                <span class="whatsapp-mark" aria-hidden="true"><i class="fa-brands fa-whatsapp"></i></span>
+                                                <span class="detail-contact-label">Whatsapp de @(string.IsNullOrWhiteSpace(contact.Name) ? "contacto" : contact.Name): @contact.Phone</span>
+                                            </a>
+                                        }
+                                    }
+                                }
+                            </div>
+                        </details>
                     }
                 </div>
             }

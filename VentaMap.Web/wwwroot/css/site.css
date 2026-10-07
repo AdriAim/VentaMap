@@ -4518,13 +4518,48 @@ textarea:focus {
   color: #334b72;
 }
 
+.company-mobile-extra-contacts {
+  display: none;
+}
+
 @media (max-width: 780px) {
   .company-hero-contact {
     grid-template-columns: 1fr;
+    gap: 0.72rem;
   }
 
   .company-contact-pill.is-email {
     grid-column: auto;
+  }
+
+  .company-contact-extra {
+    display: none;
+  }
+
+  .company-mobile-extra-contacts {
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .company-mobile-extra-contacts summary {
+    min-height: 2.8rem;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.65rem 1.05rem;
+    border: 1px solid rgba(108, 126, 150, 0.25);
+    border-radius: 999px;
+    background: rgba(239, 242, 246, 0.82);
+    color: #334b72;
+    font-size: 0.85rem;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .company-mobile-extra-contacts-list {
+    display: grid;
+    gap: 0.72rem;
+    margin-top: 0.72rem;
   }
 }
 
@@ -4543,7 +4578,7 @@ textarea:focus {
   max-width: 100%;
   padding: 0.55rem 0.8rem;
   border-radius: 16px;
-  background: rgba(255, 253, 252, 0.76);
+  background: rgba(255, 253, 252, 0.96);
   box-shadow: 0 10px 26px rgba(15, 25, 38, 0.1);
 }
 
@@ -6181,6 +6216,37 @@ textarea:focus {
   text-align: center;
 }
 
+.detail-mobile-extra-contacts {
+  display: block;
+  grid-column: 1 / -1;
+}
+
+.detail-contact-extra {
+  display: none;
+}
+
+.detail-mobile-extra-contacts summary {
+  width: fit-content;
+  min-height: 2.8rem;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.65rem 1.05rem;
+  border: 1px solid rgba(108, 126, 150, 0.25);
+  border-radius: 999px;
+  background: rgba(239, 242, 246, 0.82);
+  color: #334b72;
+  font-size: 0.85rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.detail-mobile-extra-contacts-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin-top: 0.9rem;
+}
+
 .detail-contact-label {
   min-width: 0;
   max-width: calc(100% - 2.25rem);
@@ -6291,6 +6357,7 @@ textarea:focus {
   margin: 0 0 1rem;
   display: grid;
   gap: 0.7rem;
+  width: calc((100% - 1.8rem) / 3);
   min-width: 0;
 }
 
@@ -6300,6 +6367,10 @@ textarea:focus {
 }
 
 @media (max-width: 780px) {
+  .detail-contact-chat {
+    width: 100%;
+  }
+
   .detail-contact-chat .detail-contact-label {
     max-width: 100%;
     overflow: visible;
@@ -6309,6 +6380,34 @@ textarea:focus {
   }
 
   .detail-contact-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-contact-extra {
+    display: none;
+  }
+
+  .detail-mobile-extra-contacts {
+    display: block;
+    grid-column: 1 / -1;
+  }
+
+  .detail-mobile-extra-contacts summary {
+    width: fit-content;
+    min-height: 2.8rem;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.65rem 1.05rem;
+    border: 1px solid rgba(108, 126, 150, 0.25);
+    border-radius: 999px;
+    background: rgba(239, 242, 246, 0.82);
+    color: #334b72;
+    font-size: 0.85rem;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .detail-mobile-extra-contacts-list {
     grid-template-columns: 1fr;
   }
 
