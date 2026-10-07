@@ -24,10 +24,19 @@
         <a class="primary-pill" asp-page="/Publications/Create">Crear anuncio</a>
         @if (Model.IsCompany && !string.IsNullOrWhiteSpace(Model.CompanyPublicUrl))
         {
+            <label class="company-catalog-share-mode">
+                <span>Compartir como</span>
+                <select data-company-catalog-share-view aria-label="Modo del catálogo a compartir">
+                    <option value="list">Lista</option>
+                    <option value="gallery">Galería</option>
+                    <option value="map">Mapa</option>
+                </select>
+            </label>
             <button type="button"
                     class="ghost-pill publication-share-link"
                     data-copy-publication-link="true"
                     data-copy-label="Copiar link para compartir"
+                    data-copy-view-selector="[data-company-catalog-share-view]"
                     data-copy-url="@Model.CompanyPublicUrl">
                 <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
                 <span>Copiar link para compartir</span>
@@ -582,7 +591,18 @@ else
                     return;
                 }
 
-                const absoluteUrl = new URL(rawUrl, window.location.origin).toString();
+                const url = new URL(rawUrl, window.location.origin);
+                const viewSelector = button.getAttribute("data-copy-view-selector");
+                const selectedView = viewSelector
+                    ? document.querySelector(viewSelector)?.value
+                    : "";
+                if (["gallery", "map"].includes(selectedView)) {
+                    url.searchParams.set("view", selectedView);
+                } else {
+                    url.searchParams.delete("view");
+                }
+
+                const absoluteUrl = url.toString();
                 const originalLabel = button.getAttribute("data-copy-label") || "Copiar link para compartir";
 
                 const setLabel = (text) => {

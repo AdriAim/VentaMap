@@ -7,6 +7,7 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
 {
     public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
     public DbSet<Publication> Publications => Set<Publication>();
+    public DbSet<PublicationCreationDevice> PublicationCreationDevices => Set<PublicationCreationDevice>();
     public DbSet<PublicationRepublication> PublicationRepublications => Set<PublicationRepublication>();
     public DbSet<PublicationMedia> PublicationMedia => Set<PublicationMedia>();
     public DbSet<ArgentineLocality> ArgentineLocalities => Set<ArgentineLocality>();
@@ -149,6 +150,12 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
             .HasOne(x => x.User)
             .WithMany(x => x.Publications)
             .HasForeignKey(x => x.UserId);
+
+        modelBuilder.Entity<PublicationCreationDevice>()
+            .HasOne(x => x.Publication)
+            .WithOne(x => x.CreationDevice)
+            .HasForeignKey<PublicationCreationDevice>(x => x.PublicationId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<Publication>()
             .Property(x => x.Price)

@@ -82,6 +82,7 @@ public class Publication
     public List<PublicationFavorite> Favorites { get; set; } = [];
     public List<PublicationView> Views { get; set; } = [];
     public List<VerifiedOperation> VerifiedOperations { get; set; } = [];
+    public PublicationCreationDevice? CreationDevice { get; set; }
 
     public IReadOnlyList<string> ImageList
     {

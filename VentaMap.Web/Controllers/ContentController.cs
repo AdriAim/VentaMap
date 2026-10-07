@@ -1081,9 +1081,10 @@ public partial class ContentController(
         }
 
         var needsPersonPack = await billingService.IsPersonPublicationPackRequiredAsync(user, request);
+        var creationDevice = GetPublicationCreationDevice(Request.Headers.UserAgent.ToString());
         if (needsPersonPack)
         {
-            var pendingResult = await publicationService.CreateAsync(request, user.Id, PublicationStatus.PendingPayment);
+            var pendingResult = await publicationService.CreateAsync(request, user.Id, PublicationStatus.PendingPayment, creationDevice);
             var charge = await billingService.RequirePersonPublicationPackAsync(user, request, pendingResult.Publication.Id);
             if (charge is not null)
             {
@@ -1114,7 +1115,7 @@ public partial class ContentController(
         (Publication Publication, string? AnonymousPassword) result;
         try
         {
-            result = await publicationService.CreateAsync(request, user.Id);
+            result = await publicationService.CreateAsync(request, user.Id, PublicationStatus.Active, creationDevice);
         }
         catch (Exception ex)
         {
@@ -1368,6 +1369,40 @@ public partial class ContentController(
         });
 
         return newValue;
+    }
+
+    private static PublicationCreationDevice GetPublicationCreationDevice(string? userAgent)
+    {
+        var value = userAgent ?? string.Empty;
+        var deviceType = value.Contains("iPad", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("Tablet", StringComparison.OrdinalIgnoreCase)
+            ? "Tablet"
+            : value.Contains("Mobi", StringComparison.OrdinalIgnoreCase)
+                || value.Contains("Android", StringComparison.OrdinalIgnoreCase)
+                || value.Contains("iPhone", StringComparison.OrdinalIgnoreCase)
+                ? "Mobile"
+                : string.IsNullOrWhiteSpace(value) ? "Unknown" : "Desktop";
+
+        var operatingSystem = value.Contains("Android", StringComparison.OrdinalIgnoreCase) ? "Android"
+            : value.Contains("iPhone", StringComparison.OrdinalIgnoreCase) || value.Contains("iPad", StringComparison.OrdinalIgnoreCase) ? "iOS"
+            : value.Contains("Windows", StringComparison.OrdinalIgnoreCase) ? "Windows"
+            : value.Contains("Mac OS", StringComparison.OrdinalIgnoreCase) ? "macOS"
+            : value.Contains("Linux", StringComparison.OrdinalIgnoreCase) ? "Linux"
+            : null;
+
+        var browser = value.Contains("Edg/", StringComparison.OrdinalIgnoreCase) ? "Edge"
+            : value.Contains("OPR/", StringComparison.OrdinalIgnoreCase) ? "Opera"
+            : value.Contains("Firefox/", StringComparison.OrdinalIgnoreCase) ? "Firefox"
+            : value.Contains("Chrome/", StringComparison.OrdinalIgnoreCase) ? "Chrome"
+            : value.Contains("Safari/", StringComparison.OrdinalIgnoreCase) ? "Safari"
+            : null;
+
+        return new PublicationCreationDevice
+        {
+            DeviceType = deviceType,
+            OperatingSystem = operatingSystem,
+            Browser = browser
+        };
     }
 
     private async Task<List<object>> ValidateCreateRequestAsync(CreatePublicationApiRequest request)

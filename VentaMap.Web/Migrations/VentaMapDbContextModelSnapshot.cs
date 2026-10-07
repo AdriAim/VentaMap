@@ -62,6 +62,26 @@ namespace VentaMap.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("varchar(120)");
 
+                    b.Property<string>("CompanyContactName")
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<string>("CompanyContactName2")
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<string>("CompanyContactPhone2")
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("CompanyContactName3")
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<string>("CompanyContactPhone3")
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
                     b.Property<string>("CompanyLogoUrl")
                         .HasMaxLength(260)
                         .HasColumnType("varchar(260)");
@@ -572,6 +592,41 @@ namespace VentaMap.Migrations
                     b.ToTable("Publications");
                 });
 
+            modelBuilder.Entity("VentaMap.Models.PublicationCreationDevice", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Browser")
+                        .HasMaxLength(40)
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<DateTime>("CapturedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("DeviceType")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("varchar(24)");
+
+                    b.Property<string>("OperatingSystem")
+                        .HasMaxLength(40)
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<int>("PublicationId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PublicationId")
+                        .IsUnique();
+
+                    b.ToTable("PublicationCreationDevices");
+                });
+
             modelBuilder.Entity("VentaMap.Models.PublicationCategory", b =>
                 {
                     b.Property<int>("Id")
@@ -893,6 +948,17 @@ namespace VentaMap.Migrations
                     b.HasIndex("RepublishedAtUtc");
 
                     b.ToTable("PublicationRepublications");
+                });
+
+            modelBuilder.Entity("VentaMap.Models.PublicationCreationDevice", b =>
+                {
+                    b.HasOne("VentaMap.Models.Publication", "Publication")
+                        .WithOne("CreationDevice")
+                        .HasForeignKey("VentaMap.Models.PublicationCreationDevice", "PublicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Publication");
                 });
 
             modelBuilder.Entity("VentaMap.Models.PublicationView", b =>
@@ -1503,6 +1569,8 @@ namespace VentaMap.Migrations
 
             modelBuilder.Entity("VentaMap.Models.Publication", b =>
                 {
+                    b.Navigation("CreationDevice");
+
                     b.Navigation("FavoriteListItems");
 
                     b.Navigation("Favorites");

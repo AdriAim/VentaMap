@@ -35,6 +35,21 @@ public class ApplicationUser
     [StringLength(32)]
     public string Phone { get; set; } = string.Empty;
 
+    [StringLength(120)]
+    public string? CompanyContactName { get; set; }
+
+    [StringLength(120)]
+    public string? CompanyContactName2 { get; set; }
+
+    [StringLength(32)]
+    public string? CompanyContactPhone2 { get; set; }
+
+    [StringLength(120)]
+    public string? CompanyContactName3 { get; set; }
+
+    [StringLength(32)]
+    public string? CompanyContactPhone3 { get; set; }
+
     public bool RespondsEmails { get; set; }
 
     public bool AcceptsCalls { get; set; }

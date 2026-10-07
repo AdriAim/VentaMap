@@ -76,6 +76,49 @@
                     <span asp-validation-for="Input.CompanyTagline" class="text-danger"></span>
                 </label>
 
+                <section class="settings-company-contacts">
+                    <div class="settings-company-heading">
+                        <span class="eyebrow">Contactos</span>
+                        <h2>Personas que atienden</h2>
+                        <p>Podés publicar hasta tres teléfonos de atención.</p>
+                    </div>
+                    <div class="form-grid company-contact-primary-row">
+                        <label>
+                            <span>Contacto principal</span>
+                            <input asp-for="Input.CompanyContactName" maxlength="120" placeholder="Ejemplo: Lucía Gómez" />
+                            <span asp-validation-for="Input.CompanyContactName" class="text-danger"></span>
+                        </label>
+                        <label>
+                            <span>Teléfono principal</span>
+                            <input asp-for="Input.Phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="32" placeholder="Ejemplo: 3415551200" />
+                            <input asp-for="Input.PhoneCountry" type="hidden" value="INT" />
+                            <span asp-validation-for="Input.Phone" class="text-danger"></span>
+                        </label>
+                    </div>
+                    <div class="form-grid company-contact-optional-row">
+                        <label>
+                            <span>Contacto 2: nombre (opcional)</span>
+                            <input asp-for="Input.CompanyContactName2" maxlength="120" placeholder="Ejemplo: Martín Pérez" />
+                            <span asp-validation-for="Input.CompanyContactName2" class="text-danger"></span>
+                        </label>
+                        <label>
+                            <span>Contacto 2: teléfono (opcional)</span>
+                            <input asp-for="Input.CompanyContactPhone2" type="tel" inputmode="tel" maxlength="32" placeholder="+54 9 3424566654" />
+                            <span asp-validation-for="Input.CompanyContactPhone2" class="text-danger"></span>
+                        </label>
+                        <label>
+                            <span>Contacto 3: nombre (opcional)</span>
+                            <input asp-for="Input.CompanyContactName3" maxlength="120" placeholder="Ejemplo: Ana Díaz" />
+                            <span asp-validation-for="Input.CompanyContactName3" class="text-danger"></span>
+                        </label>
+                        <label>
+                            <span>Contacto 3: teléfono (opcional)</span>
+                            <input asp-for="Input.CompanyContactPhone3" type="tel" inputmode="tel" maxlength="32" placeholder="+54 9 3424566654" />
+                            <span asp-validation-for="Input.CompanyContactPhone3" class="text-danger"></span>
+                        </label>
+                    </div>
+                </section>
+
                 <div class="settings-company-media-grid">
                     <label>
                         <span>Logo</span>
@@ -112,18 +155,21 @@
             </section>
         }
 
-        <label>
-            <span>Telefono de contacto</span>
-            <div class="phone-inline">
-                <select asp-for="Input.PhoneCountry" data-phone-country>
-                    <option value="AR">Argentina</option>
-                    <option value="INT">Internacional</option>
-                </select>
-                <input asp-for="Input.Phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+54 9 3424566654" data-phone-mask="ar" />
-            </div>
-            <span class="field-hint">Argentina: +54 9 seguido de 9, 10 u 11 digitos.</span>
-            <span asp-validation-for="Input.Phone" class="text-danger"></span>
-        </label>
+        @if (!Model.IsCompany)
+        {
+            <label>
+                <span>Telefono de contacto</span>
+                <div class="phone-inline">
+                    <select asp-for="Input.PhoneCountry" data-phone-country>
+                        <option value="AR">Argentina</option>
+                        <option value="INT">Internacional</option>
+                    </select>
+                    <input asp-for="Input.Phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+54 9 3424566654" data-phone-mask="ar" />
+                </div>
+                <span class="field-hint">Argentina: +54 9 seguido de 9, 10 u 11 digitos.</span>
+                <span asp-validation-for="Input.Phone" class="text-danger"></span>
+            </label>
+        }
 
         <div class="inline-checks contact-settings-checks">
             <label class="checkline compact-check">

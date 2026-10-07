@@ -38,12 +38,14 @@ else
     var companyHeaderBackgroundStyle = !string.IsNullOrWhiteSpace(company.CompanyHeroBackgroundUrl)
         ? $"--company-profile-cover-image: url('{company.CompanyHeroBackgroundUrl}');"
         : string.Empty;
-    var companyPhoneDigits = string.IsNullOrWhiteSpace(company.Phone)
-        ? string.Empty
-        : new string(company.Phone.Where(char.IsDigit).ToArray());
-    var companyWhatsAppUrl = string.IsNullOrWhiteSpace(companyPhoneDigits)
-        ? string.Empty
-        : $"https://web.whatsapp.com/send?phone={companyPhoneDigits}";
+    var companyContacts = new[]
+    {
+        new { Name = company.CompanyContactName, Phone = company.Phone },
+        new { Name = company.CompanyContactName2, Phone = company.CompanyContactPhone2 ?? string.Empty },
+        new { Name = company.CompanyContactName3, Phone = company.CompanyContactPhone3 ?? string.Empty }
+    }
+    .Where(contact => !string.IsNullOrWhiteSpace(contact.Phone))
+    .ToList();
     var galleryItems = Model.Publications
         .Select(publication => new
         {
@@ -101,7 +103,7 @@ else
         })
         .ToList();
 
-    <section class="company-hero">
+    <section class="company-hero" data-company-profile-cover-part="hero">
         <div class="company-hero-card" style="@companyHeaderBackgroundStyle">
             <div class="company-hero-brand">
                 @if (!string.IsNullOrWhiteSpace(company.CompanyLogoUrl))
@@ -120,7 +122,7 @@ else
                     }
                     @if (!string.IsNullOrWhiteSpace(company.CompanyTagline))
                     {
-                        <p>@company.CompanyTagline</p>
+                        <p class="company-hero-tagline">@company.CompanyTagline</p>
                     }
                 </div>
             </div>
@@ -133,19 +135,21 @@ else
                         <span>Mail a: @company.Email</span>
                     </a>
                 }
-                @if (!string.IsNullOrWhiteSpace(company.Phone))
+                @foreach (var contact in companyContacts)
                 {
-                    <a class="company-contact-pill is-phone" href="tel:@company.Phone">
+                    var contactDigits = new string(contact.Phone.Where(char.IsDigit).ToArray());
+                    var contactLabel = string.IsNullOrWhiteSpace(contact.Name) ? string.Empty : $" a {contact.Name}";
+                    <a class="company-contact-pill is-phone" href="tel:@contact.Phone">
                         <i class="fa-solid fa-phone-volume" aria-hidden="true"></i>
-                        <span>Llamar: @company.Phone</span>
+                        <span>Llamar@(contactLabel): @contact.Phone</span>
                     </a>
-                }
-                @if (!string.IsNullOrWhiteSpace(companyWhatsAppUrl))
-                {
-                    <a class="company-contact-pill is-whatsapp" href="@companyWhatsAppUrl" data-whatsapp-number="@companyPhoneDigits" target="_blank" rel="noopener noreferrer">
-                        <i class="fa-brands fa-whatsapp" aria-hidden="true"></i>
-                        <span>Whatsapp: @company.Phone</span>
-                    </a>
+                    @if (!string.IsNullOrWhiteSpace(contactDigits))
+                    {
+                        <a class="company-contact-pill is-whatsapp" href="https://web.whatsapp.com/send?phone=@contactDigits" data-whatsapp-number="@contactDigits" target="_blank" rel="noopener noreferrer">
+                            <i class="fa-brands fa-whatsapp" aria-hidden="true"></i>
+                            <span>Whatsapp@(contactLabel): @contact.Phone</span>
+                        </a>
+                    }
                 }
             </div>
         </div>
@@ -154,6 +158,7 @@ else
     <section class="favorites-strip favorites-page-strip company-publications-strip"
              data-company-catalog-anchor="true"
              data-company-catalog-toolbar="true"
+             data-company-profile-cover-part="catalog"
              style="@companyHeaderBackgroundStyle">
         <div class="favorites-strip-copy">
             <span class="eyebrow">Catalogo</span>
@@ -188,7 +193,7 @@ else
     @if (!Model.Publications.Any())
     {
         <section class="empty-state">
-            <h2>Esta empresa todavia no publico anuncios activos.</h2>
+            <h2>Esta empresa todavía no tiene anuncios activos.</h2>
             <p>Cuando publique nuevos avisos, apareceran listados aqui.</p>
         </section>
     }
@@ -315,6 +320,54 @@ else
     @section Scripts {
         <script>
             (() => {
+                const coverHero = document.querySelector("[data-company-profile-cover-part='hero']");
+                const coverCatalog = document.querySelector("[data-company-profile-cover-part='catalog']");
+
+                // The two cards show consecutive portions of the same cover instead
+                // of each independently cropping (and repeating) the photo.
+                const syncCompanyCover = () => {
+                    if (!coverHero || !coverCatalog) return;
+
+                    const imageValue = coverHero.querySelector(".company-hero-card")?.style
+                        .getPropertyValue("--company-profile-cover-image") || "";
+                    const imageUrl = imageValue.match(/url\(['"]?(.+?)['"]?\)/i)?.[1];
+                    if (!imageUrl) return;
+
+                    const image = new Image();
+                    image.onload = () => {
+                        const heroRect = coverHero.getBoundingClientRect();
+                        const catalogRect = coverCatalog.getBoundingClientRect();
+                        const left = Math.min(heroRect.left, catalogRect.left);
+                        const top = Math.min(heroRect.top, catalogRect.top);
+                        const right = Math.max(heroRect.right, catalogRect.right);
+                        const bottom = Math.max(heroRect.bottom, catalogRect.bottom);
+                        const width = right - left;
+                        const height = bottom - top;
+                        if (!width || !height || !image.naturalWidth || !image.naturalHeight) return;
+
+                        const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+                        const renderedWidth = image.naturalWidth * scale;
+                        const renderedHeight = image.naturalHeight * scale;
+                        const baseX = (width - renderedWidth) / 2;
+                        const baseY = (height - renderedHeight) / 2;
+
+                        [coverHero, coverCatalog].forEach(part => {
+                            const rect = part.getBoundingClientRect();
+                            part.style.setProperty("--company-profile-cover-size", `${renderedWidth}px ${renderedHeight}px`);
+                            part.style.setProperty("--company-profile-cover-position", `${baseX - (rect.left - left)}px ${baseY - (rect.top - top)}px`);
+                        });
+                    };
+                    image.src = imageUrl;
+                };
+
+                if (coverHero && coverCatalog && "ResizeObserver" in window) {
+                    const coverObserver = new ResizeObserver(syncCompanyCover);
+                    coverObserver.observe(coverHero);
+                    coverObserver.observe(coverCatalog);
+                }
+                window.addEventListener("resize", syncCompanyCover, { passive: true });
+                syncCompanyCover();
+
                 const toolbar = document.querySelector("[data-company-catalog-toolbar='true']");
                 if (!toolbar) return;
 
@@ -799,6 +852,8 @@ else
 
                     map = new window.maplibregl.Map({
                         container: mapCanvas,
+                        cooperativeGestures: window.matchMedia?.("(max-width: 780px)")?.matches
+                            || window.matchMedia?.("(pointer: coarse)")?.matches,
                         style: mapStyleUrl || {
                             version: 8,
                             sources: {
@@ -852,7 +907,11 @@ else
                 });
 
                 applyFilter();
-                setView(window.matchMedia("(max-width: 780px)").matches ? "gallery" : "list");
+                const requestedView = new URLSearchParams(window.location.search).get("view")?.trim().toLowerCase();
+                const initialView = ["list", "gallery", "map"].includes(requestedView)
+                    ? requestedView
+                    : window.matchMedia("(max-width: 780px)").matches ? "gallery" : "list";
+                setView(initialView);
             })();
         </script>
     }

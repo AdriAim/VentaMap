@@ -306,6 +306,11 @@ static async Task EnsureUserCompatibilityColumnsAsync(VentaMapDbContext db)
         await EnsureColumnAsync(connection, "Users", "IsDebugUser", "tinyint(1) NOT NULL DEFAULT 0");
         await EnsureColumnAsync(connection, "Users", "CanPublish", "tinyint(1) NOT NULL DEFAULT 1");
         await EnsureColumnAsync(connection, "Users", "CanReport", "tinyint(1) NOT NULL DEFAULT 1");
+        await EnsureColumnAsync(connection, "Users", "CompanyContactName", "varchar(120) CHARACTER SET utf8mb4 NULL");
+        await EnsureColumnAsync(connection, "Users", "CompanyContactName2", "varchar(120) CHARACTER SET utf8mb4 NULL");
+        await EnsureColumnAsync(connection, "Users", "CompanyContactPhone2", "varchar(32) CHARACTER SET utf8mb4 NULL");
+        await EnsureColumnAsync(connection, "Users", "CompanyContactName3", "varchar(120) CHARACTER SET utf8mb4 NULL");
+        await EnsureColumnAsync(connection, "Users", "CompanyContactPhone3", "varchar(32) CHARACTER SET utf8mb4 NULL");
     }
     finally
     {
@@ -734,7 +739,7 @@ static async Task EnsureCompanyAndSuggestionsSchemaAsync(System.Data.Common.DbCo
         INSERT IGNORE INTO `CompanyIndustries` (`Name`, `IsActive`, `SortOrder`) VALUES
             ('Inmobiliaria', 1, 10), ('Constructora', 1, 20), ('Aberturas', 1, 30),
             ('Corralon', 1, 40), ('Ferreteria', 1, 50), ('Materiales de construcción', 1, 60),
-            ('Rodados', 1, 70), ('Muebles y decoración', 1, 80), ('Servicios', 1, 90), ('Otro', 1, 100);
+            ('Rodados', 1, 70), ('Broker Náutico', 1, 75), ('Muebles y decoración', 1, 80), ('Servicios', 1, 90), ('Otro', 1, 100);
         """);
     await EnsureColumnAsync(connection, "Users", "CompanyHeroBackgroundUrl", "varchar(260) CHARACTER SET utf8mb4 NULL");
     await EnsureColumnAsync(connection, "Users", "CompanyLogoUrl", "varchar(260) CHARACTER SET utf8mb4 NULL");

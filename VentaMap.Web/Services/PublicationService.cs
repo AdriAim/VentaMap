@@ -224,7 +224,8 @@ public class PublicationService(
     public async Task<(Publication Publication, string? AnonymousPassword)> CreateAsync(
         PublicationCreateRequest input,
         int? userId,
-        PublicationStatus status = PublicationStatus.Active)
+        PublicationStatus status = PublicationStatus.Active,
+        PublicationCreationDevice? creationDevice = null)
     {
         var category = await db.PublicationCategories
             .AsNoTracking()
@@ -280,6 +281,11 @@ public class PublicationService(
         foreach (var fieldValue in BuildDynamicFieldValues(input, categoryFields))
         {
             publication.FieldValues.Add(fieldValue);
+        }
+
+        if (creationDevice is not null)
+        {
+            publication.CreationDevice = creationDevice;
         }
 
         db.Publications.Add(publication);

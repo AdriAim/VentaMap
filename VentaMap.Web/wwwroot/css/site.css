@@ -3766,6 +3766,14 @@ textarea:focus {
   background: rgba(255, 178, 62, 0.22);
 }
 
+.account-created-banner {
+  border-color: rgba(43, 137, 80, 0.5);
+  background: linear-gradient(135deg, rgba(142, 216, 160, 0.58), rgba(255, 253, 252, 0.96));
+  color: #174d2e;
+  font-weight: 800;
+  box-shadow: 0 18px 42px rgba(43, 137, 80, 0.2);
+}
+
 .contact-success-banner {
   border-color: rgba(255, 75, 95, 0.34);
   background: linear-gradient(135deg, rgba(255, 75, 95, 0.16), rgba(255, 178, 62, 0.2));
@@ -4092,7 +4100,7 @@ textarea:focus {
 }
 
 .company-hero {
-  margin-bottom: 1.4rem;
+  margin-bottom: 0;
 }
 
 .company-catalog-toolbar {
@@ -4216,8 +4224,9 @@ textarea:focus {
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.38)),
     var(--company-profile-cover-image, radial-gradient(circle at top right, rgba(255, 214, 102, 0.2), transparent 28%));
-  background-size: cover;
-  background-position: center;
+  background-size: auto, var(--company-profile-cover-size, cover);
+  background-position: center, var(--company-profile-cover-position, center);
+  background-repeat: no-repeat;
   box-shadow: var(--shadow);
 }
 
@@ -4225,6 +4234,14 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 1rem;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.8rem 1rem 0.85rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  border-radius: 24px;
+  background: rgba(255, 253, 252, 0.78);
+  box-shadow: 0 14px 32px rgba(15, 25, 38, 0.14);
+  backdrop-filter: blur(10px);
 }
 
 .company-hero-platform {
@@ -4254,13 +4271,18 @@ textarea:focus {
 }
 
 .company-hero-logo {
-  width: 108px;
-  height: 108px;
-  border-radius: 28px;
-  object-fit: cover;
-  border: 1px solid var(--line);
+  width: 116px;
+  height: 116px;
+  border-radius: 22px;
+  object-fit: contain;
+  border: 1px solid rgba(20, 38, 64, 0.12);
   background: #fff;
-  padding: 0.35rem;
+  padding: 0.5rem;
+  filter: none;
+  opacity: 1;
+  mix-blend-mode: normal;
+  image-rendering: auto;
+  box-shadow: 0 10px 24px rgba(15, 25, 38, 0.12);
 }
 
 .company-hero-copy {
@@ -4270,6 +4292,10 @@ textarea:focus {
 
 .company-hero-copy h1 {
   margin: 0;
+  color: #142640;
+  font-size: clamp(1.65rem, 3vw, 2.3rem);
+  line-height: 1;
+  letter-spacing: -0.045em;
 }
 
 .company-hero-industry {
@@ -4281,7 +4307,17 @@ textarea:focus {
 
 .company-hero-copy p {
   margin: 0;
-  color: var(--muted);
+  color: #40516b;
+  font-weight: 650;
+}
+
+.company-hero-copy .company-hero-tagline {
+  font-family: var(--ui-serif);
+  font-size: clamp(1.2rem, 2vw, 1.48rem);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.018em;
+  color: #263b5a;
 }
 
 .settings-company-shell {
@@ -4307,6 +4343,27 @@ textarea:focus {
 
 .settings-company-heading p {
   color: var(--muted);
+}
+
+.settings-company-contacts {
+  display: grid;
+  gap: 0.9rem;
+  padding-top: 0.15rem;
+}
+
+.company-contact-primary-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.company-contact-optional-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 780px) {
+  .company-contact-primary-row,
+  .company-contact-optional-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .settings-company-media-grid {
@@ -4472,12 +4529,26 @@ textarea:focus {
 }
 
 .company-publications-strip {
-  margin-top: 1.5rem;
+  margin-top: 0;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.38)),
     var(--company-profile-cover-image, radial-gradient(circle at top right, rgba(255, 214, 102, 0.2), transparent 28%));
-  background-size: cover;
-  background-position: center;
+  background-size: auto, var(--company-profile-cover-size, cover);
+  background-position: center, var(--company-profile-cover-position, center);
+  background-repeat: no-repeat;
+}
+
+.company-publications-strip .favorites-strip-copy {
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.55rem 0.8rem;
+  border-radius: 16px;
+  background: rgba(255, 253, 252, 0.76);
+  box-shadow: 0 10px 26px rgba(15, 25, 38, 0.1);
+}
+
+.company-publications-strip .favorites-strip-copy h2 {
+  color: #142640;
 }
 
 .company-publications-strip .favorites-strip-actions {
@@ -4486,6 +4557,25 @@ textarea:focus {
 
 .company-publications-strip .results-open-mode {
   margin-right: auto;
+}
+
+.company-catalog-share-mode {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.company-catalog-share-mode select {
+  appearance: auto;
+  border: 1px solid rgba(21, 40, 73, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  font: inherit;
+  padding: 0.58rem 0.8rem;
 }
 
 .register-row > label {
@@ -5905,8 +5995,17 @@ textarea:focus {
   aspect-ratio: 3 / 4;
   display: block;
   width: 100%;
-  height: 100%;
+  /*
+   * Safari can leave an asynchronously-decoded image blank when its 100%
+   * height is resolved inside the scrolling preview modal's CSS grid.  Let
+   * the aspect ratio establish the height instead.
+   */
+  height: auto;
   object-fit: cover;
+  /* The rounded border is enough here. clip-path promotes each image to a
+   * separate compositing layer on iOS and was the source of blank tiles. */
+  clip-path: none;
+  -webkit-clip-path: none;
   filter: none;
   opacity: 1;
   mix-blend-mode: normal;
@@ -6215,6 +6314,29 @@ textarea:focus {
 
   .detail-company-card {
     width: 100%;
+    display: grid;
+    grid-template-columns: 4rem minmax(0, 1fr);
+    align-items: start;
+    column-gap: 0.9rem;
+    row-gap: 0.45rem;
+  }
+
+  .detail-company-card-logo {
+    grid-row: 1 / span 2;
+  }
+
+  .detail-company-card-copy {
+    grid-column: 2;
+  }
+
+  .detail-company-card-copy strong {
+    overflow-wrap: anywhere;
+  }
+
+  .detail-company-card-action {
+    grid-column: 2;
+    margin-left: 0;
+    width: fit-content;
   }
 }
 

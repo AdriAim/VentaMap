@@ -3205,7 +3205,10 @@
       attributionControl: false,
       maxBounds: supportedMapBounds,
       center: hasInitialCenter ? [initialLng, initialLat] : [markers[0].lng, markers[0].lat],
-      zoom: mapMode === "detail" ? zoomOutLevel(17.5) : (hasInitialCenter ? zoomOutLevel(11) : 5)
+      zoom: mapMode === "detail" ? zoomOutLevel(17.5) : (hasInitialCenter ? zoomOutLevel(11) : 5),
+      // On phones, leave one-finger gestures to the page scroll. MapLibre
+      // keeps map navigation available through the standard two-finger gesture.
+      cooperativeGestures: isMobileMapInteractionContext()
     });
     addCompactAttributionControl(instance, sdk);
     const ensureInitialMapSize = () => {
@@ -7350,7 +7353,8 @@
           `);
           state.usingExpandedRadius = true;
         }
-        rail.insertAdjacentHTML("beforeend", items.map((item, index) => buildGalleryCard(item, state.offset + index === 0)).join(""));
+        const imageLoading = state.offset === 0 ? "eager" : "lazy";
+        rail.insertAdjacentHTML("beforeend", items.map((item, index) => buildGalleryCard(item, state.offset + index === 0, { imageLoading })).join(""));
         state.offset = Number(payload?.nextOffset ?? (state.offset + items.length));
         state.hasMore = Boolean(payload?.hasMore);
 
@@ -7563,6 +7567,7 @@
     const showReportButton = options.showReportButton !== false;
     const showFavoriteButton = options.showFavoriteButton !== false;
     const extraActionHtml = options.extraActionHtml || "";
+    const imageLoading = options.imageLoading === "eager" ? "eager" : "lazy";
     const images = Array.isArray(item?.images) && item.images.length
       ? item.images
       : ["/images/logo4.png"];
@@ -7586,7 +7591,7 @@
       <a href="${detailsUrl}" class="card-image-wrap gallery-card-with-caption publication-preview-trigger" data-publication-id="${publicationId}" data-details-url="${buildPublicationApiDetailsUrl(publicationId)}" data-images="${escapedImages.join("|||")}" data-video-url="${videoUrl}" data-media-index="0">
         ${videoUrl
           ? `<video src="${videoUrl}" class="gallery-carousel-video" preload="metadata" muted playsinline></video><button type="button" class="gallery-play-toggle gallery-tooltip-trigger gallery-tooltip-top" data-gallery-play-toggle="true" aria-label="Reproducir video" data-tooltip-label="Reproducir video"></button><button type="button" class="gallery-audio-toggle gallery-tooltip-trigger gallery-tooltip-side" data-gallery-audio-toggle="true" aria-label="Activar audio" data-tooltip-label="Activar audio"><i class="fa-solid fa-volume-xmark" aria-hidden="true"></i></button>`
-          : `<img src="${firstImage}" alt="${title}" class="gallery-carousel-image" loading="lazy" decoding="async" />`}
+          : `<img src="${firstImage}" alt="${title}" class="gallery-carousel-image" loading="${imageLoading}" decoding="async" />`}
         ${priceCluster}
         ${showReportButton ? `<button type="button" class="gallery-action-button gallery-report-overlay gallery-tooltip-trigger gallery-tooltip-side report-trigger" data-publication-id="${publicationId}" data-publication-code="${publicationCode}" data-publication-title="${title}" data-tooltip-label="Denunciar" aria-label="Denunciar ${title}"><span class="gallery-report-letter" aria-hidden="true">D</span></button>` : ""}
         ${navButtons}
@@ -8385,4 +8390,3 @@ document.addEventListener("keydown", event => {
     trigger?.blur();
   });
 });
-

@@ -79,13 +79,18 @@ public class SettingsModel(
             Input.ArgentineLocalityLabel = navigationLocality?.DisplayLabel ?? string.Empty;
         }
         Input.Phone = user.Phone;
-        Input.PhoneCountry = user.Phone.StartsWith("+54 9 ", StringComparison.Ordinal) ? "AR" : "INT";
+        Input.PhoneCountry = user.IsCompany ? "INT" : user.Phone.StartsWith("+54 9 ", StringComparison.Ordinal) ? "AR" : "INT";
         Input.PublishEmail = user.RespondsEmails;
         Input.AcceptsCalls = user.AcceptsCalls;
         Input.RespondsWhatsApp = user.RespondsWhatsApp;
         Input.AllowSiteChat = user.AllowsSiteChat;
         Input.MessageBubbleColor = NormalizeMessageBubbleColor(user.MessageBubbleColor);
         Input.CompanyTagline = user.CompanyTagline ?? string.Empty;
+        Input.CompanyContactName = user.CompanyContactName ?? string.Empty;
+        Input.CompanyContactName2 = user.CompanyContactName2 ?? string.Empty;
+        Input.CompanyContactPhone2 = user.CompanyContactPhone2 ?? string.Empty;
+        Input.CompanyContactName3 = user.CompanyContactName3 ?? string.Empty;
+        Input.CompanyContactPhone3 = user.CompanyContactPhone3 ?? string.Empty;
         Input.HeaderPublicationGroups = (await publicationGroupPreferenceService.GetHeaderGroupsAsync(HttpContext))
             .Select(x => x.Name).ToList();
         LoadCompanyState(user);
@@ -126,6 +131,12 @@ public class SettingsModel(
         if (user.IsCompany && string.IsNullOrWhiteSpace(Input.CompanyTagline))
         {
             ModelState.AddModelError($"{nameof(Input)}.{nameof(InputModel.CompanyTagline)}", "Ingresa un lema para la empresa.");
+        }
+
+        if (user.IsCompany)
+        {
+            ValidateAdditionalCompanyContact(Input.CompanyContactName2, Input.CompanyContactPhone2, "2");
+            ValidateAdditionalCompanyContact(Input.CompanyContactName3, Input.CompanyContactPhone3, "3");
         }
 
         if (!ModelState.IsValid)
@@ -179,6 +190,11 @@ public class SettingsModel(
         if (user.IsCompany)
         {
             user.CompanyTagline = Input.CompanyTagline?.Trim();
+            user.CompanyContactName = NullIfWhiteSpace(Input.CompanyContactName);
+            user.CompanyContactName2 = NullIfWhiteSpace(Input.CompanyContactName2);
+            user.CompanyContactPhone2 = NullIfWhiteSpace(Input.CompanyContactPhone2);
+            user.CompanyContactName3 = NullIfWhiteSpace(Input.CompanyContactName3);
+            user.CompanyContactPhone3 = NullIfWhiteSpace(Input.CompanyContactPhone3);
             user.CompanyLogoUrl = string.IsNullOrWhiteSpace(uploadedLogoUrl) ? null : uploadedLogoUrl.Trim();
             user.CompanyHeroBackgroundUrl = string.IsNullOrWhiteSpace(uploadedHeroBackgroundUrl) ? null : uploadedHeroBackgroundUrl.Trim();
         }
@@ -287,6 +303,22 @@ public class SettingsModel(
         return preferences.Count == 0 ? "None" : string.Join(",", preferences);
     }
 
+    private void ValidateAdditionalCompanyContact(string? name, string? phone, string number)
+    {
+        var hasName = !string.IsNullOrWhiteSpace(name);
+        var hasPhone = !string.IsNullOrWhiteSpace(phone);
+        if (hasName && !hasPhone)
+        {
+            ModelState.AddModelError($"{nameof(Input)}.{nameof(InputModel.CompanyContactPhone2)}".Replace("2", number), "Ingresa el teléfono de este contacto.");
+        }
+        else if (hasPhone && !hasName)
+        {
+            ModelState.AddModelError($"{nameof(Input)}.{nameof(InputModel.CompanyContactName2)}".Replace("2", number), "Ingresa quién atiende este teléfono.");
+        }
+    }
+
+    private static string? NullIfWhiteSpace(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     public class InputModel
     {
         public int? ArgentineLocalityId { get; set; }
@@ -315,5 +347,20 @@ public class SettingsModel(
 
         [StringLength(180)]
         public string? CompanyTagline { get; set; }
+
+        [StringLength(120)]
+        public string? CompanyContactName { get; set; }
+
+        [StringLength(120)]
+        public string? CompanyContactName2 { get; set; }
+
+        [StringLength(32)]
+        public string? CompanyContactPhone2 { get; set; }
+
+        [StringLength(120)]
+        public string? CompanyContactName3 { get; set; }
+
+        [StringLength(32)]
+        public string? CompanyContactPhone3 { get; set; }
     }
 }

@@ -39,13 +39,16 @@ public class CompanyProfileModel(VentaMapDbContext db, IConfiguration configurat
         }
 
         var now = DateTime.UtcNow;
+        // El catálogo normal solo muestra avisos publicados y vigentes.  En modo
+        // debug se conservan también los que ya vencieron, para poder revisar
+        // catálogos de demostración sin volver a publicarlos.
         Publications = await db.Publications
             .AsNoTracking()
             .Include(x => x.Category)
             .Include(x => x.MediaItems)
             .Where(x => x.UserId == Company.Id
-                && x.IsActive
-                && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now)
+                && ((x.IsActive && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now))
+                    || (DebugEnabled && x.Status == PublicationStatus.Expired))
                 && (DebugEnabled || x.UserId == null || x.User == null || !x.User.IsDebugUser))
             .OrderByDescending(x => x.Featured)
             .ThenByDescending(x => x.CreatedAtUtc)
