@@ -4111,7 +4111,7 @@
         const categories = response.ok ? await response.json() : [];
         const items = Array.isArray(categories) ? categories : [];
 
-        categorySelect.innerHTML = '<option value="">Todas</option>';
+        categorySelect.innerHTML = '<option value="">Categoría: todas</option>';
         items.forEach(category => {
           const option = document.createElement("option");
           option.value = String(category?.id ?? "");
@@ -4145,12 +4145,11 @@
           ? fields.find(field => String(field?.internalName || "").trim().toLowerCase() === "operacion")
           : null;
         const options = Array.isArray(operationField?.options) ? operationField.options : [];
-        const defaultOperation = options.find(operation => String(operation || "").trim().toLowerCase() === "venta") || "";
         const nextSelectedOperation = options.some(operation => String(operation || "").trim() === selectedOperation)
           ? selectedOperation
-          : String(defaultOperation || "").trim();
+          : "";
 
-        operationSelect.innerHTML = '<option value="">Tipo de operación</option>';
+        operationSelect.innerHTML = '<option value="">Operación: todas</option>';
         options.forEach(operation => {
           const value = String(operation || "").trim();
           if (!value) return;
@@ -7684,6 +7683,11 @@
       bindGalleryVideoState(video);
       syncGalleryVideoVisualState(video.closest(".card-image-wrap"));
     });
+
+    if (document.body.dataset.galleryOverlayResizeBound !== "true") {
+      document.body.dataset.galleryOverlayResizeBound = "true";
+      window.addEventListener("resize", () => syncGalleryOverlayLayout());
+    }
   }
 
   function syncGalleryOverlayLayout(root = document) {
@@ -7693,7 +7697,17 @@
 
     cards.forEach(card => {
       const reportButton = card.querySelector(".gallery-report-overlay");
-      if (!reportButton) return;
+      const priceCluster = card.querySelector(".gallery-price-cluster");
+      if (!reportButton || !priceCluster) return;
+
+      // The price sits at the upper-left and the report action at the
+      // upper-right. On narrow cards a monthly rental price can reach the
+      // report action, so move that action below the operation marker.
+      reportButton.hidden = false;
+      reportButton.classList.remove("is-below-operation");
+      const priceBounds = priceCluster.getBoundingClientRect();
+      const reportBounds = reportButton.getBoundingClientRect();
+      reportButton.classList.toggle("is-below-operation", priceBounds.right + 8 >= reportBounds.left);
       reportButton.classList.remove("is-compact");
     });
   }

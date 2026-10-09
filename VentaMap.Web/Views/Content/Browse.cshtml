@@ -166,11 +166,11 @@
                 {
                     if (currentGroup == group.Name)
                     {
-                        <option selected>@group.Name</option>
+                        <option value="@group.Name" selected>@(string.Equals(group.Name, "Todos", StringComparison.OrdinalIgnoreCase) ? "Grupo: todos" : group.Name)</option>
                     }
                     else
                     {
-                        <option>@group.Name</option>
+                        <option value="@group.Name">@(string.Equals(group.Name, "Todos", StringComparison.OrdinalIgnoreCase) ? "Grupo: todos" : group.Name)</option>
                     }
                 }
             </select>
@@ -181,7 +181,7 @@
                     data-group-category-select="true"
                     data-selected-category-id="@(Model.SelectedCategoryId?.ToString() ?? string.Empty)"
                     data-categories-endpoint="/api/content/categories">
-                <option value="">Todas</option>
+                <option value="">Categoría: todas</option>
                 @foreach (var category in Model.CategoryOptions)
                 {
                     if (Model.SelectedCategoryId == category.Id)
@@ -197,8 +197,8 @@
         </label>
         <label class="search-control">
             <span class="search-control-label">Tipo de operación</span>
-            <select name="operation" required data-group-operation-select="true" data-selected-operation="@(Model.Operation ?? string.Empty)">
-                <option value="">Tipo de operación</option>
+            <select name="operation" data-group-operation-select="true" data-selected-operation="@(Model.Operation ?? string.Empty)">
+                <option value="">Operación: todas</option>
                 @foreach (var option in operationOptions)
                 {
                     <option value="@option" selected="@(string.Equals(Model.Operation, option, StringComparison.OrdinalIgnoreCase))">@option</option>

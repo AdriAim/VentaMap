@@ -2776,6 +2776,14 @@ textarea:focus {
   transition: background-color 160ms ease, transform 160ms ease;
 }
 
+/* A long price (for example, a monthly rental) uses the top-right space.
+   Keep reporting available by placing it below the operation marker instead. */
+.gallery-report-overlay.is-below-operation {
+  top: 3.35rem;
+  right: auto;
+  left: 0.8rem;
+}
+
 .republish-success-pill {
   background: linear-gradient(135deg, #16a34a, #15803d);
   box-shadow: 0 12px 26px rgba(22, 163, 74, 0.22);
@@ -4607,12 +4615,11 @@ textarea:focus {
 
 .publication-sold-badge {
   position: absolute;
-  top: 0.8rem;
-  left: -2.15rem;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 2;
-  min-width: 9rem;
-  padding: 0.35rem 0.75rem;
-  transform: rotate(-42deg);
+  padding: 0.58rem 0.75rem;
   background: #d83a4d;
   color: #fff;
   font-size: 0.78rem;
@@ -5945,6 +5952,12 @@ textarea:focus {
   grid-template-columns: 1.5fr 0.7fr;
   gap: 2rem;
   padding: 2rem;
+}
+
+/* Grid children otherwise keep their intrinsic width, which lets long prices
+   widen the entire detail sheet instead of fitting within the available space. */
+.detail-hero > * {
+  min-width: 0;
 }
 
 .detail-hero-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }
@@ -7457,6 +7470,28 @@ textarea.input-validation-error,
   .map-card,
   .site-footer {
     grid-template-columns: 1fr;
+  }
+
+  .detail-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+    padding: 1.25rem;
+  }
+
+  .detail-hero .eyebrow,
+  .detail-hero h1,
+  .price-panel {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .detail-price-cluster {
+    white-space: normal;
+  }
+
+  .price-panel strong {
+    font-size: clamp(1.5rem, 7.5vw, 2rem);
+    overflow-wrap: anywhere;
   }
 
   /* La ficha técnica usa etiquetas e inputs en línea en escritorio. En móvil,
