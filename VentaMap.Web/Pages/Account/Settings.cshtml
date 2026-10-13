@@ -16,7 +16,7 @@
         <div class="status-banner success-banner">@Model.SuccessMessage</div>
     }
 
-    <form method="post" enctype="multipart/form-data" class="stack-form">
+    <form method="post" enctype="multipart/form-data" class="stack-form" data-is-company="@Model.IsCompany.ToString().ToLowerInvariant()">
         <div asp-validation-summary="All" class="text-danger"></div>
 
         <label>
@@ -166,7 +166,7 @@
                     </select>
                     <input asp-for="Input.Phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+54 9 3424566654" data-phone-mask="ar" />
                 </div>
-                <span class="field-hint">Argentina: +54 9 seguido de 9, 10 u 11 digitos.</span>
+                <span class="field-hint">Opcional si no recibís llamadas ni WhatsApp. Argentina: +54 9 seguido de 9, 10 u 11 dígitos.</span>
                 <span asp-validation-for="Input.Phone" class="text-danger"></span>
             </label>
         }

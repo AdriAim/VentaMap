@@ -10,6 +10,34 @@
         <h1>Métricas diarias</h1>
         <p>Últimos 30 días. Se excluyen cuentas y anuncios de depuración.</p>
     </div>
+    <section class="detail-panel monitor-suggestions" data-monitor-suggestions data-last-suggestion-id="@Model.LatestSuggestionId">
+        <div class="section-heading">
+            <span class="eyebrow">Alertas</span>
+            <h2>Sugerencias del sitio</h2>
+            <p>Este panel avisa automáticamente cuando llega una nueva sugerencia.</p>
+        </div>
+        <div class="status-banner success-banner" data-suggestion-alert role="alert" hidden></div>
+        <div class="monitor-suggestions-list" data-suggestion-list aria-live="polite">
+            @if (!Model.RecentSuggestions.Any())
+            {
+                <p class="field-hint" data-suggestion-empty>Aún no hay sugerencias.</p>
+            }
+            @foreach (var suggestion in Model.RecentSuggestions)
+            {
+                var sender = suggestion.SenderName ?? suggestion.User?.Name ?? "Anónimo";
+                var email = suggestion.SenderEmail ?? suggestion.User?.Email;
+                <article class="monitor-suggestion" data-suggestion-id="@suggestion.Id">
+                    <strong>@sender</strong>
+                    @if (!string.IsNullOrWhiteSpace(email))
+                    {
+                        <span>@email</span>
+                    }
+                    <time datetime="@suggestion.CreatedAtUtc.ToString("O")">@suggestion.CreatedAtUtc.AddHours(-3).ToString("dd/MM/yyyy HH:mm")</time>
+                    <p>@suggestion.Message</p>
+                </article>
+            }
+        </div>
+    </section>
     <section class="detail-panel">
         <div class="table-responsive">
             <table class="table">
@@ -24,3 +52,73 @@
         </div>
     </section>
 </section>
+
+@section Scripts {
+    <script>
+        (() => {
+            const panel = document.querySelector('[data-monitor-suggestions]');
+            if (!panel) return;
+
+            const list = panel.querySelector('[data-suggestion-list]');
+            const alert = panel.querySelector('[data-suggestion-alert]');
+            let lastId = Number(panel.dataset.lastSuggestionId || 0);
+
+            const formatDate = (value) => new Intl.DateTimeFormat('es-AR', {
+                dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Argentina/Buenos_Aires'
+            }).format(new Date(value));
+
+            const renderSuggestion = (suggestion) => {
+                const article = document.createElement('article');
+                article.className = 'monitor-suggestion';
+                article.dataset.suggestionId = suggestion.id;
+
+                const sender = document.createElement('strong');
+                sender.textContent = suggestion.senderName || 'Anónimo';
+                article.appendChild(sender);
+
+                if (suggestion.senderEmail) {
+                    const email = document.createElement('span');
+                    email.textContent = suggestion.senderEmail;
+                    article.appendChild(email);
+                }
+
+                const time = document.createElement('time');
+                time.dateTime = suggestion.createdAtUtc;
+                time.textContent = formatDate(suggestion.createdAtUtc);
+                article.appendChild(time);
+
+                const message = document.createElement('p');
+                message.textContent = suggestion.message;
+                article.appendChild(message);
+                return article;
+            };
+
+            const checkForSuggestions = async () => {
+                try {
+                    const response = await fetch(`?handler=Suggestions&afterId=${lastId}`, {
+                        headers: { Accept: 'application/json' }, credentials: 'same-origin'
+                    });
+                    if (!response.ok) return;
+
+                    const suggestions = await response.json();
+                    if (!suggestions.length) return;
+
+                    const empty = list.querySelector('[data-suggestion-empty]');
+                    empty?.remove();
+                    suggestions.forEach((suggestion) => {
+                        list.prepend(renderSuggestion(suggestion));
+                        lastId = Math.max(lastId, suggestion.id);
+                    });
+                    alert.textContent = suggestions.length === 1
+                        ? 'Nueva sugerencia recibida.'
+                        : `${suggestions.length} nuevas sugerencias recibidas.`;
+                    alert.hidden = false;
+                } catch {
+                    // El próximo ciclo vuelve a intentar sin interrumpir el monitor.
+                }
+            };
+
+            window.setInterval(checkForSuggestions, 15000);
+        })();
+    </script>
+}

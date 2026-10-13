@@ -1,12 +1,17 @@
 @page "/Buscar"
 @model BrowseModel
 @{
-    ViewData["Title"] = "Anuncios clasificados Argentina";
-    ViewData["MetaDescription"] = "Explora anuncios clasificados en Argentina de inmuebles, rodados y otras categorias. Busca por mapa, galeria o texto en VentaMap.";
+    ViewData["Title"] = "Buscar inmuebles en mapa y anuncios clasificados";
+    ViewData["MetaDescription"] = "Busca inmuebles en mapa en Argentina: casas, departamentos, terrenos y propiedades en venta. Explora anuncios con ubicación, fotos y precios en VentaMap.";
+    var normalizedMode = string.Equals(Model.Mode, "mapa", StringComparison.OrdinalIgnoreCase)
+        ? "Mapa"
+        : string.Equals(Model.Mode, "texto", StringComparison.OrdinalIgnoreCase)
+            ? "Texto"
+            : "Galeria";
     var queryParts = new List<string>
     {
         $"group={Uri.EscapeDataString(Model.Group)}",
-        $"mode={Uri.EscapeDataString(Model.Mode)}",
+        $"mode={Uri.EscapeDataString(normalizedMode)}",
         $"query={Uri.EscapeDataString(Model.Query ?? string.Empty)}",
         $"page={Model.CurrentPage}",
         $"pageSize={Model.PageSize}"

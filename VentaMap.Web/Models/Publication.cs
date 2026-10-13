@@ -100,4 +100,6 @@ public class Publication
             .ThenBy(x => x.SortOrder)
             .Select(x => x.Url)
             .FirstOrDefault();
+
+    public bool IsVideoPrimary => MediaItems.Any(x => x.MediaType == PublicationMediaType.Video && x.IsPrimary && !string.IsNullOrWhiteSpace(x.Url));
 }

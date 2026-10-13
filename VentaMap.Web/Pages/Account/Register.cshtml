@@ -35,7 +35,7 @@
                 <label class="register-account-kind-card">
                     <input asp-for="Input.AccountType" type="radio" value="Company" data-account-type-option aria-describedby="company-pricing-help" />
                     <span class="register-account-kind-copy">
-                        <strong>Empresa</strong>
+                        <strong>Usuario Empresa/Emprendedor</strong>
                         <span>Tendrás una web en VentaMap para tu empresa y un panel especial para seguir todos tus anuncios.</span>
                     </span>
                     <span class="register-pricing-tooltip" id="company-pricing-help" role="tooltip">
@@ -62,7 +62,7 @@
 
             <div class="register-row">
                 <label>
-                    <span>Nombre de la empresa</span>
+                    <span>Nombre de la empresa/emprendimiento</span>
                     <input asp-for="Input.CompanyName" placeholder="Ejemplo: Inmobiliaria López" />
                     <span class="field-hint">Debe ser único dentro del sitio.</span>
                     <span asp-validation-for="Input.CompanyName" class="text-danger"></span>
@@ -97,9 +97,9 @@
 
             <div class="register-row">
                 <label>
-                    <span>Lema de la empresa</span>
+                    <span>Lema de la empresa/emprendimiento</span>
                     <input asp-for="Input.CompanyTagline" maxlength="180" placeholder="Ejemplo: Viví en el lugar de tus sueños." />
-                    <span class="field-hint">Se mostrará debajo del logo en la página pública de la empresa.</span>
+                    <span class="field-hint">Se mostrará debajo del logo en la página pública de la empresa/emprendimiento.</span>
                     <span asp-validation-for="Input.CompanyTagline" class="text-danger"></span>
                 </label>
             </div>
@@ -199,7 +199,7 @@
 
         <div class="register-row">
             <label>
-                <span>Telefono</span>
+                <span>Telefono de contacto</span>
                 <div class="phone-inline">
                     <select asp-for="Input.PhoneCountry" data-phone-country>
                         <option value="AR">Argentina</option>
@@ -207,7 +207,7 @@
                     </select>
                     <input asp-for="Input.Phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+54 9 3424566654" data-phone-mask="ar" />
                 </div>
-                <span class="field-hint">Argentina: +54 9 seguido de 9, 10 u 11 digitos.</span>
+                <span class="field-hint">Opcional si no recibís llamadas ni WhatsApp. Argentina: +54 9 seguido de 9, 10 u 11 dígitos.</span>
                 <span asp-validation-for="Input.Phone" class="text-danger"></span>
             </label>
 

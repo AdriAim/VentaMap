@@ -57,6 +57,7 @@
             <input type="hidden" name="address" value="@Model.Input.Address" />
             <input type="hidden" name="imagesCsv" value="@Model.Input.ImagesCsv" />
             <input type="hidden" name="videoUrl" value="@Model.Input.VideoUrl" />
+            <input type="hidden" name="primaryMediaType" value="@Model.Input.PrimaryMediaType" data-primary-media-type />
             <input name="noLocation"
                    type="checkbox"
                    value="true"
@@ -207,11 +208,12 @@
                 </div>
             </section>
 
+            @{ var maxImages = Model.IsCompanyAccount ? 30 : 10; }
             <section class="detail-panel create-uploads-panel">
                 <div class="section-heading">
                     <span class="eyebrow create-step-label">Paso 2 - Imágenes</span>
-                    <h2>Subí hasta 10 fotos</h2>
-                    <p>Arrastra y suelta archivos o usa el selector. La primera se toma como principal y podes reorganizarla despues.</p>
+                    <h2>Subí hasta @maxImages fotos</h2>
+                    <p>Arrastra y suelta archivos o usa el selector. Podes elegir si la foto o el video será el contenido principal.</p>
                 </div>
 
                 <div class="status-banner warning">
@@ -220,7 +222,7 @@
                     <a href="/Reglas#imagenes">Ver reglas de uso de imágenes</a>.
                 </div>
 
-                <div class="upload-dropzone" data-image-dropzone data-field-container="imagesCsv">
+                <div class="upload-dropzone" data-image-dropzone data-field-container="imagesCsv" data-max-images="@maxImages">
                     <input type="file" multiple accept="image/*" data-create-images-input hidden />
                     <div class="upload-photo-tip">
                         <div class="upload-photo-tip-icon" aria-hidden="true">
@@ -235,10 +237,10 @@
                     <div class="upload-dropzone-actions">
                         <button type="button" class="primary-pill" data-create-images-pick>Elegir imagenes</button>
                         <button type="button" class="ghost-pill" data-create-images-clear>Limpiar todo</button>
-                        <span class="field-hint" data-image-count>0/10 imagenes</span>
+                        <span class="field-hint" data-image-count>0/@maxImages imagenes</span>
                     </div>
                     <div class="upload-previews" data-image-previews></div>
-                    <p class="field-hint">El anuncio básico permite hasta 3 fotos; el completo, hasta 10. La primera foto será la principal.</p>
+                    <p class="field-hint">@(Model.IsCompanyAccount ? "Tu cuenta empresa permite hasta 30 fotos." : "El anuncio básico permite hasta 3 fotos; el completo, hasta 10.") La primera foto se usará si elegís “Foto principal”.</p>
                     <span class="field-error" data-field-error="imagesCsv"></span>
                 </div>
             </section>
@@ -247,7 +249,18 @@
                 <div class="section-heading">
                     <span class="eyebrow create-step-label">Paso 3 - Video (opcional)</span>
                     <h2>Subi un video de hasta 1 minuto</h2>
-                    <p>Si cargas un video, pasa a ser el contenido principal del anuncio.</p>
+                    <p>Elegí qué contenido se muestra primero. Video principal es la opción predeterminada.</p>
+                </div>
+
+                <div class="radio-grid primary-media-choice" data-primary-media-choice-container role="radiogroup" aria-label="Contenido principal del anuncio" @(string.IsNullOrWhiteSpace(Model.Input.VideoUrl) ? "hidden" : null)>
+                    <label class="choice-tile">
+                        <input type="radio" name="primaryMediaChoice" value="video" data-primary-media-choice @(string.Equals(Model.Input.PrimaryMediaType, "image", StringComparison.OrdinalIgnoreCase) ? null : "checked") />
+                        <span><i class="fa-solid fa-video" aria-hidden="true"></i> Video principal</span>
+                    </label>
+                    <label class="choice-tile">
+                        <input type="radio" name="primaryMediaChoice" value="image" data-primary-media-choice @(string.Equals(Model.Input.PrimaryMediaType, "image", StringComparison.OrdinalIgnoreCase) ? "checked" : null) />
+                        <span><i class="fa-solid fa-image" aria-hidden="true"></i> Foto principal</span>
+                    </label>
                 </div>
 
                 <div class="upload-dropzone" data-video-dropzone data-field-container="videoUrl">

@@ -277,7 +277,9 @@ public class PublicationService(
         publication.MediaItems.AddRange(PublicationMediaBuilder.Build(
             input.ImagesCsv,
             input.VideoUrl,
-            publication.CreatedAtUtc));
+            publication.CreatedAtUtc,
+            input.PrimaryMediaType,
+            isCompany ? 30 : 10));
 
         string? rawAnonymousPassword = null;
         if (input.PublisherMode == "Anonymous")
@@ -656,6 +658,10 @@ public class PublicationService(
             .ThenBy(x => x.SortOrder)
             .ThenBy(x => x.Id)
             .ToListAsync();
+        var isCompany = await db.Users
+            .Where(user => user.Id == userId)
+            .Select(user => user.IsCompany)
+            .FirstOrDefaultAsync();
 
         publication.Group = input.Group;
         publication.CategoryId = input.CategoryId;
@@ -689,7 +695,9 @@ public class PublicationService(
         var nextMediaItems = PublicationMediaBuilder.Build(
             input.ImagesCsv,
             input.VideoUrl,
-            publication.CreatedAtUtc);
+            publication.CreatedAtUtc,
+            input.PrimaryMediaType,
+            isCompany ? 30 : 10);
         var nextMediaUrls = nextMediaItems
             .Select(x => x.Url)
             .Where(x => !string.IsNullOrWhiteSpace(x))

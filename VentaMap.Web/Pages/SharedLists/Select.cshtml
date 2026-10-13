@@ -25,7 +25,7 @@
             shortDescription = x.Publication.ShortDescription,
             locality = x.Publication.Locality,
             image = x.Publication.ImageList.FirstOrDefault(),
-            images = x.Publication.ImageList.Take(11).ToList(),
+            images = x.Publication.ImageList.Take(31).ToList(),
             operationLabel = x.Publication.OperationType?.ToDisplayName(),
             categoryLabel = x.Publication.Category?.Name,
             detailsUrl = $"/Publications/Details/{x.Publication.Id}",

@@ -216,12 +216,13 @@ public partial class ContentController(
                     code = x.ToAdCode(),
                     groupName = x.Group,
                     videoUrl = x.PrimaryVideoUrl,
+                    isVideoPrimary = x.IsVideoPrimary,
                     title = x.Title,
                     shortDescription = x.ShortDescription,
                     locality = x.Locality,
                     isFavorite = favoritePublicationIds.Contains(x.Id),
                     image = x.ImageList.FirstOrDefault(),
-                    images = x.ImageList.Take(11).ToList(),
+                    images = x.ImageList.Take(31).ToList(),
                     operationLabel = x.OperationType.HasValue ? x.OperationType.Value.ToDisplayName() : null,
                     categoryLabel = x.Category != null ? x.Category.Name : null,
                     detailsUrl = BuildPublicationDetailsUrl(x.Id, includeDebug),
@@ -412,12 +413,13 @@ public partial class ContentController(
                     code = x.ToAdCode(),
                     groupName = x.Group,
                     videoUrl = x.PrimaryVideoUrl,
+                    isVideoPrimary = x.IsVideoPrimary,
                     title = x.Title,
                     shortDescription = x.ShortDescription,
                     locality = x.Locality,
                     isFavorite = favoritePublicationIds.Contains(x.Id),
                     image = x.ImageList.FirstOrDefault(),
-                    images = x.ImageList.Take(11).ToList(),
+                    images = x.ImageList.Take(31).ToList(),
                     operationLabel = x.OperationType.HasValue ? x.OperationType.Value.ToDisplayName() : null,
                     categoryLabel = x.Category != null ? x.Category.Name : null,
                     detailsUrl = BuildPublicationDetailsUrl(x.Id, includeDebug),
@@ -532,12 +534,13 @@ public partial class ContentController(
                     code = item.ToAdCode(),
                     groupName = item.Group,
                     videoUrl = item.PrimaryVideoUrl,
+                    isVideoPrimary = item.IsVideoPrimary,
                     title = item.Title,
                     shortDescription = item.ShortDescription,
                     locality = item.Locality,
                     isFavorite = favoritePublicationIds.Contains(item.Id),
                     image = item.ImageList.FirstOrDefault(),
-                    images = item.ImageList.Take(11).ToList(),
+                    images = item.ImageList.Take(31).ToList(),
                     operationLabel = item.OperationType.HasValue ? item.OperationType.Value.ToDisplayName() : null,
                     categoryLabel = item.Category != null ? item.Category.Name : null,
                     detailsUrl = BuildPublicationDetailsUrl(item.Id, includeDebug),
@@ -829,6 +832,7 @@ public partial class ContentController(
             LongDescription = publication.LongDescription,
             ImagesCsv = string.Join(",", publication.ImageList),
             VideoUrl = publication.PrimaryVideoUrl,
+            PrimaryMediaType = publication.IsVideoPrimary ? "video" : "image",
             ContactName = publication.ContactName,
             ContactPhone = publication.ContactPhone,
             ContactEmail = publication.ContactEmail,
@@ -1069,11 +1073,13 @@ public partial class ContentController(
         request.ContactEmail = user.Email;
         request.PublisherMode = "Account";
         request.VideoUrl = string.IsNullOrWhiteSpace(request.VideoUrl) ? null : request.VideoUrl.Trim();
+        request.PrimaryMediaType = NormalizePrimaryMediaType(request.PrimaryMediaType);
+        if (request.VideoUrl is null) request.PrimaryMediaType = "video";
 
         var category = await publicationCategoryService.GetActiveByIdAsync(request.CategoryId);
         request.Title = BuildPublicationTitle(category?.Name, request.Locality, request.Latitude, request.Longitude, request.NoLocation);
 
-        var errors = await ValidateCreateRequestAsync(request);
+        var errors = await ValidateCreateRequestAsync(request, user.IsCompany ? 30 : 10);
         if (errors.Count > 0)
         {
             logger.LogWarning("CreatePublication rejected by business validation for user {UserId}. Errors: {@Errors}", user.Id, errors);
@@ -1187,11 +1193,13 @@ public partial class ContentController(
         request.ContactEmail = user.Email;
         request.PublisherMode = "Account";
         request.VideoUrl = string.IsNullOrWhiteSpace(request.VideoUrl) ? null : request.VideoUrl.Trim();
+        request.PrimaryMediaType = NormalizePrimaryMediaType(request.PrimaryMediaType);
+        if (request.VideoUrl is null) request.PrimaryMediaType = "video";
 
         var category = await publicationCategoryService.GetActiveByIdAsync(request.CategoryId);
         request.Title = BuildPublicationTitle(category?.Name, request.Locality, request.Latitude, request.Longitude, request.NoLocation);
 
-        var errors = await ValidateCreateRequestAsync(request);
+        var errors = await ValidateCreateRequestAsync(request, user.IsCompany ? 30 : 10);
         if (errors.Count > 0)
         {
             return BadRequest(new { message = "Revisa los datos del formulario.", errors });
@@ -1227,10 +1235,15 @@ public partial class ContentController(
             return BadRequest(new { message = "Subi al menos una imagen." });
         }
 
-        if (files.Count > 10)
+        var isCompany = currentUserAccessor.UserId is int userId && await db.Users
+            .Where(user => user.Id == userId)
+            .Select(user => user.IsCompany)
+            .FirstOrDefaultAsync();
+        var maxImages = isCompany ? 30 : 10;
+        if (files.Count > maxImages)
         {
             logger.LogWarning("UploadImages rejected: too many files ({Count}) for user {UserId}.", files.Count, currentUserAccessor.UserId);
-            return BadRequest(new { message = "Podes subir hasta 10 imagenes." });
+            return BadRequest(new { message = $"Podes subir hasta {maxImages} imagenes." });
         }
 
         var fileInfo = files.Select(file => new { file.FileName, file.Length, file.ContentType }).ToList();
@@ -1238,7 +1251,7 @@ public partial class ContentController(
 
         try
         {
-            var urls = await imageStorageService.UploadPublicationImagesAsync(files);
+            var urls = await imageStorageService.UploadPublicationImagesAsync(files, maxImages);
             if (urls.Count == 0)
             {
                 logger.LogWarning("UploadImages produced no urls for user {UserId}. File info: {@Files}.", currentUserAccessor.UserId, fileInfo);
@@ -1405,7 +1418,7 @@ public partial class ContentController(
         };
     }
 
-    private async Task<List<object>> ValidateCreateRequestAsync(CreatePublicationApiRequest request)
+    private async Task<List<object>> ValidateCreateRequestAsync(CreatePublicationApiRequest request, int maxImages)
     {
         var errors = new List<object>();
 
@@ -1453,6 +1466,10 @@ public partial class ContentController(
         if (ContainsHyperlink(request.ShortDescription)) AddError("shortDescription", "No se permiten hipervinculos en la descripcion.");
         if (ContainsHyperlink(request.LongDescription)) AddError("longDescription", "No se permiten hipervinculos en la descripcion.");
         if (string.IsNullOrWhiteSpace(request.ImagesCsv)) AddError("imagesCsv", "Subi al menos una imagen.");
+        if (request.ImagesCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length > maxImages)
+        {
+            AddError("imagesCsv", $"Podes subir hasta {maxImages} imagenes.");
+        }
         if (!string.IsNullOrWhiteSpace(request.VideoUrl)
             && !Uri.IsWellFormedUriString(request.VideoUrl, UriKind.Absolute)
             && !request.VideoUrl.StartsWith("/", StringComparison.Ordinal))
@@ -1555,6 +1572,9 @@ public partial class ContentController(
             _ => "U$D"
         };
     }
+
+    private static string NormalizePrimaryMediaType(string? primaryMediaType)
+        => string.Equals(primaryMediaType, "image", StringComparison.OrdinalIgnoreCase) ? "image" : "video";
 
     private static PublicationSearchFilters BuildSearchFilters(decimal? priceFrom, decimal? priceTo, IQueryCollection query)
     {
@@ -1903,7 +1923,7 @@ public partial class ContentController(
     private static object MapGalleryItem(Publication item, bool isFavorite, bool includeDebug)
     {
         var images = item.ImageList
-            .Take(11)
+            .Take(31)
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .ToList();
 
@@ -1919,6 +1939,7 @@ public partial class ContentController(
             categoryLabel = item.Category?.Name,
             detailsUrl = BuildPublicationDetailsUrl(item.Id, includeDebug),
             videoUrl = item.PrimaryVideoUrl,
+            isVideoPrimary = item.IsVideoPrimary,
             images,
             groupName = item.Group.ToDisplayName(),
             isFavorite

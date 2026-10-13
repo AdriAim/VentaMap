@@ -195,6 +195,17 @@ if (hasHttpsUrlConfigured)
 {
     app.UseHttpsRedirection();
 }
+app.Use(async (context, next) =>
+{
+    // Las URLs de depuración se usan manualmente para revisar anuncios, pero no
+    // representan una URL pública alternativa que deba aparecer en buscadores.
+    if (string.Equals(context.Request.Query["debug"], "1", StringComparison.Ordinal))
+    {
+        context.Response.Headers.Append("X-Robots-Tag", "noindex, follow");
+    }
+
+    await next();
+});
 app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthentication();
@@ -223,20 +234,14 @@ app.MapGet("/sitemap.xml", async (HttpContext context, VentaMapDbContext db) =>
     var urls = new List<(string Location, DateTime? LastModified)>
     {
         ($"{baseUrl}/", null),
-        ($"{baseUrl}/Browse", null),
         ($"{baseUrl}/Precios", null)
     };
 
-    var categories = await db.PublicationCategories
-        .AsNoTracking()
-        .Where(category => category.IsActive)
-        .Select(category => category.Id)
-        .ToListAsync();
-    urls.AddRange(categories.Select(categoryId => ($"{baseUrl}/Browse?categoryId={categoryId}", (DateTime?)null)));
-
     var publications = await db.Publications
         .AsNoTracking()
-        .Where(publication => publication.IsActive && publication.Status == PublicationStatus.Active)
+        .Where(publication => publication.IsActive
+            && publication.Status == PublicationStatus.Active
+            && (publication.User == null || !publication.User.IsDebugUser))
         .Select(publication => new { publication.Id, publication.CreatedAtUtc })
         .ToListAsync();
     urls.AddRange(publications.Select(publication => ($"{baseUrl}/Publications/Details/{publication.Id}", (DateTime?)publication.CreatedAtUtc)));

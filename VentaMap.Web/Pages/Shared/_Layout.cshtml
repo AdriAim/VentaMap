@@ -9,10 +9,23 @@
     var pageTitle = string.IsNullOrWhiteSpace(ViewData["Title"]?.ToString())
         ? "VentaMap"
         : ViewData["Title"]!.ToString();
+    var ogTitle = ViewData["OgTitle"]?.ToString() ?? $"{pageTitle} - VentaMap";
     var metaDescription = ViewData["MetaDescription"]?.ToString()
         ?? "VentaMap es una plataforma de compra venta en Argentina para publicar anuncios clasificados de inmuebles, rodados y mas con precios claros.";
     var canonicalUrl = $"{Context.Request.Scheme}://{Context.Request.Host}{Context.Request.PathBase}{Context.Request.Path}";
-    var ogImageUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/images/logo5.png";
+    var siteUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/";
+    var siteOgImageUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/images/ventamap-social-transparent-lighter.png?v=20261011d";
+    var requestedOgImageUrl = ViewData["OgImageUrl"]?.ToString()?.Trim();
+    var hasAbsoluteCustomOgImage = Uri.TryCreate(requestedOgImageUrl, UriKind.Absolute, out var customOgImageUri)
+        && (customOgImageUri.Scheme == Uri.UriSchemeHttp || customOgImageUri.Scheme == Uri.UriSchemeHttps);
+    var hasRelativeCustomOgImage = !string.IsNullOrWhiteSpace(requestedOgImageUrl)
+        && requestedOgImageUrl.StartsWith('/');
+    var usesCustomOgImage = hasAbsoluteCustomOgImage || hasRelativeCustomOgImage;
+    var ogImageUrl = hasAbsoluteCustomOgImage
+        ? requestedOgImageUrl!
+        : hasRelativeCustomOgImage
+            ? $"{Context.Request.Scheme}://{Context.Request.Host}{requestedOgImageUrl}"
+            : siteOgImageUrl;
     var hideSiteHeader = string.Equals(ViewData["HideSiteHeader"]?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
     var isHomePage = string.Equals(Context.Request.Path, "/", StringComparison.OrdinalIgnoreCase)
         || string.Equals(Context.Request.Path, "/Index", StringComparison.OrdinalIgnoreCase);
@@ -32,14 +45,32 @@
     <link rel="canonical" href="@canonicalUrl" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="VentaMap" />
-    <meta property="og:title" content="@($"{pageTitle} - VentaMap")" />
+    <meta property="og:title" content="@ogTitle" />
     <meta property="og:description" content="@metaDescription" />
     <meta property="og:url" content="@canonicalUrl" />
     <meta property="og:image" content="@ogImageUrl" />
+    @if (!usesCustomOgImage)
+    {
+        <meta property="og:image:width" content="1254" />
+        <meta property="og:image:height" content="1254" />
+        <meta property="og:image:type" content="image/png" />
+    }
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="@($"{pageTitle} - VentaMap")" />
+    <meta name="twitter:title" content="@ogTitle" />
     <meta name="twitter:description" content="@metaDescription" />
     <meta name="twitter:image" content="@ogImageUrl" />
+    @if (isHomePage)
+    {
+        var websiteSchema = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            @context = "https://schema.org",
+            @type = "WebSite",
+            name = "VentaMap",
+            url = siteUrl,
+            description = "VentaMap permite buscar inmuebles en mapa y publicar anuncios de propiedades en venta en Argentina."
+        });
+        <script type="application/ld+json">@Html.Raw(websiteSchema)</script>
+    }
     <link rel="icon" type="image/svg+xml" href="~/favicon.svg" asp-append-version="true" />
     <link rel="shortcut icon" type="image/svg+xml" href="~/favicon.svg" asp-append-version="true" />
     <link rel="apple-touch-icon" href="~/images/logo5.png" asp-append-version="true" />

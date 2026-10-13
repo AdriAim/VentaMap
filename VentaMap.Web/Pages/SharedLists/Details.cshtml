@@ -5,6 +5,11 @@
 @model VentaMap.Pages.SharedLists.DetailsModel
 @{
     ViewData["Title"] = Model.SharedList?.Name ?? "Lista compartida";
+    if (Model.SharedList?.User?.IsCompany == true
+        && !string.IsNullOrWhiteSpace(Model.SharedList.User.CompanyLogoUrl))
+    {
+        ViewData["OgImageUrl"] = Model.SharedList.User.CompanyLogoUrl;
+    }
     ViewData["HideSiteHeader"] = "true";
     string FormatMapPrice(VentaMap.Models.Publication publication, string numericFormat)
     {
@@ -26,7 +31,7 @@
             shortDescription = x.ShortDescription,
             locality = x.Locality,
             image = x.ImageList.FirstOrDefault(),
-            images = x.ImageList.Take(11).ToList(),
+            images = x.ImageList.Take(31).ToList(),
             operationLabel = x.OperationType?.ToDisplayName(),
             categoryLabel = x.Category?.Name,
             detailsUrl = $"/Publications/Details/{x.Id}",
@@ -47,7 +52,7 @@
         categoryLabel = x.Category?.Name,
         detailsUrl = $"/Publications/Details/{x.Id}",
         videoUrl = x.PrimaryVideoUrl,
-        images = x.ImageList.Take(11).ToList(),
+            images = x.ImageList.Take(31).ToList(),
         isFavorite = false,
         groupName = x.Group.ToDisplayName()
     }));

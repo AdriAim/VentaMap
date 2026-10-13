@@ -194,7 +194,7 @@ else
             @{
                 var detailMediaIndex = 0;
             }
-            @if (!string.IsNullOrWhiteSpace(publication.PrimaryVideoUrl))
+            @if (publication.IsVideoPrimary && !string.IsNullOrWhiteSpace(publication.PrimaryVideoUrl))
             {
                 <div class="detail-gallery-video-frame detail-media-trigger"
                      data-detail-media-item="true"
@@ -225,6 +225,23 @@ else
                      data-detail-media-src="@image"
                      data-detail-media-title="@displayTitle" />
                 detailMediaIndex++;
+            }
+            @if (!publication.IsVideoPrimary && !string.IsNullOrWhiteSpace(publication.PrimaryVideoUrl))
+            {
+                <div class="detail-gallery-video-frame detail-media-trigger"
+                     data-detail-media-item="true"
+                     data-detail-media-index="@detailMediaIndex"
+                     data-detail-media-type="video"
+                     data-detail-media-src="@publication.PrimaryVideoUrl"
+                     data-detail-media-title="@displayTitle">
+                    <video class="detail-gallery-primary"
+                           preload="metadata"
+                           playsinline
+                           src="@publication.PrimaryVideoUrl"></video>
+                    <button type="button" class="detail-gallery-video-play" data-detail-video-play="true" aria-label="Reproducir video">
+                        <i class="fa-solid fa-play" aria-hidden="true"></i>
+                    </button>
+                </div>
             }
         </div>
     </section>
@@ -420,7 +437,7 @@ else
                              videoUrl = publication.PrimaryVideoUrl,
                              title = displayTitle,
                              image = publication.ImageList.FirstOrDefault(),
-                             images = publication.ImageList.Take(11).ToList(),
+                             images = publication.ImageList.Take(31).ToList(),
                              detailsUrl = $"/Publications/Details/{publication.Id}{debugSuffix}",
                              lat = publication.Latitude,
                              lng = publication.Longitude,

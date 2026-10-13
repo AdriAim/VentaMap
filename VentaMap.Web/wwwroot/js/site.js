@@ -487,11 +487,14 @@
     wireHeaderGroupPreferences(document);
     wireGuestLocalityPrompt(document);
     wireRegisterAccountType(document);
+    wireOptionalPhoneContact(document);
+    wireValidationErrorFocus(document);
     wireHybridLocalityPicker(document);
     wireReportModal();
     wireDetailShareModal();
     wireAuthRequiredModal();
     wireSuggestionModal();
+    wireCatalogPromoZoom();
     wirePublicationPreviewModal();
     wireDetailMediaOverlay();
     wireDetailGalleryLayout();
@@ -510,6 +513,73 @@
     clearPersistedSystemLoading();
     forceHideSystemLoading();
   });
+
+  function wireValidationErrorFocus(root = document) {
+    const hasErrorMessage = element => Boolean(element.textContent?.trim());
+    const errorMessages = Array.from(root.querySelectorAll(
+      ".field-validation-error, [data-valmsg-for].field-validation-error"
+    )).filter(hasErrorMessage);
+    const summary = Array.from(root.querySelectorAll(".validation-summary-errors, [data-valmsg-summary]"))
+      .find(hasErrorMessage);
+
+    if (!errorMessages.length && !summary) return;
+
+    window.requestAnimationFrame(() => {
+      const fieldError = errorMessages[0];
+      const fieldName = fieldError?.getAttribute("data-valmsg-for");
+      const target = fieldName
+        ? root.querySelector(`[name="${CSS.escape(fieldName)}"]`)
+        : null;
+      const scrollTarget = target || fieldError || summary;
+      if (!scrollTarget) return;
+
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      scrollTarget.scrollIntoView({
+        behavior: reducedMotion ? "auto" : "smooth",
+        block: "center"
+      });
+
+      if (target instanceof HTMLElement) {
+        target.focus({ preventScroll: true });
+      }
+    });
+  }
+
+  function wireOptionalPhoneContact(root = document) {
+    const forms = Array.from(root.querySelectorAll("form")).filter(form =>
+      form.querySelector('input[name="Input.Phone"]')
+      && form.querySelector('input[name="Input.AcceptsCalls"]')
+      && form.querySelector('input[name="Input.RespondsWhatsApp"]')
+    );
+
+    forms.forEach(form => {
+      const phone = form.querySelector('input[name="Input.Phone"]');
+      const calls = form.querySelector('input[name="Input.AcceptsCalls"]');
+      const whatsapp = form.querySelector('input[name="Input.RespondsWhatsApp"]');
+      const phoneError = form.querySelector('[data-valmsg-for="Input.Phone"]');
+      if (!phone || !calls || !whatsapp) return;
+
+      const clearOptionalPhone = () => {
+        const accountType = form.querySelector('input[name="Input.AccountType"]:checked')?.value;
+        const isCompany = accountType === "Company" || form.dataset.isCompany === "true";
+        if (isCompany || calls.checked || whatsapp.checked) return;
+
+        phone.value = "";
+        phone.classList.remove("input-validation-error");
+        phone.removeAttribute("aria-invalid");
+        if (phoneError) {
+          phoneError.textContent = "";
+          phoneError.classList.remove("field-validation-error");
+          phoneError.classList.add("field-validation-valid");
+        }
+      };
+
+      calls.addEventListener("change", clearOptionalPhone);
+      whatsapp.addEventListener("change", clearOptionalPhone);
+      form.addEventListener("submit", clearOptionalPhone);
+      clearOptionalPhone();
+    });
+  }
 
   function scheduleMapWarmup() {
     window.setTimeout(() => {
@@ -681,6 +751,8 @@
       applyInitialViewportMapHeight(host);
       wirePhoneMasks(host);
       wireHeaderGroupPreferences(host);
+      wireGuestLocalityPrompt(document);
+      wireCatalogPromoZoom();
 
       if (ventamapFlashMessage) {
         const banner = document.createElement("div");
@@ -1281,6 +1353,69 @@
     document.body.classList.add("preview-open");
   }
 
+  function wireCatalogPromoZoom() {
+    const modal = document.getElementById("catalogPromoZoomModal");
+    const trigger = document.querySelector("[data-catalog-promo-zoom-open]");
+    const preview = document.querySelector("[data-catalog-promo-preview]");
+    const previewImage = document.querySelector("[data-catalog-promo-preview-image]");
+    const zoomImage = document.querySelector("[data-catalog-promo-zoom-image]");
+    const modeButtons = Array.from(document.querySelectorAll("[data-catalog-promo-mode]"));
+    if (!modal || !trigger || modal.dataset.bound === "true") return;
+
+    modal.dataset.bound = "true";
+
+    const setPreviewMode = mode => {
+      const isMap = mode === "map";
+      const source = preview?.getAttribute(isMap ? "data-map-src" : "data-gallery-src");
+      if (!source) return;
+
+      const label = isMap ? "mapa" : "galería";
+      if (previewImage) {
+        previewImage.src = source;
+        previewImage.alt = `Vista previa en ${label} del catálogo digital de Horizonte Propiedades`;
+      }
+      if (zoomImage) {
+        zoomImage.src = source;
+        zoomImage.alt = `Vista ampliada en ${label} del catálogo digital de Horizonte Propiedades`;
+      }
+      modeButtons.forEach(button => {
+        const isSelected = button.getAttribute("data-catalog-promo-mode") === mode;
+        button.classList.toggle("is-active", isSelected);
+        button.setAttribute("aria-pressed", isSelected ? "true" : "false");
+      });
+    };
+
+    modeButtons.forEach(button => {
+      button.addEventListener("click", () => setPreviewMode(button.getAttribute("data-catalog-promo-mode")));
+    });
+
+    const close = () => {
+      modal.hidden = true;
+      modal.classList.remove("is-open");
+      syncPreviewOpenState();
+      trigger.focus();
+    };
+
+    trigger.addEventListener("click", () => {
+      modal.hidden = false;
+      modal.classList.add("is-open");
+      document.body.classList.add("preview-open");
+      modal.querySelector("[data-catalog-promo-zoom-close]")?.focus();
+    });
+
+    modal.addEventListener("click", event => {
+      if (event.target.closest("[data-catalog-promo-zoom-close]")) {
+        close();
+      }
+    });
+
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && modal.classList.contains("is-open")) {
+        close();
+      }
+    });
+  }
+
   function wireSuggestionModal() {
     const modal = document.getElementById("suggestionModal");
     const form = document.getElementById("suggestionForm");
@@ -1292,10 +1427,12 @@
     const textarea = form.querySelector("[data-suggestion-textarea]");
     const prefixInput = form.querySelector("[data-suggestion-prefix]");
     const feedback = form.querySelector("[data-suggestion-feedback]");
+    const submitButton = form.querySelector('button[type="submit"]');
     const defaultTitle = titleNode?.textContent || "Sugerencias para VentaMap";
     const defaultIntro = introNode?.textContent || "A VentaMap lo mejoramos entre todos.";
     const defaultLabel = labelNode?.textContent || "Tu sugerencia";
     const defaultPlaceholder = textarea?.getAttribute("placeholder") || "Escribe aquí tu sugerencia para el sitio.";
+    const defaultSubmitLabel = submitButton?.textContent?.trim() || "Enviar sugerencia";
 
     const configureSuggestionModal = button => {
       const title = String(button?.getAttribute("data-suggestion-title") || "").trim();
@@ -1303,6 +1440,7 @@
       const label = String(button?.getAttribute("data-suggestion-label") || "").trim();
       const placeholder = String(button?.getAttribute("data-suggestion-placeholder") || "").trim();
       const prefix = String(button?.getAttribute("data-suggestion-prefix") || "").trim();
+      const submitLabel = String(button?.getAttribute("data-suggestion-submit-label") || "").trim();
 
       if (titleNode) {
         titleNode.textContent = title || defaultTitle;
@@ -1318,6 +1456,9 @@
       }
       if (prefixInput) {
         prefixInput.value = prefix;
+      }
+      if (submitButton) {
+        submitButton.textContent = submitLabel || defaultSubmitLabel;
       }
     };
 
@@ -1384,7 +1525,6 @@
         return;
       }
 
-      const submitButton = form.querySelector('button[type="submit"]');
       if (submitButton) {
         submitButton.disabled = true;
       }
@@ -2255,7 +2395,7 @@
       companyPublicUrlInput.value = slug ? `/catalogo/${slug}` : "/catalogo/tuempresa";
     };
 
-    const sync = () => {
+    const sync = ({ applyCompanyDefaults = false } = {}) => {
       const selected = options.find(option => option.checked)?.value || "Person";
       const isCompany = selected === "Company";
 
@@ -2279,7 +2419,7 @@
         personNameInput.required = !isCompany;
       }
 
-      if (isCompany) {
+      if (isCompany && applyCompanyDefaults) {
         if (emailCheckbox) {
           emailCheckbox.checked = true;
         }
@@ -2292,7 +2432,9 @@
       }
     };
 
-    options.forEach(option => option.addEventListener("change", sync));
+    options.forEach(option => option.addEventListener("change", () => {
+      sync({ applyCompanyDefaults: option.value === "Company" && option.checked });
+    }));
     companyNameInput?.addEventListener("input", syncCompanyPublicUrl);
     sync();
     syncCompanyPublicUrl();
@@ -4325,6 +4467,7 @@
     const detailsUrl = escapeAttribute(marker.detailsUrl || "#");
     const publicationId = escapeAttribute(marker.id || "");
     const videoUrl = escapeAttribute(marker.videoUrl || "");
+    const isVideoPrimary = marker.isVideoPrimary !== false;
     const images = Array.isArray(marker.images) && marker.images.length
       ? marker.images
       : [marker.image || "/images/logo4.png"];
@@ -4347,8 +4490,8 @@
 
     return `
       <article class="map-popup-card listing-card listing-card-compact">
-        <a href="${detailsUrl}" class="card-image-wrap map-popup-image-wrap publication-preview-trigger" data-publication-id="${publicationId}" data-details-url="${buildPublicationApiDetailsUrl(publicationId)}" data-images="${escapedImages.join("|||")}" data-video-url="${videoUrl}" data-media-index="0">
-          ${videoUrl
+        <a href="${detailsUrl}" class="card-image-wrap map-popup-image-wrap publication-preview-trigger" data-publication-id="${publicationId}" data-details-url="${buildPublicationApiDetailsUrl(publicationId)}" data-images="${escapedImages.join("|||")}" data-video-url="${videoUrl}" data-video-primary="${isVideoPrimary}" data-media-index="0">
+          ${videoUrl && isVideoPrimary
             ? `<video src="${videoUrl}" class="gallery-carousel-video" preload="metadata" muted playsinline></video><button type="button" class="gallery-play-toggle gallery-tooltip-trigger gallery-tooltip-top" data-gallery-play-toggle="true" aria-label="Reproducir video" data-tooltip-label="Reproducir video"></button><button type="button" class="gallery-audio-toggle gallery-tooltip-trigger gallery-tooltip-side" data-gallery-audio-toggle="true" aria-label="Activar audio" data-tooltip-label="Activar audio"><i class="fa-solid fa-volume-xmark" aria-hidden="true"></i></button>`
             : `<img src="${firstImage}" alt="${title}" class="gallery-carousel-image" />`}
           ${priceCluster}
@@ -5208,6 +5351,7 @@
 
     const uploader = wireCreateImageUploader(form);
     const videoUploader = wireCreateVideoUploader(form);
+    wirePrimaryMediaChoice(form);
     wirePublicationChargeEstimator(form);
 
     form.addEventListener("submit", async event => {
@@ -6496,8 +6640,38 @@
     };
   }
 
+  function wirePrimaryMediaChoice(form) {
+    const hiddenInput = form.querySelector("[data-primary-media-type]");
+    const choices = Array.from(form.querySelectorAll("[data-primary-media-choice]"));
+    const container = form.querySelector("[data-primary-media-choice-container]");
+    const videoUrlInput = form.querySelector('input[name="videoUrl"]');
+    if (!hiddenInput || !choices.length || !container || !videoUrlInput) return;
+
+    const sync = () => {
+      const selected = choices.find(choice => choice.checked)?.value;
+      hiddenInput.value = selected === "image" ? "image" : "video";
+      form.dispatchEvent(new CustomEvent("create:primary-media-changed", { bubbles: true }));
+    };
+
+    const syncVisibility = () => {
+      const hasVideo = Boolean(String(videoUrlInput.value || "").trim());
+      container.hidden = !hasVideo;
+      choices.forEach(choice => { choice.disabled = !hasVideo; });
+      if (!hasVideo) {
+        const videoChoice = choices.find(choice => choice.value === "video");
+        if (videoChoice) videoChoice.checked = true;
+      }
+      sync();
+    };
+
+    choices.forEach(choice => choice.addEventListener("change", sync));
+    form.addEventListener("create:video-state-changed", syncVisibility);
+    syncVisibility();
+  }
+
   function wireCreateImageUploader(form) {
     const dropzone = form.querySelector("[data-image-dropzone]");
+    const maxImages = Number(dropzone?.dataset.maxImages || 10);
     const input = form.querySelector("[data-create-images-input]");
     const pickButton = form.querySelector("[data-create-images-pick]");
     const clearButton = form.querySelector("[data-create-images-clear]");
@@ -6628,7 +6802,7 @@
 
     const render = () => {
       if (countNode) {
-        countNode.textContent = `${state.length}/10 imágenes`;
+        countNode.textContent = `${state.length}/${maxImages} imágenes`;
       }
 
       if (!previews) return;
@@ -6656,7 +6830,7 @@
       const unsupportedFiles = selectedFiles.filter(file => !isSupportedImageFile(file));
       const validFiles = selectedFiles
         .filter(file => isSupportedImageFile(file))
-        .slice(0, Math.max(0, 10 - state.length));
+        .slice(0, Math.max(0, maxImages - state.length));
 
       if (unsupportedFiles.length) {
         const unsupportedNames = unsupportedFiles
@@ -7021,6 +7195,7 @@
     const previews = form.querySelector("[data-video-previews]");
     const statusNode = form.querySelector("[data-video-status]");
     const videoUrlInput = form.querySelector('input[name="videoUrl"]');
+    const primaryMediaTypeInput = form.querySelector("[data-primary-media-type]");
     const feedback = document.getElementById("create-feedback");
 
     let state = null;
@@ -7078,7 +7253,7 @@
       previews.innerHTML = `
         <article class="upload-preview upload-preview-video main">
           <video src="${escapeAttribute(state.previewUrl)}" preload="metadata" muted playsinline controls></video>
-          <span class="gallery-badge">Video principal</span>
+          <span class="gallery-badge">${primaryMediaTypeInput?.value === "image" ? "Video" : "Video principal"}</span>
           <span class="upload-status">${escapeHtml(state.statusText || (state.uploadedUrl ? "Listo" : "Subiendo..."))}</span>
           <button type="button" class="gallery-nav gallery-nav-next upload-action" data-video-action="remove" aria-label="Quitar video">&times;</button>
         </article>
@@ -7251,6 +7426,8 @@
       if (!button) return;
       clearState();
     });
+
+    form.addEventListener("create:primary-media-changed", render);
 
     seedExistingVideo();
     render();
@@ -7475,17 +7652,19 @@
       }
       price.append(document.createTextNode(formattedPrice));
       price.dataset.tooltipLabel = [operation, category, formattedPrice].filter(Boolean).join(" · ");
+      const primaryMediaType = value("primaryMediaType") || "video";
       const videoUrl = form.querySelector("[data-video-previews] video")?.getAttribute("src") || value("videoUrl");
       const imageUrl = form.querySelector("[data-image-previews] img")?.getAttribute("src") || value("imagesCsv").split(",").filter(Boolean)[0];
-      const nextKey = videoUrl ? `video:${videoUrl}` : imageUrl ? `image:${imageUrl}` : "empty";
+      const showVideo = primaryMediaType === "video" && videoUrl;
+      const nextKey = showVideo ? `video:${videoUrl}` : imageUrl ? `image:${imageUrl}` : videoUrl ? `video:${videoUrl}` : "empty";
       if (nextKey !== mediaKey) {
         mediaKey = nextKey;
         media.querySelector("video")?.pause();
         media.replaceChildren();
         if (videoUrl || imageUrl) {
-          const element = document.createElement(videoUrl ? "video" : "img");
-          element.src = videoUrl || imageUrl;
-          if (videoUrl) {
+          const element = document.createElement(showVideo || !imageUrl ? "video" : "img");
+          element.src = showVideo || !imageUrl ? videoUrl : imageUrl;
+          if (showVideo || !imageUrl) {
             element.muted = true;
             element.playsInline = true;
             element.className = "gallery-carousel-video";
@@ -7535,6 +7714,7 @@
     form.addEventListener("input", schedule);
     form.addEventListener("change", schedule);
     form.addEventListener("create:video-state-changed", schedule);
+    form.addEventListener("create:primary-media-changed", schedule);
     new MutationObserver(schedule).observe(form, { childList: true, subtree: true });
     schedule();
   }
@@ -7563,6 +7743,7 @@
     const operationLetter = escapeHtml(String(item?.operationLabel || "").trim().charAt(0).toUpperCase());
     const priceTooltipLabel = buildPriceTooltipLabel(item);
     const videoUrl = escapeAttribute(item?.videoUrl || "");
+    const isVideoPrimary = item?.isVideoPrimary !== false;
     const showReportButton = options.showReportButton !== false;
     const showFavoriteButton = options.showFavoriteButton !== false;
     const extraActionHtml = options.extraActionHtml || "";
@@ -7587,8 +7768,8 @@
         </span>
       `;
     const cardContent = `
-      <a href="${detailsUrl}" class="card-image-wrap gallery-card-with-caption publication-preview-trigger" data-publication-id="${publicationId}" data-details-url="${buildPublicationApiDetailsUrl(publicationId)}" data-images="${escapedImages.join("|||")}" data-video-url="${videoUrl}" data-media-index="0">
-        ${videoUrl
+      <a href="${detailsUrl}" class="card-image-wrap gallery-card-with-caption publication-preview-trigger" data-publication-id="${publicationId}" data-details-url="${buildPublicationApiDetailsUrl(publicationId)}" data-images="${escapedImages.join("|||")}" data-video-url="${videoUrl}" data-video-primary="${isVideoPrimary}" data-media-index="0">
+        ${videoUrl && isVideoPrimary
           ? `<video src="${videoUrl}" class="gallery-carousel-video" preload="metadata" muted playsinline></video><button type="button" class="gallery-play-toggle gallery-tooltip-trigger gallery-tooltip-top" data-gallery-play-toggle="true" aria-label="Reproducir video" data-tooltip-label="Reproducir video"></button><button type="button" class="gallery-audio-toggle gallery-tooltip-trigger gallery-tooltip-side" data-gallery-audio-toggle="true" aria-label="Activar audio" data-tooltip-label="Activar audio"><i class="fa-solid fa-volume-xmark" aria-hidden="true"></i></button>`
           : `<img src="${firstImage}" alt="${title}" class="gallery-carousel-image" loading="${imageLoading}" decoding="async" />`}
         ${priceCluster}
@@ -7910,6 +8091,7 @@
       .map(x => x.trim())
       .filter(Boolean);
     const videoUrl = (card.dataset.videoUrl || "").trim();
+    const isVideoPrimary = card.dataset.videoPrimary !== "false";
     const mediaCount = images.length + (videoUrl ? 1 : 0);
 
     if (mediaCount <= 1) return;
@@ -7924,7 +8106,8 @@
       currentVideo.pause?.();
     }
 
-    if (nextIndex === 0 && videoUrl) {
+    const showVideo = Boolean(videoUrl) && (isVideoPrimary ? nextIndex === 0 : nextIndex === images.length);
+    if (showVideo) {
       if (currentImage) {
         currentImage.remove();
       }
@@ -7950,7 +8133,7 @@
       mediaPreloadService.primeCardNavigation(card);
       return;
     } else {
-      const imageIndex = videoUrl ? nextIndex - 1 : nextIndex;
+      const imageIndex = videoUrl && isVideoPrimary ? nextIndex - 1 : nextIndex;
       const nextImageUrl = images[imageIndex] || images[0] || "";
       if (!nextImageUrl) return;
 
@@ -8320,6 +8503,7 @@
       longDescription: value("longDescription") || null,
       imagesCsv: value("imagesCsv"),
       videoUrl: value("videoUrl") || null,
+      primaryMediaType: value("videoUrl") ? (value("primaryMediaType") || "video") : "video",
       contactEmail: null,
       contactName: null,
       contactPhone: null,

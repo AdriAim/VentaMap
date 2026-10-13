@@ -19,6 +19,8 @@ public class PublicationCreateRequest
     public string? ContactEmail { get; set; }
     public bool Featured { get; set; }
     public string? VideoUrl { get; set; }
+    /// <summary>Tipo de contenido que debe abrir el anuncio. Video es la opción inicial.</summary>
+    public string? PrimaryMediaType { get; set; } = "video";
     public string? InternalNotes { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }

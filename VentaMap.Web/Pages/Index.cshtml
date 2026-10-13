@@ -1,8 +1,8 @@
 @page
 @model IndexModel
 @{
-    ViewData["Title"] = "Compra venta Argentina de inmuebles, rodados y anuncios";
-    ViewData["MetaDescription"] = "Compra venta Argentina en VentaMap. Publica anuncios clasificados de inmuebles, rodados y mas con precios visibles, mapa, galeria y texto.";
+    ViewData["Title"] = "Buscar inmuebles en mapa | Venta de inmuebles";
+    ViewData["MetaDescription"] = "Busca inmuebles en mapa y encuentra casas, departamentos, terrenos y propiedades en venta en Argentina. VentaMap reúne avisos con ubicación, fotos y precios.";
     var endpoint = $"/api/content/home?group={Uri.EscapeDataString(Model.Group)}&mode={Uri.EscapeDataString(Model.Mode)}&query={Uri.EscapeDataString(Model.Query ?? string.Empty)}";
     if (!string.IsNullOrWhiteSpace(Model.Operation))
     {

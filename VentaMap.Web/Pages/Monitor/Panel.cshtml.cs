@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using VentaMap.Data;
+using VentaMap.Models;
 using VentaMap.Services;
 
 namespace VentaMap.Pages.Monitor;
@@ -11,13 +12,13 @@ namespace VentaMap.Pages.Monitor;
 public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAccessor) : PageModel
 {
     public List<DailyMetric> Metrics { get; private set; } = [];
+    public List<SiteSuggestion> RecentSuggestions { get; private set; } = [];
+    public int LatestSuggestionId { get; private set; }
 
     public async Task<IActionResult> OnGetAsync()
     {
-        var currentUser = currentUserAccessor.UserId is int userId
-            ? await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId)
-            : null;
-        if (!MonitorAccess.IsMonitor(currentUser)) return Forbid();
+        var accessResult = await EnsureMonitorAccessAsync();
+        if (accessResult is not null) return accessResult;
 
         var today = DateTime.UtcNow.AddHours(-3).Date;
         var from = today.AddDays(-29);
@@ -49,11 +50,47 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
         var userCounts = users.GroupBy(ToArgentinaDay).ToDictionary(x => x.Key, x => x.Count());
         var publicationCounts = publications.GroupBy(ToArgentinaDay).ToDictionary(x => x.Key, x => x.Count());
         var republicationCounts = republications.GroupBy(ToArgentinaDay).ToDictionary(x => x.Key, x => x.Count());
+        RecentSuggestions = await db.SiteSuggestions.AsNoTracking()
+            .Include(x => x.User)
+            .OrderByDescending(x => x.Id)
+            .Take(10)
+            .ToListAsync();
+        LatestSuggestionId = RecentSuggestions.Count == 0 ? 0 : RecentSuggestions.Max(x => x.Id);
         Metrics = Enumerable.Range(0, 30)
             .Select(offset => today.AddDays(-offset))
             .Select(day => new DailyMetric(day, userCounts.GetValueOrDefault(day), publicationCounts.GetValueOrDefault(day), republicationCounts.GetValueOrDefault(day), visitors.GetValueOrDefault(day)))
             .ToList();
         return Page();
+    }
+
+    public async Task<IActionResult> OnGetSuggestionsAsync(int afterId = 0)
+    {
+        var accessResult = await EnsureMonitorAccessAsync();
+        if (accessResult is not null) return accessResult;
+
+        var suggestions = await db.SiteSuggestions.AsNoTracking()
+            .Where(x => x.Id > Math.Max(0, afterId))
+            .OrderBy(x => x.Id)
+            .Select(x => new
+            {
+                x.Id,
+                x.Message,
+                SenderName = x.SenderName ?? x.User!.Name,
+                SenderEmail = x.SenderEmail ?? x.User!.Email,
+                x.CreatedAtUtc
+            })
+            .Take(20)
+            .ToListAsync();
+
+        return new JsonResult(suggestions);
+    }
+
+    private async Task<IActionResult?> EnsureMonitorAccessAsync()
+    {
+        var currentUser = currentUserAccessor.UserId is int userId
+            ? await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId)
+            : null;
+        return MonitorAccess.IsMonitor(currentUser) ? null : Forbid();
     }
 
     private static DateTime ToArgentinaDay(DateTime utc) => utc.AddHours(-3).Date;

@@ -112,20 +112,40 @@ public class SettingsModel(
             return Page();
         }
 
-        if (Input.PhoneCountry == "AR" && !Regex.IsMatch(Input.Phone.Trim(), @"^\+54 9 \d{9,11}$"))
+        var user = await db.Users.FirstOrDefaultAsync(x => x.Id == userId);
+        if (user is null)
         {
-            ModelState.AddModelError(PhoneField, "Ingresa el telefono argentino como +54 9 seguido de 9, 10 u 11 digitos.");
+            return RedirectToPage("/Account/Login", new { returnUrl = Url.Page("/Account/Settings") });
+        }
+
+        var phoneIsRequired = user.IsCompany
+            || Input.AcceptsCalls
+            || Input.RespondsWhatsApp;
+        var phoneErrorMessage = user.IsCompany
+            ? "Ingresa el telefono argentino como +54 9 seguido de 9, 10 u 11 digitos."
+            : "Ingresa el telefono argentino como +54 9 seguido de 9, 10 u 11 digitos. O destilda Recibe llamadas y Recibe WhatsApp para obviar la carga de teléfono.";
+        if (phoneIsRequired && string.IsNullOrWhiteSpace(Input.Phone))
+        {
+            ModelState.AddModelError(PhoneField, phoneErrorMessage);
+        }
+        else if (phoneIsRequired
+                 && !string.IsNullOrWhiteSpace(Input.Phone)
+                 && Input.PhoneCountry == "AR"
+                 && !Regex.IsMatch(Input.Phone.Trim(), @"^\+54 9 \d{9,11}$"))
+        {
+            ModelState.AddModelError(PhoneField, phoneErrorMessage);
+        }
+
+        // Si no se publica por llamadas ni WhatsApp, no conservamos un teléfono
+        // parcial ni exigimos su formato para poder guardar la configuración.
+        if (!phoneIsRequired)
+        {
+            Input.Phone = string.Empty;
         }
 
         if (!Input.PublishEmail && !Input.AcceptsCalls && !Input.RespondsWhatsApp && !Input.AllowSiteChat)
         {
             ModelState.AddModelError(string.Empty, "Selecciona al menos un canal de contacto para publicar.");
-        }
-
-        var user = await db.Users.FirstOrDefaultAsync(x => x.Id == userId);
-        if (user is null)
-        {
-            return RedirectToPage("/Account/Login", new { returnUrl = Url.Page("/Account/Settings") });
         }
 
         if (user.IsCompany && string.IsNullOrWhiteSpace(Input.CompanyTagline))
@@ -179,7 +199,7 @@ public class SettingsModel(
         }
 
         user.ArgentineLocalityId = Input.ArgentineLocalityId;
-        user.Phone = NormalizePhone(Input.Phone, Input.PhoneCountry);
+        user.Phone = NormalizePhone(Input.Phone ?? string.Empty, Input.PhoneCountry);
         user.RespondsEmails = Input.PublishEmail;
         user.AcceptsCalls = Input.AcceptsCalls;
         user.RespondsWhatsApp = Input.RespondsWhatsApp;
@@ -327,8 +347,7 @@ public class SettingsModel(
 
         public string? SelectedExternalLocalityId { get; set; }
 
-        [Required(ErrorMessage = "Ingresa tu telefono.")]
-        public string Phone { get; set; } = string.Empty;
+        public string? Phone { get; set; }
 
         [Required]
         public string PhoneCountry { get; set; } = "AR";

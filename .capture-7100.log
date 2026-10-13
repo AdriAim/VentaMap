@@ -1,0 +1,42 @@
+[09:57:54 INF] Executed DbCommand (7ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='ventamap' AND TABLE_NAME='__EFMigrationsHistory';
+[09:57:54 INF] Executed DbCommand (2ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='ventamap' AND TABLE_NAME='__EFMigrationsHistory';
+[09:57:55 INF] Executed DbCommand (17ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT `MigrationId`, `ProductVersion`
+FROM `__EFMigrationsHistory`
+ORDER BY `MigrationId`;
+[09:57:55 INF] No migrations were applied. The database is already up to date.
+[09:57:56 INF] Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM `Users` AS `u`
+    WHERE `u`.`Email` = 'monitor@ventamap.local')
+[09:57:56 INF] Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT `a`.`Province`, `a`.`Locality`
+FROM `ArgentineLocalities` AS `a`
+[09:57:57 INF] Executed DbCommand (13ms) [Parameters=[@__now_0='?' (DbType = DateTime), @__p_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT `p`.`Id`, `p`.`AnonymousDeletePasswordHash`, `p`.`CategoryId`, `p`.`ContactEmail`, `p`.`ContactName`, `p`.`ContactPhone`, `p`.`CreatedAtUtc`, `p`.`Currency`, `p`.`DeactivatedAtUtc`, `p`.`DeactivationComment`, `p`.`DeactivationReason`, `p`.`ExpirationNoticeSentAtUtc`, `p`.`ExpiresAtUtc`, `p`.`Featured`, `p`.`Group`, `p`.`HideFromMap`, `p`.`InternalNotes`, `p`.`IsActive`, `p`.`IsAnonymous`, `p`.`Latitude`, `p`.`Locality`, `p`.`LongDescription`, `p`.`Longitude`, `p`.`ModerationStatus`, `p`.`OperationType`, `p`.`OriginalCreatedAtUtc`, `p`.`Price`, `p`.`ReportTrashSentAtUtc`, `p`.`ReportWarningSentAtUtc`, `p`.`ShortDescription`, `p`.`Status`, `p`.`Title`, `p`.`TrashedAtUtc`, `p`.`UniqueFavoriteCount`, `p`.`UniqueViewCount`, `p`.`UserId`, `u`.`Id`, `u`.`AcceptsCalls`, `u`.`AllowsSiteChat`, `u`.`ArgentineLocalityId`, `u`.`AuthProvider`, `u`.`CanPublish`, `u`.`CanReport`, `u`.`CompanyContactName`, `u`.`CompanyContactName2`, `u`.`CompanyContactName3`, `u`.`CompanyContactPhone2`, `u`.`CompanyContactPhone3`, `u`.`CompanyHeroBackgroundUrl`, `u`.`CompanyIndustry`, `u`.`CompanyLogoUrl`, `u`.`CompanyName`, `u`.`CompanySlug`, `u`.`CompanyTagline`, `u`.`ContactPreference`, `u`.`CreatedAtUtc`, `u`.`Email`, `u`.`HeaderPublicationGroupsCsv`, `u`.`IsAdmin`, `u`.`IsBillingExempt`, `u`.`IsCompany`, `u`.`IsDebugUser`, `u`.`MessageBubbleColor`, `u`.`Name`, `u`.`PasswordHash`, `u`.`Phone`, `u`.`RespondsEmails`, `u`.`RespondsWhatsApp`
+FROM `Publications` AS `p`
+LEFT JOIN `Users` AS `u` ON `p`.`UserId` = `u`.`Id`
+WHERE (((`p`.`IsActive` AND (`u`.`Id` IS NULL OR NOT (`u`.`IsCompany`))) AND `p`.`ExpiresAtUtc` IS NOT NULL) AND (`p`.`ExpiresAtUtc` <= @__now_0)) AND `p`.`ExpirationNoticeSentAtUtc` IS NULL
+ORDER BY `p`.`ExpiresAtUtc`
+LIMIT @__p_1
+[09:57:57 INF] Now listening on: http://localhost:7100
+[09:57:57 INF] Application started. Press Ctrl+C to shut down.
+[09:57:57 INF] Hosting environment: Development
+[09:57:57 INF] Content root path: E:\Proyectos\VentaMap
+[10:07:57 INF] Executed DbCommand (3ms) [Parameters=[@__now_0='?' (DbType = DateTime), @__p_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT `p`.`Id`, `p`.`AnonymousDeletePasswordHash`, `p`.`CategoryId`, `p`.`ContactEmail`, `p`.`ContactName`, `p`.`ContactPhone`, `p`.`CreatedAtUtc`, `p`.`Currency`, `p`.`DeactivatedAtUtc`, `p`.`DeactivationComment`, `p`.`DeactivationReason`, `p`.`ExpirationNoticeSentAtUtc`, `p`.`ExpiresAtUtc`, `p`.`Featured`, `p`.`Group`, `p`.`HideFromMap`, `p`.`InternalNotes`, `p`.`IsActive`, `p`.`IsAnonymous`, `p`.`Latitude`, `p`.`Locality`, `p`.`LongDescription`, `p`.`Longitude`, `p`.`ModerationStatus`, `p`.`OperationType`, `p`.`OriginalCreatedAtUtc`, `p`.`Price`, `p`.`ReportTrashSentAtUtc`, `p`.`ReportWarningSentAtUtc`, `p`.`ShortDescription`, `p`.`Status`, `p`.`Title`, `p`.`TrashedAtUtc`, `p`.`UniqueFavoriteCount`, `p`.`UniqueViewCount`, `p`.`UserId`, `u`.`Id`, `u`.`AcceptsCalls`, `u`.`AllowsSiteChat`, `u`.`ArgentineLocalityId`, `u`.`AuthProvider`, `u`.`CanPublish`, `u`.`CanReport`, `u`.`CompanyContactName`, `u`.`CompanyContactName2`, `u`.`CompanyContactName3`, `u`.`CompanyContactPhone2`, `u`.`CompanyContactPhone3`, `u`.`CompanyHeroBackgroundUrl`, `u`.`CompanyIndustry`, `u`.`CompanyLogoUrl`, `u`.`CompanyName`, `u`.`CompanySlug`, `u`.`CompanyTagline`, `u`.`ContactPreference`, `u`.`CreatedAtUtc`, `u`.`Email`, `u`.`HeaderPublicationGroupsCsv`, `u`.`IsAdmin`, `u`.`IsBillingExempt`, `u`.`IsCompany`, `u`.`IsDebugUser`, `u`.`MessageBubbleColor`, `u`.`Name`, `u`.`PasswordHash`, `u`.`Phone`, `u`.`RespondsEmails`, `u`.`RespondsWhatsApp`
+FROM `Publications` AS `p`
+LEFT JOIN `Users` AS `u` ON `p`.`UserId` = `u`.`Id`
+WHERE (((`p`.`IsActive` AND (`u`.`Id` IS NULL OR NOT (`u`.`IsCompany`))) AND `p`.`ExpiresAtUtc` IS NOT NULL) AND (`p`.`ExpiresAtUtc` <= @__now_0)) AND `p`.`ExpirationNoticeSentAtUtc` IS NULL
+ORDER BY `p`.`ExpiresAtUtc`
+LIMIT @__p_1
+[10:17:57 INF] Executed DbCommand (1ms) [Parameters=[@__now_0='?' (DbType = DateTime), @__p_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT `p`.`Id`, `p`.`AnonymousDeletePasswordHash`, `p`.`CategoryId`, `p`.`ContactEmail`, `p`.`ContactName`, `p`.`ContactPhone`, `p`.`CreatedAtUtc`, `p`.`Currency`, `p`.`DeactivatedAtUtc`, `p`.`DeactivationComment`, `p`.`DeactivationReason`, `p`.`ExpirationNoticeSentAtUtc`, `p`.`ExpiresAtUtc`, `p`.`Featured`, `p`.`Group`, `p`.`HideFromMap`, `p`.`InternalNotes`, `p`.`IsActive`, `p`.`IsAnonymous`, `p`.`Latitude`, `p`.`Locality`, `p`.`LongDescription`, `p`.`Longitude`, `p`.`ModerationStatus`, `p`.`OperationType`, `p`.`OriginalCreatedAtUtc`, `p`.`Price`, `p`.`ReportTrashSentAtUtc`, `p`.`ReportWarningSentAtUtc`, `p`.`ShortDescription`, `p`.`Status`, `p`.`Title`, `p`.`TrashedAtUtc`, `p`.`UniqueFavoriteCount`, `p`.`UniqueViewCount`, `p`.`UserId`, `u`.`Id`, `u`.`AcceptsCalls`, `u`.`AllowsSiteChat`, `u`.`ArgentineLocalityId`, `u`.`AuthProvider`, `u`.`CanPublish`, `u`.`CanReport`, `u`.`CompanyContactName`, `u`.`CompanyContactName2`, `u`.`CompanyContactName3`, `u`.`CompanyContactPhone2`, `u`.`CompanyContactPhone3`, `u`.`CompanyHeroBackgroundUrl`, `u`.`CompanyIndustry`, `u`.`CompanyLogoUrl`, `u`.`CompanyName`, `u`.`CompanySlug`, `u`.`CompanyTagline`, `u`.`ContactPreference`, `u`.`CreatedAtUtc`, `u`.`Email`, `u`.`HeaderPublicationGroupsCsv`, `u`.`IsAdmin`, `u`.`IsBillingExempt`, `u`.`IsCompany`, `u`.`IsDebugUser`, `u`.`MessageBubbleColor`, `u`.`Name`, `u`.`PasswordHash`, `u`.`Phone`, `u`.`RespondsEmails`, `u`.`RespondsWhatsApp`
+FROM `Publications` AS `p`
+LEFT JOIN `Users` AS `u` ON `p`.`UserId` = `u`.`Id`
+WHERE (((`p`.`IsActive` AND (`u`.`Id` IS NULL OR NOT (`u`.`IsCompany`))) AND `p`.`ExpiresAtUtc` IS NOT NULL) AND (`p`.`ExpiresAtUtc` <= @__now_0)) AND `p`.`ExpirationNoticeSentAtUtc` IS NULL
+ORDER BY `p`.`ExpiresAtUtc`
+LIMIT @__p_1

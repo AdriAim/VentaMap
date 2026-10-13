@@ -2,7 +2,16 @@
 @model VentaMap.Pages.CompanyProfileModel
 @using VentaMap.Models
 @{
-    ViewData["Title"] = Model.Company?.CompanyName ?? "Empresa";
+    var catalogCompany = Model.Company;
+    ViewData["Title"] = catalogCompany?.CompanyName ?? "Empresa";
+    if (!string.IsNullOrWhiteSpace(catalogCompany?.CompanyTagline))
+    {
+        ViewData["MetaDescription"] = catalogCompany.CompanyTagline;
+    }
+    if (!string.IsNullOrWhiteSpace(catalogCompany?.CompanyLogoUrl))
+    {
+        ViewData["OgImageUrl"] = catalogCompany.CompanyLogoUrl;
+    }
     ViewData["HideSiteHeader"] = "true";
 }
 
@@ -59,7 +68,7 @@ else
             categoryLabel = publication.Category?.Name,
             detailsUrl = $"/Publications/Details/{publication.Id}{debugSuffix}",
             videoUrl = publication.PrimaryVideoUrl,
-            images = publication.ImageList.Take(11).ToList(),
+            images = publication.ImageList.Take(31).ToList(),
             groupName = publication.Group.ToDisplayName(),
             isFavorite = Model.FavoritePublicationIds.Contains(publication.Id),
             locality = publication.Locality,
@@ -86,7 +95,7 @@ else
             priceTooltip = FormatMapPrice(publication),
             url = $"/Publications/Details/{publication.Id}{debugSuffix}",
             image = publication.ImageList.FirstOrDefault(),
-            images = publication.ImageList.Take(11).ToList(),
+            images = publication.ImageList.Take(31).ToList(),
             code = $"VTG-{publication.Id:000000}",
             videoUrl = publication.PrimaryVideoUrl,
             groupName = publication.Group.ToDisplayName(),
@@ -139,17 +148,21 @@ else
                 {
                     var contact = companyContacts[contactIndex];
                     var contactDigits = new string(contact.Phone.Where(char.IsDigit).ToArray());
-                    var contactLabel = string.IsNullOrWhiteSpace(contact.Name) ? string.Empty : $" a {contact.Name}";
+                    var contactName = string.IsNullOrWhiteSpace(contact.Name) ? company.CompanyName : contact.Name;
                     var extraContactClass = contactIndex > 0 ? " company-contact-extra" : string.Empty;
+                    <span class="@($"company-contact-pill is-contact-name{extraContactClass}")">
+                        <i class="fa-solid fa-user" aria-hidden="true"></i>
+                        <span>Contacto: @contactName</span>
+                    </span>
                     <a class="@($"company-contact-pill is-phone{extraContactClass}")" href="tel:@contact.Phone">
                         <i class="fa-solid fa-phone-volume" aria-hidden="true"></i>
-                        <span>Llamar@(contactLabel): @contact.Phone</span>
+                        <span>Llamar: @contact.Phone</span>
                     </a>
                     @if (!string.IsNullOrWhiteSpace(contactDigits))
                     {
                         <a class="@($"company-contact-pill is-whatsapp{extraContactClass}")" href="https://web.whatsapp.com/send?phone=@contactDigits" data-whatsapp-number="@contactDigits" target="_blank" rel="noopener noreferrer">
                             <i class="fa-brands fa-whatsapp" aria-hidden="true"></i>
-                            <span>Whatsapp@(contactLabel): @contact.Phone</span>
+                            <span>WhatsApp: @contact.Phone</span>
                         </a>
                     }
                 }
@@ -161,16 +174,20 @@ else
                             @foreach (var contact in companyContacts.Skip(1))
                             {
                                 var contactDigits = new string(contact.Phone.Where(char.IsDigit).ToArray());
-                                var contactLabel = string.IsNullOrWhiteSpace(contact.Name) ? string.Empty : $" a {contact.Name}";
+                                var contactName = string.IsNullOrWhiteSpace(contact.Name) ? company.CompanyName : contact.Name;
+                                <span class="company-contact-pill is-contact-name">
+                                    <i class="fa-solid fa-user" aria-hidden="true"></i>
+                                    <span>Contacto: @contactName</span>
+                                </span>
                                 <a class="company-contact-pill is-phone" href="tel:@contact.Phone">
                                     <i class="fa-solid fa-phone-volume" aria-hidden="true"></i>
-                                    <span>Llamar@(contactLabel): @contact.Phone</span>
+                                    <span>Llamar: @contact.Phone</span>
                                 </a>
                                 @if (!string.IsNullOrWhiteSpace(contactDigits))
                                 {
                                     <a class="company-contact-pill is-whatsapp" href="https://web.whatsapp.com/send?phone=@contactDigits" data-whatsapp-number="@contactDigits" target="_blank" rel="noopener noreferrer">
                                         <i class="fa-brands fa-whatsapp" aria-hidden="true"></i>
-                                        <span>Whatsapp@(contactLabel): @contact.Phone</span>
+                                        <span>WhatsApp: @contact.Phone</span>
                                     </a>
                                 }
                             }

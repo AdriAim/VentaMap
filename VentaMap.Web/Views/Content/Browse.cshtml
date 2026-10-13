@@ -1,6 +1,10 @@
 @model HomeContentViewModel
 @{
-    var currentMode = string.IsNullOrWhiteSpace(Model.Mode) ? "Galeria" : Model.Mode;
+    var currentMode = string.Equals(Model.Mode, "Mapa", StringComparison.OrdinalIgnoreCase)
+        ? "Mapa"
+        : string.Equals(Model.Mode, "Texto", StringComparison.OrdinalIgnoreCase)
+            ? "Texto"
+            : "Galeria";
     var currentGroup = string.IsNullOrWhiteSpace(Model.Group) ? "Inmuebles" : Model.Group;
     var previousPage = Math.Max(1, Model.Page - 1);
     var nextPage = Math.Min(Math.Max(1, Model.TotalPages), Model.Page + 1);

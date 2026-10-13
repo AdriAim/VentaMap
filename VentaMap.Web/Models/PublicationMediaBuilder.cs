@@ -2,7 +2,7 @@ namespace VentaMap.Models;
 
 public static class PublicationMediaBuilder
 {
-    public static IReadOnlyList<string> ParseLegacyImagesCsv(string? raw)
+    public static IReadOnlyList<string> ParseLegacyImagesCsv(string? raw, int maxImages = 10)
     {
         if (string.IsNullOrWhiteSpace(raw))
         {
@@ -12,7 +12,7 @@ public static class PublicationMediaBuilder
         return raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(IsValidMediaUrl)
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Take(10)
+            .Take(Math.Max(1, maxImages))
             .ToList();
     }
 
@@ -33,12 +33,17 @@ public static class PublicationMediaBuilder
     public static List<PublicationMedia> Build(
         string? imagesCsv,
         string? videoUrl,
-        DateTime createdAtUtc)
+        DateTime createdAtUtc,
+        string? primaryMediaType = null,
+        int maxImages = 10)
     {
         var items = new List<PublicationMedia>();
         var normalizedVideoUrl = NormalizeOptionalUrl(videoUrl);
-        var normalizedImages = ParseLegacyImagesCsv(imagesCsv);
+        var normalizedImages = ParseLegacyImagesCsv(imagesCsv, maxImages);
         var sortOrder = 1;
+
+        var useVideoAsPrimary = !string.Equals(primaryMediaType, "image", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(normalizedVideoUrl);
 
         if (!string.IsNullOrWhiteSpace(normalizedVideoUrl))
         {
@@ -47,7 +52,7 @@ public static class PublicationMediaBuilder
                 SortOrder = sortOrder++,
                 MediaType = PublicationMediaType.Video,
                 Url = normalizedVideoUrl,
-                IsPrimary = true,
+                IsPrimary = useVideoAsPrimary,
                 CreatedAtUtc = createdAtUtc
             });
         }
@@ -59,7 +64,7 @@ public static class PublicationMediaBuilder
                 SortOrder = sortOrder++,
                 MediaType = PublicationMediaType.Image,
                 Url = normalizedImages[index],
-                IsPrimary = normalizedVideoUrl is null && index == 0,
+                IsPrimary = !useVideoAsPrimary && index == 0,
                 CreatedAtUtc = createdAtUtc
             });
         }

@@ -51,8 +51,13 @@ public class RegisterModel(
 
     public IReadOnlyList<PublicationGroupType> HeaderGroupOptions { get; private set; } = [];
 
-    public async Task OnGetAsync()
+    public async Task OnGetAsync(string? accountType)
     {
+        if (string.Equals(accountType, "Company", StringComparison.OrdinalIgnoreCase))
+        {
+            Input.AccountType = "Company";
+        }
+
         await LoadPageOptionsAsync();
     }
 
@@ -77,11 +82,35 @@ public class RegisterModel(
             ModelState.AddModelError($"{nameof(Input)}.{nameof(InputModel.Name)}", "Ingresa tu nombre.");
         }
 
-        if (Input.PhoneCountry == "AR" && !Regex.IsMatch(Input.Phone.Trim(), @"^\+54 9 \d{9,11}$"))
+        var phoneIsRequired = Input.AccountType == "Company"
+            || Input.AcceptsCalls
+            || Input.RespondsWhatsApp;
+        var phoneErrorMessage = Input.AccountType == "Company"
+            ? "Ingresa el telefono argentino como +54 9 seguido de 9, 10 u 11 digitos."
+            : "Ingresa el telefono argentino como +54 9 seguido de 9, 10 u 11 digitos. O destilda Recibe llamadas y Recibe WhatsApp para obviar la carga de teléfono.";
+        if (phoneIsRequired && string.IsNullOrWhiteSpace(Input.Phone))
         {
-            ModelState.AddModelError(PhoneField, "Ingresa el telefono argentino como +54 9 seguido de 9, 10 u 11 digitos.");
+            ModelState.AddModelError(PhoneField, phoneErrorMessage);
+            LogFailedRegistrationAttempt("Phone missing for selected contact channels.");
+            return Page();
+        }
+
+        if (phoneIsRequired
+            && !string.IsNullOrWhiteSpace(Input.Phone)
+            && Input.PhoneCountry == "AR"
+            && !Regex.IsMatch(Input.Phone.Trim(), @"^\+54 9 \d{9,11}$"))
+        {
+            ModelState.AddModelError(PhoneField, phoneErrorMessage);
             LogFailedRegistrationAttempt("Invalid Argentine phone format.");
             return Page();
+        }
+
+        // Cuando la cuenta usa solamente el chat del sitio o email, el teléfono no
+        // participa del registro. Así un valor incompleto que haya quedado escrito
+        // no bloquea la creación ni se guarda como dato de contacto.
+        if (!phoneIsRequired)
+        {
+            Input.Phone = string.Empty;
         }
 
         string? companyLogoUrl = null;
@@ -218,7 +247,7 @@ public class RegisterModel(
         var result = await authService.RegisterAsync(
             registrationName,
             Input.Email,
-            Input.PhoneCountry == "AR" ? Input.Phone : Input.Phone.Trim(),
+            Input.PhoneCountry == "AR" ? Input.Phone ?? string.Empty : Input.Phone?.Trim() ?? string.Empty,
             Input.Password,
             Input.PhoneCountry,
             Input.AllowSiteChat,
@@ -380,8 +409,7 @@ public class RegisterModel(
         [EmailAddress(ErrorMessage = "Ingresa un email valido.")]
         public string Email { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "Ingresa tu telefono.")]
-        public string Phone { get; set; } = string.Empty;
+        public string? Phone { get; set; }
 
         [Required]
         public string PhoneCountry { get; set; } = "AR";

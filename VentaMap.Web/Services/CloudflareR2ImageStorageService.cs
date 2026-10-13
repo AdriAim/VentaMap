@@ -63,14 +63,14 @@ public sealed class CloudflareR2ImageStorageService
         _watermarkBytes = new Lazy<byte[]>(LoadWatermarkBytes);
     }
 
-    public async Task<List<string>> UploadPublicationImagesAsync(IReadOnlyList<IFormFile> files, CancellationToken cancellationToken = default)
+    public async Task<List<string>> UploadPublicationImagesAsync(IReadOnlyList<IFormFile> files, int maxImages = 10, CancellationToken cancellationToken = default)
     {
         var options = GetOptions();
         ValidateConfiguration(options);
 
         var urls = new List<string>();
         var rejectedMessages = new List<string>();
-        foreach (var file in files.Where(x => x.Length > 0).Take(11))
+        foreach (var file in files.Where(x => x.Length > 0).Take(Math.Max(1, maxImages)))
         {
             if (!TryValidateImageFile(file, out var rejectionMessage))
             {

@@ -19,6 +19,11 @@
             <span>Explorar Inmuebles</span>
             <i class="fa-solid fa-arrow-right explore-launcher-arrow" aria-hidden="true"></i>
         </a>
+        <a class="explore-launcher-button explore-launcher-button-map" href="/Buscar?group=Inmuebles&amp;mode=Mapa#browse-results">
+            <span class="explore-launcher-icon" aria-hidden="true"><i class="fa-solid fa-map-location-dot"></i></span>
+            <span>Mapa de Inmuebles</span>
+            <i class="fa-solid fa-arrow-right explore-launcher-arrow" aria-hidden="true"></i>
+        </a>
         <a class="explore-launcher-button explore-launcher-button-vehicle" href="/Buscar?group=Rodados#search-panel">
             <span class="explore-launcher-icon" aria-hidden="true"><i class="fa-solid fa-car-side"></i></span>
             <span>Explorar Rodados</span>
@@ -53,6 +58,71 @@
         </div>
     </div>
 </section>
+
+<section class="catalog-promo" aria-labelledby="catalog-promo-title">
+    <div class="catalog-promo-copy">
+        <span class="eyebrow">Tu vidriera digital</span>
+        <h2 id="catalog-promo-title">Creá tu catálogo digital</h2>
+        <p>Ofrecé tus inmuebles, rodados, embarcaciones o <strong>productos que vendas</strong>. Vas a tener un micrositio dentro de VentaMap, como este:</p>
+        <p class="catalog-promo-company">Podés crearlo dando de alta tu <a href="/Account/Register?accountType=Company"><strong>usuario empresa/emprendedor clickeando aquí</strong></a>.</p>
+        <div class="catalog-promo-contact">
+            <strong>¿Querés más información?</strong>
+            <span>Dejá tu teléfono o mail y te contactamos.</span>
+            <button type="button"
+                    class="primary-pill catalog-promo-button"
+                    data-suggestion-open="true"
+                    data-suggestion-title="Creá tu catálogo digital"
+                    data-suggestion-intro="Dejanos un teléfono o email para contarte cómo crear tu micrositio dentro de VentaMap."
+                    data-suggestion-label="Teléfono o email"
+                    data-suggestion-placeholder="Ej. 341 555 1234 o nombre@empresa.com"
+                    data-suggestion-prefix="CATALOGO DIGITAL - Contacto: "
+                    data-suggestion-submit-label="Enviar consulta">
+                Quiero más información
+            </button>
+        </div>
+    </div>
+    <div class="catalog-promo-preview"
+         aria-label="Vista previa del catálogo digital de Horizonte Propiedades"
+         data-catalog-promo-preview
+         data-gallery-src="/images/catalogo-horizonte-propiedades-galeria.png"
+         data-map-src="/images/catalogo-horizonte-propiedades-mapa.png">
+        <div class="catalog-promo-mode-switcher" role="group" aria-label="Modo de la vista previa">
+            <button type="button" class="is-active" data-catalog-promo-mode="gallery" aria-pressed="true">
+                <i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>
+                <span>Galería</span>
+            </button>
+            <button type="button" data-catalog-promo-mode="map" aria-pressed="false">
+                <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i>
+                <span>Mapa</span>
+            </button>
+        </div>
+        <button type="button"
+                class="catalog-promo-zoom-button"
+                data-catalog-promo-zoom-open
+                aria-haspopup="dialog"
+                aria-controls="catalogPromoZoomModal"
+                aria-label="Ampliar vista previa del catálogo digital">
+            <i class="fa-solid fa-magnifying-glass-plus" aria-hidden="true"></i>
+            <span>Zoom</span>
+        </button>
+        <img data-catalog-promo-preview-image
+             src="~/images/catalogo-horizonte-propiedades-galeria.png"
+             alt="Vista previa del catálogo digital de Horizonte Propiedades" />
+    </div>
+</section>
+
+<div class="preview-overlay catalog-promo-zoom-overlay" id="catalogPromoZoomModal" hidden>
+    <div class="preview-backdrop" data-catalog-promo-zoom-close></div>
+    <div class="preview-dialog catalog-promo-zoom-dialog"
+         role="dialog"
+         aria-modal="true"
+         aria-label="Vista ampliada del catálogo digital">
+        <button type="button" class="btn-close catalog-promo-zoom-close" data-catalog-promo-zoom-close aria-label="Cerrar vista ampliada"></button>
+        <img data-catalog-promo-zoom-image
+             src="~/images/catalogo-horizonte-propiedades-galeria.png"
+             alt="Vista ampliada del catálogo digital de Horizonte Propiedades" />
+    </div>
+</div>
 
 <section class="status-banner civic-banner">
     <strong>La comunidad decide.</strong>
