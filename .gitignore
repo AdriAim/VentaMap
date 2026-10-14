@@ -33,6 +33,9 @@ deploy-hostinger-db-seeds.local.ps1
 align-hostinger-ef-history.local.ps1
 /.codex-remote-attachments/01a040d6-ccfb-7cf0-a06f-a882213b50e8/da84c970-1535-4677-a2de-c779760376d4
 .codex-remote-attachments/
+# Perfiles y capturas locales de navegadores; pueden incluir datos sensibles.
+/chrome-capture-profile/
+/edge-capture-profile/
 artifacts/r2-seed-vertical/
 /logo-redes-180x180.jpg
 /Publicidad/Facebook-Instagram
