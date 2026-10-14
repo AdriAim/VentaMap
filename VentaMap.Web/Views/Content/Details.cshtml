@@ -55,7 +55,7 @@ else
         "Temporario" => " / día",
         _ => string.Empty
     };
-    var formattedPrice = $"{publication.Currency} {publication.Price.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-AR"))}{pricePeriod}";
+    var formattedPrice = $"{publication.Currency} {publication.Price.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-AR"))}";
     var detailShareUrl = $"{Context.Request.PathBase}/Publications/Details/{publication.Id}{debugSuffix}";
     var detailShareImage = publication.ImageList.FirstOrDefault();
 
@@ -90,12 +90,16 @@ else
         </div>
         <div class="price-panel" id="publication-start">
             <span class="detail-price-cluster">
-                <strong>
+                <strong class="detail-price">
                     @if (!string.IsNullOrWhiteSpace(operationLetter))
                     {
                         <span class="detail-operation-letter gallery-tooltip-trigger gallery-tooltip-top" data-tooltip-label="@operationLabel">@operationLetter</span>
                     }
-                    @formattedPrice
+                    <span>@formattedPrice</span>
+                    @if (!string.IsNullOrWhiteSpace(pricePeriod))
+                    {
+                        <span class="detail-price-period">@pricePeriod.Trim()</span>
+                    }
                 </strong>
             </span>
             <span>@publication.Locality</span>

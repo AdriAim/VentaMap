@@ -1,0 +1,45 @@
+@page "/conectarConIA"
+@model VentaMap.Pages.IAModel
+@{
+    ViewData["Title"] = "Conectá tu IA";
+    ViewData["MetaDescription"] = "Conectá asistentes de inteligencia artificial a los anuncios públicos de VentaMap mediante MCP.";
+}
+
+<section class="form-shell" style="max-width: 880px; margin: 2.5rem auto;">
+    <div class="section-heading">
+        <span class="eyebrow">Para asistentes de IA</span>
+        <h1>Consultá anuncios de VentaMap desde tu IA</h1>
+        <p>Conectá cualquier asistente compatible con MCP y pedile que busque anuncios por vos. Es público, gratuito y solo permite consultar anuncios activos.</p>
+    </div>
+
+    <section class="status-banner promo-banner" aria-label="Dirección del conector MCP">
+        <strong>Dirección para conectar</strong>
+        <p style="margin: .5rem 0 0;"><code>@Model.McpUrl</code></p>
+    </section>
+
+    <div class="section-heading" style="margin-top: 2rem;">
+        <h2>Cómo conectarlo</h2>
+        <ol>
+            <li>En la configuración de conectores o MCP de tu asistente, elegí <strong>Agregar servidor MCP</strong>.</li>
+            <li>Pegá la dirección de arriba como URL del servidor.</li>
+            <li>Guardá la conexión y preguntá, por ejemplo: <em>“Buscá casas quintas con pileta en Arroyo Leyes hasta USD 120.000 en VentaMap”.</em></li>
+        </ol>
+        <p class="field-hint">No requiere usuario, contraseña ni clave API. El conector permite hasta 20 consultas por día; para buscar sin límite, ingresá directamente a VentaMap.</p>
+    </div>
+
+    <section class="form-shell" style="margin-top: 2rem;">
+        <h2 style="font-size: 1.2rem;">Qué recibe la IA</h2>
+        <p>La localidad es obligatoria, igual que en la búsqueda de VentaMap. Si no se la indicás, la IA te la pedirá antes de buscar. También puede filtrar por texto, categoría y rango de precio. Cada resultado contiene solamente:</p>
+        <ul>
+            <li>Descripción breve del anuncio</li>
+            <li>Precio</li>
+            <li>Enlace para abrir el anuncio en VentaMap</li>
+        </ul>
+        <p class="field-hint">No compartimos datos de contacto, información del anunciante, ubicaciones exactas ni información interna a través de esta conexión.</p>
+    </section>
+
+    <section class="status-banner" style="margin-top: 2rem;">
+        <strong>Importante</strong>
+        <p style="margin: .5rem 0 0;">Los anuncios cambian con frecuencia. Usá siempre el enlace devuelto para ver la publicación vigente y contactar al anunciante desde VentaMap.</p>
+    </section>
+</section>

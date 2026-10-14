@@ -73,6 +73,20 @@ public class PublicationService(
             .Take(Math.Max(1, take))
             .ToListAsync();
 
+    // Deliberately narrower than the site search: this is the data source for the
+    // public MCP integration, so it never includes pending, inactive or debug ads.
+    public Task<List<Publication>> SearchPublicMcpPublicationsAsync(
+        PublicationGroup? group,
+        string? query,
+        double? referenceLatitude,
+        double? referenceLongitude,
+        PublicationSearchFilters? filters,
+        int take)
+        => BuildOrderedActiveSearchQuery(group, query, referenceLatitude, referenceLongitude, filters, includeDebug: false)
+            .Where(x => x.Status == PublicationStatus.Active)
+            .Take(Math.Clamp(take, 1, 10))
+            .ToListAsync();
+
     public Task<List<Publication>> SearchActivePublicationsPageAsync(PublicationGroup? group, string? query, int skip, int take, double? referenceLatitude, double? referenceLongitude, bool includeDebug = false)
         => SearchActivePublicationsPageAsync(group, query, skip, take, referenceLatitude, referenceLongitude, null, includeDebug);
 

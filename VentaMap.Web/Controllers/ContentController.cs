@@ -1452,6 +1452,11 @@ public partial class ContentController(
         }
 
         if (request.Price <= 0) AddError("price", "Ingresa un precio mayor a cero.");
+        if (request.Group is PublicationGroup.Inmuebles or PublicationGroup.Rodados or PublicationGroup.Embarcaciones
+            && decimal.Truncate(request.Price) != request.Price)
+        {
+            AddError("price", "El precio debe ser un número entero, sin decimales.");
+        }
         if (string.IsNullOrWhiteSpace(request.Currency)) AddError("currency", "Selecciona la moneda.");
         if (request.NoLocation && string.IsNullOrWhiteSpace(request.Locality)) AddError("locationSearch", "Completa tu localidad de usuario o marca un punto en el mapa.");
         if (!request.NoLocation && string.IsNullOrWhiteSpace(request.Locality)) AddError("locationSearch", "Indica la ubicacion del anuncio.");

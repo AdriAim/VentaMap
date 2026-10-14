@@ -202,13 +202,24 @@
     {
     <header class="site-header">
         <nav class="site-nav">
-            <a class="brand-lockup" asp-page="/Index">
-                <img class="brand-mark" src="~/images/logo5.png" alt="VentaMap" />
-                <span class="brand-text">
-                    <strong>VentaMap</strong>
-                    <small>Comunidad y Anuncios</small>
-                </span>
-            </a>
+            <div class="header-brand">
+                <a class="brand-mark-link" asp-page="/Index" aria-label="Ir al inicio de VentaMap">
+                    <img class="brand-mark" src="~/images/logo5.png" alt="VentaMap" />
+                </a>
+                <div>
+                    <a class="brand-lockup" asp-page="/Index">
+                        <span class="brand-text">
+                            <strong>VentaMap</strong>
+                            <small>Comunidad y Anuncios</small>
+                        </span>
+                    </a>
+                    <nav class="header-social-links" aria-label="Seguinos en redes sociales">
+                        <a href="https://www.instagram.com/ventamap.com.ar/" target="_blank" rel="noopener noreferrer" aria-label="Seguinos en Instagram" title="Instagram"><i class="fa-brands fa-instagram" aria-hidden="true"></i></a>
+                        <a href="https://www.facebook.com/profile.php?id=61594128039954" target="_blank" rel="noopener noreferrer" aria-label="Seguinos en Facebook" title="Facebook"><i class="fa-brands fa-facebook-f" aria-hidden="true"></i></a>
+                        <a href="https://x.com/VentaMap" target="_blank" rel="noopener noreferrer" aria-label="Seguinos en X" title="X"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i></a>
+                    </nav>
+                </div>
+            </div>
             <div class="site-nav-center">
                 <div class="header-category-strip" aria-label="Categorias principales">
                     @foreach (var group in headerGroups)
@@ -518,6 +529,17 @@
             <div>
                 <strong class="brand-wordmark">VentaMap</strong>
                 <p>Comunidad y Anuncios</p>
+                <nav class="footer-social-links" aria-label="Seguinos en redes sociales">
+                    <a href="https://www.instagram.com/ventamap.com.ar/" target="_blank" rel="noopener noreferrer" aria-label="Seguinos en Instagram" title="Instagram">
+                        <i class="fa-brands fa-instagram" aria-hidden="true"></i>
+                    </a>
+                    <a href="https://www.facebook.com/profile.php?id=61594128039954" target="_blank" rel="noopener noreferrer" aria-label="Seguinos en Facebook" title="Facebook">
+                        <i class="fa-brands fa-facebook-f" aria-hidden="true"></i>
+                    </a>
+                    <a href="https://x.com/VentaMap" target="_blank" rel="noopener noreferrer" aria-label="Seguinos en X" title="X">
+                        <i class="fa-brands fa-x-twitter" aria-hidden="true"></i>
+                    </a>
+                </nav>
             </div>
         </div>
         <div class="footer-links">

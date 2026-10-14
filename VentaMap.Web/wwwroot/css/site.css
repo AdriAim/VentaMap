@@ -282,6 +282,18 @@ img {
   flex-wrap: nowrap;
 }
 
+.header-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.brand-mark-link {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
 .brand-mark,
 .footer-mark {
   width: 58px;
@@ -303,6 +315,7 @@ img {
   line-height: 1;
   min-width: 0;
   flex: 0 1 auto;
+  text-align: center;
 }
 
 .brand-text strong {
@@ -317,6 +330,31 @@ img {
   font-size: 1.36rem;
   letter-spacing: 0.02em;
   white-space: nowrap;
+}
+
+.header-social-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.38rem;
+  margin-top: 0.42rem;
+}
+
+.header-social-links a {
+  display: inline-grid;
+  width: 1.35rem;
+  height: 1.35rem;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.header-social-links a:hover,
+.header-social-links a:focus-visible {
+  color: #fff;
+  background: var(--accent-navy);
 }
 
 .nav-links,
@@ -6190,15 +6228,25 @@ textarea:focus {
 }
 
 .detail-price-cluster {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  flex-wrap: nowrap;
-  white-space: nowrap;
+  display: block;
+  min-width: 0;
 }
 
 .price-panel strong {
-  font-size: 2rem;
+  font-size: clamp(1.45rem, 2.7vw, 2rem);
+}
+
+.detail-price {
+  display: flex;
+  align-items: baseline;
+  column-gap: 0.35rem;
+  row-gap: 0.05rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.detail-price-period {
+  white-space: nowrap;
 }
 
 .detail-operation-letter {
@@ -7208,6 +7256,33 @@ textarea:focus {
   margin: 0.35rem 0 0;
 }
 
+.footer-social-links {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+
+.footer-social-links a {
+  display: inline-grid;
+  width: 1.9rem;
+  height: 1.9rem;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.66);
+  text-decoration: none;
+  transition: transform 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.footer-social-links a:hover,
+.footer-social-links a:focus-visible {
+  color: #fff;
+  background: var(--accent-navy);
+  transform: translateY(-1px);
+}
+
 .footer-mark {
   width: 64px;
   height: 64px;
@@ -7699,7 +7774,7 @@ textarea.input-validation-error,
   }
 
   .detail-price-cluster {
-    white-space: normal;
+    min-width: 0;
   }
 
   .price-panel strong {
@@ -8152,6 +8227,16 @@ textarea.input-validation-error,
   .map-layout {
     grid-template-columns: 1fr;
     --map-desktop-shared-height: auto;
+  }
+
+  /* En teléfono el mapa es la vista principal: usar una proporción vertical
+     en vez de heredar el cuadrado que termina creando el canvas interactivo. */
+  .map-canvas-shell,
+  .map-canvas {
+    height: min(72vh, 135vw);
+    height: min(72svh, 135vw);
+    min-height: 0;
+    max-height: none;
   }
 
   .map-view-row {

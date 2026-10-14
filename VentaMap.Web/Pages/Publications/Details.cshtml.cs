@@ -19,6 +19,7 @@ public class DetailsModel(VentaMapDbContext db) : PageModel
         Publication = await db.Publications
             .AsNoTracking()
             .Include(x => x.User)
+            .Include(x => x.MediaItems)
             .FirstOrDefaultAsync(x => x.Id == Id);
 
         if (Publication is not null)
@@ -45,6 +46,12 @@ public class DetailsModel(VentaMapDbContext db) : PageModel
             {
                 ViewData["OgTitle"] = "Mira mi anuncio:";
                 ViewData["MetaDescription"] = shortDescription;
+            }
+
+            var publicationImage = Publication.ImageList.FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(publicationImage))
+            {
+                ViewData["OgImageUrl"] = publicationImage;
             }
         }
 

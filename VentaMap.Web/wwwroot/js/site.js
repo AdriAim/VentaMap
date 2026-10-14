@@ -5323,6 +5323,13 @@
     const localityInput = form.querySelector('input[name="locality"]');
     const addressInput = form.querySelector('input[name="address"]');
     syncCreatePricePeriodHint(form);
+    syncCreatePriceInput(form);
+    const priceInput = form.querySelector('[name="price"]');
+    priceInput?.addEventListener("input", () => {
+      if (priceInput.dataset.integerOnly === "true") {
+        priceInput.value = priceInput.value.replace(/\D/g, "");
+      }
+    });
     [categorySelect, localityInput, addressInput].forEach(input => {
       input?.addEventListener("input", () => syncCreateTitle(form));
       input?.addEventListener("change", () => syncCreateTitle(form));
@@ -5337,6 +5344,7 @@
     });
 
     groupInput?.addEventListener("change", async () => {
+      syncCreatePriceInput(form);
       await reloadCategoryOptions(form);
       await reloadDynamicCategoryFields(form);
       enhanceSearchableSelects(form);
@@ -6455,6 +6463,28 @@
 
     label.textContent = "Precio";
     hint.textContent = "Para alquileres indicá el valor mensual; para temporarios, el valor diario.";
+  }
+
+  function syncCreatePriceInput(form) {
+    const input = form.querySelector('[name="price"]');
+    const group = String(form.querySelector('[name="group"]')?.value || "");
+    if (!input) return;
+
+    const requiresIntegerPrice = ["1", "2", "4"].includes(group);
+    input.dataset.integerOnly = String(requiresIntegerPrice);
+
+    if (requiresIntegerPrice) {
+      input.type = "text";
+      input.inputMode = "numeric";
+      input.pattern = "[0-9]*";
+      input.value = input.value.replace(/\D/g, "");
+      return;
+    }
+
+    input.type = "number";
+    input.inputMode = "decimal";
+    input.step = "0.01";
+    input.removeAttribute("pattern");
   }
 
   function buildDynamicFieldNode(field, currentValue, mode = "optional") {
@@ -8188,6 +8218,18 @@
 
   function tryAutoplayGalleryVideo(video) {
     if (!video || !isMobileGalleryAutoplayContext()) return;
+    const rect = video.getBoundingClientRect();
+    const isFullyVisible = rect.top >= 0
+      && rect.left >= 0
+      && rect.bottom <= window.innerHeight
+      && rect.right <= window.innerWidth;
+    if (!isFullyVisible) {
+      video.autoplay = false;
+      video.pause?.();
+      syncGalleryVideoVisualState(video.closest(".card-image-wrap"));
+      return;
+    }
+
     video.muted = true;
     video.playsInline = true;
     video.autoplay = true;
@@ -8200,16 +8242,17 @@
 
     root.querySelectorAll(".card-image-wrap .gallery-carousel-video").forEach(video => {
       const rect = video.getBoundingClientRect();
-      const isVisible = rect.bottom > 0
-        && rect.right > 0
-        && rect.top < window.innerHeight
-        && rect.left < window.innerWidth;
+      const isFullyVisible = rect.top >= 0
+        && rect.left >= 0
+        && rect.bottom <= window.innerHeight
+        && rect.right <= window.innerWidth;
 
-      if (isVisible) {
+      if (isFullyVisible) {
         bindGalleryVideoState(video);
         tryAutoplayGalleryVideo(video);
         syncGalleryVideoAudioButton(video.closest(".card-image-wrap"));
       } else {
+        video.autoplay = false;
         video.pause?.();
         syncGalleryVideoVisualState(video.closest(".card-image-wrap"));
       }

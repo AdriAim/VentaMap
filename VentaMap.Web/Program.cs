@@ -2,10 +2,13 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using ModelContextProtocol.AspNetCore;
 using Serilog;
 using System.Security.Claims;
 using System.Data;
+using System.Threading.RateLimiting;
 using VentaMap.Data;
 using VentaMap.Models;
 using VentaMap.Services;
@@ -34,6 +37,21 @@ var maxUploadRequestBytes = builder.Configuration.GetValue<long?>("Uploads:MaxRe
 
 builder.Services.AddRazorPages();
 builder.Services.AddControllersWithViews();
+builder.Services.AddMcpServer()
+    .WithHttpTransport(options => options.SessionMode = HttpServerSessionMode.StatefulForInitializeClients)
+    .WithTools<McpListingTools>();
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("mcp-public", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 60,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
+});
 builder.Services.Configure<FormOptions>(options =>
 {
     options.MultipartBodyLengthLimit = maxUploadRequestBytes;
@@ -143,6 +161,9 @@ builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 builder.Services.AddSingleton<CloudflareR2ImageStorageService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PublicationService>();
+builder.Services.AddScoped<McpListingTools>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<McpDailyQueryLimitService>();
 builder.Services.AddScoped<BillingService>();
 builder.Services.AddScoped<PricingService>();
 builder.Services.AddHttpClient<MercadoPagoService>();
@@ -208,6 +229,7 @@ app.Use(async (context, next) =>
 });
 app.UseStaticFiles();
 app.UseRouting();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.Use(async (context, next) =>
@@ -227,6 +249,7 @@ app.Use(async (context, next) =>
 });
 app.MapControllers();
 app.MapRazorPages();
+app.MapMcp("/mcp").RequireRateLimiting("mcp-public");
 app.MapGet("/MisPublicaciones", () => Results.Redirect("/MisAnuncios", permanent: true));
 app.MapGet("/sitemap.xml", async (HttpContext context, VentaMapDbContext db) =>
 {
