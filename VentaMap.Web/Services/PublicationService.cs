@@ -353,6 +353,14 @@ public class PublicationService(
             if (!IsValidDynamicValue(field.DataType, value))
             {
                 errors.Add(new { field = field.InternalName, message = $"El valor de {field.Label} no coincide con el tipo esperado." });
+                continue;
+            }
+
+            if (field.DataType == PublicationCategoryFieldDataType.Numero
+                && value?.ValueNumber is decimal numberValue
+                && TryGetDynamicNumberRangeError(field.InternalName, numberValue, out var rangeError))
+            {
+                errors.Add(new { field = field.InternalName, message = rangeError });
             }
         }
 
@@ -1064,6 +1072,25 @@ public class PublicationService(
             PublicationCategoryFieldDataType.Booleano => value.ValueBoolean is null,
             _ => string.IsNullOrWhiteSpace(value.ValueText)
         };
+    }
+
+    private static bool TryGetDynamicNumberRangeError(string internalName, decimal value, out string error)
+    {
+        if (value < 0)
+        {
+            error = "Ingresa un número igual o mayor que cero.";
+            return true;
+        }
+
+        if (string.Equals(internalName, "antiguedad_anios", StringComparison.OrdinalIgnoreCase)
+            && value > 200)
+        {
+            error = "La antigüedad debe estar entre 0 y 200 años.";
+            return true;
+        }
+
+        error = string.Empty;
+        return false;
     }
 
     private static bool IsValidDynamicValue(PublicationCategoryFieldDataType dataType, PublicationDynamicFieldInput value)

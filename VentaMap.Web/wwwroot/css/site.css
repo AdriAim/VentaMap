@@ -1111,6 +1111,29 @@ h3,
   row-gap: 1.15rem;
 }
 
+.create-technical-panel {
+  container-type: inline-size;
+}
+
+/* The technical panel can become narrow even on a desktop viewport because the
+   live preview occupies a column. Base this layout on the panel width itself. */
+@container (max-width: 980px) {
+  .form-grid[data-dynamic-optional-fields-container] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .form-grid[data-dynamic-optional-fields-container] label.dynamic-field-half,
+  .form-grid[data-dynamic-optional-fields-container] label.dynamic-field-full {
+    grid-column: 1 / -1;
+  }
+
+  .form-grid[data-dynamic-optional-fields-container] label.dynamic-field-inline,
+  .form-grid[data-dynamic-optional-fields-container] label.dynamic-field-inline.checkline {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.45rem;
+  }
+}
+
 .search-grid {
   align-items: end;
 }

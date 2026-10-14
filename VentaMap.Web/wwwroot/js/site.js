@@ -6493,8 +6493,14 @@
     switch (effectiveFieldType) {
       case "numero":
         input = document.createElement("input");
-        input.type = "number";
-        input.step = "1";
+        // A native number control renders its own spinner. On compact notebooks
+        // that resembles a date picker and the mouse wheel can silently change
+        // the value while the user is scrolling the form. Use plain text with a
+        // numeric keyboard instead, then normalize comma/dot decimals ourselves.
+        input.type = "text";
+        input.inputMode = "decimal";
+        input.autocomplete = "off";
+        input.className = "dynamic-number-input";
         input.value = currentValue ?? "";
         break;
       case "booleano":
@@ -8482,7 +8488,7 @@
             ? null
             : String(input.value).toLowerCase() === "true";
         } else if (fieldType === "numero") {
-          payload.valueNumber = input.value === "" ? null : Number(input.value);
+          payload.valueNumber = parseLocalizedNumber(input.value);
         } else {
           payload.valueText = input.value === "" ? null : input.value;
         }
@@ -8559,7 +8565,30 @@
   }
 
   function numberOrNull(value) {
-    return value === "" ? null : Number(value);
+    return parseLocalizedNumber(value);
+  }
+
+  function parseLocalizedNumber(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw) return null;
+
+    // The rightmost separator is the decimal separator when both are present.
+    // This accepts both Argentine (1.234,50) and dot-decimal (1,234.50) input.
+    const compact = raw.replace(/\s+/g, "");
+    const lastComma = compact.lastIndexOf(",");
+    const lastDot = compact.lastIndexOf(".");
+    let normalized = compact;
+
+    if (lastComma >= 0 && lastDot >= 0) {
+      const decimalSeparator = lastComma > lastDot ? "," : ".";
+      const groupingSeparator = decimalSeparator === "," ? "." : ",";
+      normalized = compact.split(groupingSeparator).join("").replace(decimalSeparator, ".");
+    } else if (lastComma >= 0) {
+      normalized = compact.replace(",", ".");
+    }
+
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
   }
 })();
 
