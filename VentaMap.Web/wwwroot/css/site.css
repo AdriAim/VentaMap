@@ -3422,7 +3422,7 @@ textarea:focus {
   position: absolute;
   z-index: 40;
   left: 50%;
-  bottom: calc(100% + 0.6rem);
+  top: calc(100% + 0.6rem);
   display: grid;
   gap: 0.55rem;
   width: min(19rem, 72vw);
@@ -3436,7 +3436,7 @@ textarea:focus {
   text-align: left;
   pointer-events: none;
   opacity: 0;
-  transform: translate(-50%, 0.25rem);
+  transform: translate(-50%, -0.25rem);
   transition: opacity 0.16s ease, transform 0.16s ease;
   visibility: hidden;
 }
@@ -3467,7 +3467,7 @@ textarea:focus {
 /* La primera métrica queda junto al borde izquierdo de la tabla en móvil. */
 .monitor-metric-cell--start .monitor-metric-tooltip {
   left: 0;
-  transform: translate(0, 0.25rem);
+  transform: translate(0, -0.25rem);
 }
 
 .monitor-metric-cell--start:hover .monitor-metric-tooltip,
