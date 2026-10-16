@@ -1315,6 +1315,58 @@ public partial class ContentController(
         }
     }
 
+    [HttpPost("prepare-direct-video-upload")]
+    [IgnoreAntiforgeryToken]
+    public IActionResult PrepareDirectVideoUpload([FromBody] DirectVideoUploadRequest request)
+    {
+        if (!currentUserAccessor.IsAuthenticated)
+        {
+            return Unauthorized(new { message = "Tenes que iniciar sesion para subir videos." });
+        }
+
+        try
+        {
+            var upload = imageStorageService.CreateDirectPublicationVideoUpload(request.FileName, request.ContentType, request.ContentLength);
+            logger.LogInformation("Prepared direct R2 video upload for user {UserId}. File {FileName}, {Length} bytes.", currentUserAccessor.UserId, request.FileName, request.ContentLength);
+            return Ok(new { uploadUrl = upload.UploadUrl, publicUrl = upload.PublicUrl, contentType = upload.ContentType, contentLength = upload.ContentLength });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Could not prepare direct R2 video upload for user {UserId}.", currentUserAccessor.UserId);
+            return StatusCode(500, new { message = "No se pudo preparar la subida del video." });
+        }
+    }
+
+    [HttpPost("confirm-direct-video-upload")]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> ConfirmDirectVideoUpload([FromBody] ConfirmDirectVideoUploadRequest request, CancellationToken cancellationToken)
+    {
+        if (!currentUserAccessor.IsAuthenticated)
+        {
+            return Unauthorized(new { message = "Tenes que iniciar sesion para subir videos." });
+        }
+
+        try
+        {
+            var url = await imageStorageService.ConfirmDirectPublicationVideoUploadAsync(request.PublicUrl, request.ContentLength, request.ContentType, cancellationToken);
+            logger.LogInformation("Confirmed direct R2 video upload for user {UserId}: {Url}", currentUserAccessor.UserId, url);
+            return Ok(new { url });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Could not confirm direct R2 video upload for user {UserId}.", currentUserAccessor.UserId);
+            return StatusCode(500, new { message = "No se pudo confirmar la subida del video." });
+        }
+    }
+
     [HttpPost("delete-uploaded-media")]
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> DeleteUploadedMedia([FromBody] DeleteUploadedMediaRequest request)
@@ -1971,3 +2023,6 @@ public partial class ContentController(
         return $"{displayCurrency} {price.ToString(numericFormat, CultureInfo.GetCultureInfo("es-AR"))}{period}";
     }
 }
+
+public sealed record DirectVideoUploadRequest(string? FileName, string? ContentType, long ContentLength);
+public sealed record ConfirmDirectVideoUploadRequest(string PublicUrl, string ContentType, long ContentLength);

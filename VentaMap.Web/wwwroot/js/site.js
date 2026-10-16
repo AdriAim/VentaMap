@@ -5011,38 +5011,58 @@
     });
   }
 
-  function uploadVideoRequest(formData) {
+  async function prepareDirectVideoUpload(file) {
+    const response = await fetch("/api/content/prepare-direct-video-upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" },
+      body: JSON.stringify({
+        fileName: file.name || "video.mp4",
+        contentType: file.type || "video/mp4",
+        contentLength: file.size
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.uploadUrl || !payload?.publicUrl) {
+      throw new Error(payload?.message || "No se pudo preparar la subida directa del video.");
+    }
+    return payload;
+  }
+
+  function uploadVideoDirectly(uploadUrl, file, contentType, onProgress) {
     return new Promise((resolve, reject) => {
       const request = new XMLHttpRequest();
-      request.open("POST", "/api/content/upload-video", true);
-      request.setRequestHeader("X-Requested-With", "fetch");
+      request.open("PUT", uploadUrl, true);
+      request.setRequestHeader("Content-Type", contentType);
 
       request.onload = () => {
-        let payload = {};
-        try {
-          payload = request.responseText ? JSON.parse(request.responseText) : {};
-        } catch {
-          payload = {};
-        }
-
-        resolve({
-          ok: request.status >= 200 && request.status < 300,
-          status: request.status,
-          message: payload?.message,
-          url: payload?.url
-        });
+        if (request.status >= 200 && request.status < 300) return resolve();
+        reject(new Error("R2 rechazó la subida del video."));
       };
 
       request.onerror = () => {
-        reject(new Error("Fallo la conexion al subir el video desde este navegador."));
+        reject(new Error("Falló la conexión directa con el almacenamiento de videos."));
       };
 
       request.ontimeout = () => {
         reject(new Error("La subida del video agoto el tiempo de espera."));
       };
 
-      request.send(formData);
+      request.upload.onprogress = event => {
+        if (event.lengthComputable) onProgress?.(event.loaded / event.total);
+      };
+      request.send(file);
     });
+  }
+
+  async function confirmDirectVideoUpload(upload, file) {
+    const response = await fetch("/api/content/confirm-direct-video-upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" },
+      body: JSON.stringify({ publicUrl: upload.publicUrl, contentType: upload.contentType, contentLength: file.size })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.url) throw new Error(payload?.message || "No se pudo confirmar el video subido.");
+    return payload.url;
   }
 
   async function deleteUploadedMediaRequest(urls) {
@@ -7543,24 +7563,27 @@
           fileToUpload = file;
         }
 
-        currentState.statusText = "Subiendo...";
+        currentState.statusText = "Preparando subida directa...";
         render();
-        const formData = new FormData();
-        formData.append("file", fileToUpload);
-
-        const result = await uploadVideoRequest(formData);
-        if (!result.ok || !result.url) {
-          clearState();
-          throw new Error(result.message || "No se pudo subir el video.");
-        }
+        const upload = await prepareDirectVideoUpload(fileToUpload);
+        currentState.statusText = "Subiendo a almacenamiento... 0%";
+        render();
+        await uploadVideoDirectly(upload.uploadUrl, fileToUpload, upload.contentType, progress => {
+          if (state?.id !== currentState.id) return;
+          currentState.statusText = `Subiendo a almacenamiento... ${Math.round(progress * 100)}%`;
+          render();
+        });
+        currentState.statusText = "Confirmando video...";
+        render();
+        const uploadedUrl = await confirmDirectVideoUpload(upload, fileToUpload);
 
         if (state?.id === currentState.id) {
-          state.uploadedUrl = result.url;
+          state.uploadedUrl = uploadedUrl;
           state.statusText = "Listo";
         }
         if (currentState.removed && currentState.deleteOnRemove) {
           try {
-            await deleteUploadedUrls([result.url]);
+            await deleteUploadedUrls([uploadedUrl]);
           } catch (error) {
             showDeleteWarning(error?.message || "No se pudo borrar el video descartado.");
           }

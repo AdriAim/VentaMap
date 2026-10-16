@@ -307,6 +307,66 @@ public sealed class CloudflareR2ImageStorageService
         }
     }
 
+    /// <summary>Creates a short-lived, single-object R2 upload URL so video bytes do not traverse the web server.</summary>
+    public DirectVideoUpload CreateDirectPublicationVideoUpload(string? fileName, string? declaredContentType, long contentLength)
+    {
+        if (contentLength <= 0)
+        {
+            throw new InvalidOperationException("El video esta vacio.");
+        }
+
+        var options = GetOptions();
+        ValidateConfiguration(options);
+        var contentType = NormalizeVideoContentType(fileName, declaredContentType);
+        if (!AllowedVideoContentTypes.Contains(contentType))
+        {
+            throw new InvalidOperationException("El video debe estar en formato MP4, WEBM o MOV.");
+        }
+
+        if (contentLength > options.MaxVideoBytes)
+        {
+            throw new InvalidOperationException($"El video supera el limite de {options.MaxVideoBytes / (1024 * 1024)} MB.");
+        }
+
+        var key = BuildObjectKey(options, ResolveVideoExtension(fileName, contentType));
+        var uploadUrl = _client.Value.GetPreSignedURL(new GetPreSignedUrlRequest
+        {
+            BucketName = options.Bucket,
+            Key = key,
+            Verb = HttpVerb.PUT,
+            Expires = DateTime.UtcNow.AddMinutes(15),
+            ContentType = contentType
+        });
+
+        return new DirectVideoUpload(uploadUrl, BuildPublicUrl(options.PublicBaseUrl, key), contentType, contentLength);
+    }
+
+    public async Task<string> ConfirmDirectPublicationVideoUploadAsync(string publicUrl, long expectedLength, string expectedContentType, CancellationToken cancellationToken = default)
+    {
+        var options = GetOptions();
+        ValidateConfiguration(options);
+        var key = TryExtractManagedObjectKey(publicUrl, options.PublicBaseUrl);
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            throw new InvalidOperationException("La URL del video no pertenece al almacenamiento de VentaMap.");
+        }
+
+        var metadata = await _client.Value.GetObjectMetadataAsync(options.Bucket, key, cancellationToken);
+        if (metadata.ContentLength <= 0 || metadata.ContentLength > options.MaxVideoBytes || metadata.ContentLength != expectedLength)
+        {
+            throw new InvalidOperationException("El tamaño del video subido no es válido.");
+        }
+
+        var actualContentType = NormalizeVideoContentType(key, metadata.Headers.ContentType);
+        if (!AllowedVideoContentTypes.Contains(actualContentType)
+            || !string.Equals(actualContentType, expectedContentType, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("El formato del video subido no es válido.");
+        }
+
+        return BuildPublicUrl(options.PublicBaseUrl, key);
+    }
+
     public async Task DeletePublicObjectsAsync(IEnumerable<string> urls, CancellationToken cancellationToken = default)
     {
         var options = GetOptions();
@@ -567,18 +627,22 @@ public sealed class CloudflareR2ImageStorageService
         return $"{fileName} no tiene un formato compatible. Usa JPG, PNG o WEBP.";
     }
 
-    private static string NormalizeVideoContentType(IFormFile file)
+    private static string NormalizeVideoContentType(IFormFile file) => NormalizeVideoContentType(file.FileName, file.ContentType);
+
+    private static string NormalizeVideoContentType(string? fileName, string? declaredContentType)
     {
-        var contentType = file.ContentType?.Trim() ?? string.Empty;
+        var contentType = declaredContentType?.Trim() ?? string.Empty;
         if (!string.IsNullOrWhiteSpace(contentType))
         {
             return contentType;
         }
 
-        return ContentTypeProvider.TryGetContentType(file.FileName, out var inferred)
+        return ContentTypeProvider.TryGetContentType(fileName ?? string.Empty, out var inferred)
             ? inferred
             : "application/octet-stream";
     }
+
+    public sealed record DirectVideoUpload(string UploadUrl, string PublicUrl, string ContentType, long ContentLength);
 
     private static string ResolveVideoExtension(string? fileName, string contentType)
     {
