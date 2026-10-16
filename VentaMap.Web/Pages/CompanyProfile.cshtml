@@ -124,7 +124,7 @@ else
                         <img src="~/images/logo5.png" alt="VentaMap" class="company-hero-platform-logo" />
                         <span class="brand-wordmark">VentaMap</span>
                     </a>
-                    <h1>@company.CompanyName</h1>
+                    <h1 data-company-profile-name>@company.CompanyName</h1>
                     @if (!string.IsNullOrWhiteSpace(company.CompanyIndustry))
                     {
                         <strong class="company-hero-industry">@company.CompanyIndustry</strong>
@@ -349,6 +349,56 @@ else
     @section Scripts {
         <script>
             (() => {
+                const fitCompanyProfileName = () => {
+                    const companyName = document.querySelector("[data-company-profile-name]");
+                    if (!companyName || !window.matchMedia("(max-width: 780px)").matches) {
+                        return;
+                    }
+
+                    companyName.style.fontSize = "";
+                    const availableWidth = companyName.clientWidth;
+                    const words = companyName.textContent.trim().split(/\s+/).filter(Boolean);
+                    if (!availableWidth || !words.length) {
+                        return;
+                    }
+
+                    const initialFontSize = Number.parseFloat(window.getComputedStyle(companyName).fontSize);
+                    const measure = document.createElement("span");
+                    const computedStyle = window.getComputedStyle(companyName);
+                    measure.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:${computedStyle.font};letter-spacing:${computedStyle.letterSpacing};`;
+                    document.body.appendChild(measure);
+
+                    const widestWordAt = (fontSize) => {
+                        measure.style.fontSize = `${fontSize}px`;
+                        return Math.max(...words.map(word => {
+                            measure.textContent = word;
+                            return measure.getBoundingClientRect().width;
+                        }));
+                    };
+
+                    let minimum = 1;
+                    let maximum = initialFontSize;
+                    while (maximum - minimum > 0.1) {
+                        const candidate = (minimum + maximum) / 2;
+                        if (widestWordAt(candidate) <= availableWidth) {
+                            minimum = candidate;
+                        } else {
+                            maximum = candidate;
+                        }
+                    }
+
+                    companyName.style.fontSize = widestWordAt(initialFontSize) <= availableWidth
+                        ? ""
+                        : `${minimum.toFixed(2)}px`;
+                    measure.remove();
+                };
+
+                const scheduleCompanyProfileNameFit = () => requestAnimationFrame(fitCompanyProfileName);
+                window.addEventListener("resize", scheduleCompanyProfileNameFit);
+                window.addEventListener("load", scheduleCompanyProfileNameFit, { once: true });
+                document.fonts?.ready.then(scheduleCompanyProfileNameFit);
+                scheduleCompanyProfileNameFit();
+
                 const coverHero = document.querySelector("[data-company-profile-cover-part='hero']");
                 const coverCatalog = document.querySelector("[data-company-profile-cover-part='catalog']");
 

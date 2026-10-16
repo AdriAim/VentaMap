@@ -25,6 +25,11 @@
   const chatConfig = window.__VENTAMAP_CHAT_CONFIG || {};
   const supportedMapBounds = [[-73.6, -56.5], [-52.0, -19.0]];
   const supportedMapCenter = [-60.5, -31.5];
+  const mapLibreLocale = {
+    "CooperativeGesturesHandler.WindowsHelpText": "Usá Ctrl + desplazamiento para acercar el mapa",
+    "CooperativeGesturesHandler.MacHelpText": "Usá ⌘ + desplazamiento para acercar el mapa",
+    "CooperativeGesturesHandler.MobileHelpText": "Usá dos dedos para mover el mapa"
+  };
   const MAP_ZOOM_OUT_FACTOR = 0.8;
   const defaultGeocodingSearchUrlTemplate = "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&countrycodes=ar,uy,py&q={query}";
   const defaultReverseGeocodingUrlTemplate = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&lat={lat}&lon={lng}";
@@ -3345,6 +3350,7 @@
       container: mapElement,
       style: buildMapStyle(styleUrl, tilesUrlTemplate, attribution, { preferRaster: mapMode === "detail" }),
       attributionControl: false,
+      locale: mapLibreLocale,
       maxBounds: supportedMapBounds,
       center: hasInitialCenter ? [initialLng, initialLat] : [markers[0].lng, markers[0].lat],
       zoom: mapMode === "detail" ? zoomOutLevel(17.5) : (hasInitialCenter ? zoomOutLevel(11) : 5),
@@ -3558,28 +3564,94 @@
       button.hidden = !(mapMode !== "detail" && markersEndpoint);
     };
 
-    const refreshVisibleMapMarkers = async () => {
-      if (!markersEndpoint) return;
+    let visibleMarkersRequest = null;
+    let visibleMarkersRequestId = 0;
+    let lastViewportRequestKey = null;
+    let viewportRefreshTimer = null;
+
+    const getVisibleViewport = () => {
       const currentBounds = instance.getBounds?.();
-      if (!currentBounds) return;
+      if (!currentBounds) return null;
+
+      const north = currentBounds.getNorth();
+      const south = currentBounds.getSouth();
+      const east = currentBounds.getEast();
+      const west = currentBounds.getWest();
+      if (![north, south, east, west].every(Number.isFinite)) return null;
+
+      // La precisión evita volver a consultar por variaciones imperceptibles
+      // de coma flotante al finalizar una animación del mapa.
+      const requestKey = [north, south, east, west]
+        .map(value => value.toFixed(5))
+        .join(":");
+
+      return { north, south, east, west, requestKey };
+    };
+
+    const refreshVisibleMapMarkers = async ({ force = false } = {}) => {
+      if (!markersEndpoint) return;
+      const viewport = getVisibleViewport();
+      if (!viewport || (!force && viewport.requestKey === lastViewportRequestKey)) return;
+
+      visibleMarkersRequest?.abort();
+      const requestController = new AbortController();
+      visibleMarkersRequest = requestController;
+      const requestId = ++visibleMarkersRequestId;
 
       const endpointUrl = new URL(markersEndpoint, window.location.origin);
-      endpointUrl.searchParams.set("north", String(currentBounds.getNorth()));
-      endpointUrl.searchParams.set("south", String(currentBounds.getSouth()));
-      endpointUrl.searchParams.set("east", String(currentBounds.getEast()));
-      endpointUrl.searchParams.set("west", String(currentBounds.getWest()));
+      endpointUrl.searchParams.set("north", String(viewport.north));
+      endpointUrl.searchParams.set("south", String(viewport.south));
+      endpointUrl.searchParams.set("east", String(viewport.east));
+      endpointUrl.searchParams.set("west", String(viewport.west));
 
-      const response = await fetch(endpointUrl.toString(), {
-        headers: { "X-Requested-With": "fetch" }
-      });
-      if (!response.ok) {
-        throw new Error(`Map refresh failed with status ${response.status}`);
+      try {
+        const response = await fetch(endpointUrl.toString(), {
+          headers: { "X-Requested-With": "fetch" },
+          signal: requestController.signal
+        });
+        if (!response.ok) {
+          throw new Error(`Map refresh failed with status ${response.status}`);
+        }
+
+        const result = await response.json().catch(() => ({}));
+        // Una respuesta vieja no puede reemplazar los marcadores del último
+        // desplazamiento o zoom del usuario.
+        if (requestId !== visibleMarkersRequestId || requestController.signal.aborted) return;
+
+        lastViewportRequestKey = viewport.requestKey;
+        markers = Array.isArray(result?.items) ? result.items : [];
+        mapElement.dataset.markers = JSON.stringify(markers);
+        renderMapMarkers({ preserveSelection: true });
+      } finally {
+        if (visibleMarkersRequest === requestController) {
+          visibleMarkersRequest = null;
+        }
+      }
+    };
+
+    const scheduleVisibleMarkersRefresh = () => {
+      if (viewportRefreshTimer) {
+        window.clearTimeout(viewportRefreshTimer);
+      }
+      viewportRefreshTimer = window.setTimeout(() => {
+        viewportRefreshTimer = null;
+        refreshVisibleMapMarkers().catch(error => {
+          if (error?.name !== "AbortError") {
+            console.error(error);
+          }
+        });
+      }, 320);
+    };
+
+    const cancelVisibleMarkersRefresh = () => {
+      if (viewportRefreshTimer) {
+        window.clearTimeout(viewportRefreshTimer);
+        viewportRefreshTimer = null;
       }
 
-      const result = await response.json().catch(() => ({}));
-      markers = Array.isArray(result?.items) ? result.items : [];
-      mapElement.dataset.markers = JSON.stringify(markers);
-      renderMapMarkers({ preserveSelection: true });
+      // Si el usuario vuelve a mover el mapa, no dejamos que una respuesta
+      // del sector anterior redibuje los pines durante ese nuevo gesto.
+      visibleMarkersRequest?.abort();
     };
 
     const initialBounds = renderMapMarkers();
@@ -3613,7 +3685,7 @@
             if (label) {
               label.textContent = "Actualizando...";
             }
-            await refreshVisibleMapMarkers();
+            await refreshVisibleMapMarkers({ force: true });
             syncRefreshButtonVisibility(refreshButton);
           } catch (error) {
             console.error(error);
@@ -3626,6 +3698,12 @@
           }
         });
       }
+
+      // Mientras se mueve, se conservan los pines ya dibujados. `moveend`
+      // cubre arrastre y zoom, por lo que la consulta recién se agenda al
+      // terminar el gesto.
+      instance.on?.("movestart", cancelVisibleMarkersRefresh);
+      instance.on?.("moveend", scheduleVisibleMarkersRefresh);
     }
 
     if (!isMobileMapInteractionContext()) {

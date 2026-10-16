@@ -511,13 +511,20 @@ public partial class ContentController(
         filters.East = east;
         filters.West = west;
 
+        // Cuando el mapa informa un rectángulo visible, ese rectángulo pasa a
+        // ser el criterio geográfico. El radio de la localidad sólo se usa
+        // para la carga inicial de la vista; mantenerlo aquí haría que un
+        // anuncio dentro del mapa, pero fuera de la localidad original,
+        // nunca pudiera aparecer.
+        var hasViewportBounds = north.HasValue && south.HasValue && east.HasValue && west.HasValue;
+
         var limitedPublications = await publicationService.SearchActivePublicationsPageAsync(
             selectedGroup,
             query,
             0,
             MaxMapPublications,
-            effectiveLocality?.Latitude,
-            effectiveLocality?.Longitude,
+            hasViewportBounds ? null : effectiveLocality?.Latitude,
+            hasViewportBounds ? null : effectiveLocality?.Longitude,
             filters,
             includeDebug);
         var favoritePublicationIds = currentUserAccessor.UserId is int currentUserId

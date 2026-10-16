@@ -4558,6 +4558,20 @@ textarea:focus {
   letter-spacing: -0.045em;
 }
 
+@media (max-width: 780px) {
+  .company-hero-copy {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .company-hero-copy h1[data-company-profile-name] {
+    min-width: 0;
+    overflow-wrap: normal;
+    word-break: normal;
+    hyphens: none;
+  }
+}
+
 .company-hero-industry {
   color: var(--accent-deep);
   font-size: 0.92rem;
