@@ -349,6 +349,27 @@ else
     @section Scripts {
         <script>
             (() => {
+                const mapLibreLocale = {
+                    "AttributionControl.ToggleAttribution": "Mostrar atribución",
+                    "AttributionControl.MapFeedback": "Comentarios sobre el mapa",
+                    "FullscreenControl.Enter": "Entrar en pantalla completa",
+                    "FullscreenControl.Exit": "Salir de pantalla completa",
+                    "GeolocateControl.FindMyLocation": "Encontrar mi ubicación",
+                    "GeolocateControl.LocationNotAvailable": "Ubicación no disponible",
+                    "LogoControl.Title": "Logo de MapLibre",
+                    "Map.Title": "Mapa",
+                    "Marker.Title": "Marcador del mapa",
+                    "NavigationControl.ResetBearing": "Restablecer orientación al norte",
+                    "NavigationControl.ZoomIn": "Acercar",
+                    "NavigationControl.ZoomOut": "Alejar",
+                    "Popup.Close": "Cerrar",
+                    "ScaleControl.Kilometers": "km",
+                    "ScaleControl.Meters": "m",
+                    "CooperativeGesturesHandler.WindowsHelpText": "Usá Ctrl + desplazamiento para acercar el mapa",
+                    "CooperativeGesturesHandler.MacHelpText": "Usá ⌘ + desplazamiento para acercar el mapa",
+                    "CooperativeGesturesHandler.MobileHelpText": "Usá dos dedos para mover el mapa"
+                };
+
                 const fitCompanyProfileName = () => {
                     const companyName = document.querySelector("[data-company-profile-name]");
                     if (!companyName || !window.matchMedia("(max-width: 780px)").matches) {
@@ -918,6 +939,7 @@ else
 
                     map = new window.maplibregl.Map({
                         container: mapCanvas,
+                        locale: mapLibreLocale,
                         cooperativeGestures: window.matchMedia?.("(max-width: 780px)")?.matches
                             || window.matchMedia?.("(pointer: coarse)")?.matches,
                         style: mapStyleUrl || {

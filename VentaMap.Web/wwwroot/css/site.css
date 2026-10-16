@@ -6326,6 +6326,15 @@ textarea:focus {
   line-height: 1.2;
 }
 
+/* El precio usa una tipografía grande en móvil. Este nombre debe conservar
+   una escala propia para que las palabras de la empresa no se partan. */
+.price-panel .price-panel-company-copy strong {
+  font-size: clamp(1rem, 4.8vw, 1.18rem);
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+}
+
 .price-panel-company-copy span {
   color: var(--muted);
   font-size: 0.74rem;

@@ -26,6 +26,21 @@
   const supportedMapBounds = [[-73.6, -56.5], [-52.0, -19.0]];
   const supportedMapCenter = [-60.5, -31.5];
   const mapLibreLocale = {
+    "AttributionControl.ToggleAttribution": "Mostrar atribución",
+    "AttributionControl.MapFeedback": "Comentarios sobre el mapa",
+    "FullscreenControl.Enter": "Entrar en pantalla completa",
+    "FullscreenControl.Exit": "Salir de pantalla completa",
+    "GeolocateControl.FindMyLocation": "Encontrar mi ubicación",
+    "GeolocateControl.LocationNotAvailable": "Ubicación no disponible",
+    "LogoControl.Title": "Logo de MapLibre",
+    "Map.Title": "Mapa",
+    "Marker.Title": "Marcador del mapa",
+    "NavigationControl.ResetBearing": "Restablecer orientación al norte",
+    "NavigationControl.ZoomIn": "Acercar",
+    "NavigationControl.ZoomOut": "Alejar",
+    "Popup.Close": "Cerrar",
+    "ScaleControl.Kilometers": "km",
+    "ScaleControl.Meters": "m",
     "CooperativeGesturesHandler.WindowsHelpText": "Usá Ctrl + desplazamiento para acercar el mapa",
     "CooperativeGesturesHandler.MacHelpText": "Usá ⌘ + desplazamiento para acercar el mapa",
     "CooperativeGesturesHandler.MobileHelpText": "Usá dos dedos para mover el mapa"
@@ -645,6 +660,7 @@
             center: supportedMapCenter,
             zoom: 4.8,
             maxBounds: supportedMapBounds,
+            locale: mapLibreLocale,
             interactive: false,
             attributionControl: false,
             fadeDuration: 0
@@ -3860,6 +3876,7 @@
       container: mapElement,
       style: buildMapStyle(styleUrl, tilesUrlTemplate, attribution, { preferRaster: true }),
       attributionControl: false,
+      locale: mapLibreLocale,
       maxBounds: supportedMapBounds,
       center: defaultCenter.center,
       zoom: defaultCenter.zoom
