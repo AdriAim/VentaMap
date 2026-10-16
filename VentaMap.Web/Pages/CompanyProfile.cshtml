@@ -51,7 +51,8 @@ else
     {
         new { Name = company.CompanyContactName, Phone = company.Phone },
         new { Name = company.CompanyContactName2, Phone = company.CompanyContactPhone2 ?? string.Empty },
-        new { Name = company.CompanyContactName3, Phone = company.CompanyContactPhone3 ?? string.Empty }
+        new { Name = company.CompanyContactName3, Phone = company.CompanyContactPhone3 ?? string.Empty },
+        new { Name = company.CompanyContactName4, Phone = company.CompanyContactPhone4 ?? string.Empty }
     }
     .Where(contact => !string.IsNullOrWhiteSpace(contact.Phone))
     .ToList();

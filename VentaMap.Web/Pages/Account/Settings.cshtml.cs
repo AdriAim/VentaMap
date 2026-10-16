@@ -91,6 +91,8 @@ public class SettingsModel(
         Input.CompanyContactPhone2 = user.CompanyContactPhone2 ?? string.Empty;
         Input.CompanyContactName3 = user.CompanyContactName3 ?? string.Empty;
         Input.CompanyContactPhone3 = user.CompanyContactPhone3 ?? string.Empty;
+        Input.CompanyContactName4 = user.CompanyContactName4 ?? string.Empty;
+        Input.CompanyContactPhone4 = user.CompanyContactPhone4 ?? string.Empty;
         Input.HeaderPublicationGroups = (await publicationGroupPreferenceService.GetHeaderGroupsAsync(HttpContext))
             .Select(x => x.Name).ToList();
         LoadCompanyState(user);
@@ -157,6 +159,7 @@ public class SettingsModel(
         {
             ValidateAdditionalCompanyContact(Input.CompanyContactName2, Input.CompanyContactPhone2, "2");
             ValidateAdditionalCompanyContact(Input.CompanyContactName3, Input.CompanyContactPhone3, "3");
+            ValidateAdditionalCompanyContact(Input.CompanyContactName4, Input.CompanyContactPhone4, "4");
         }
 
         if (!ModelState.IsValid)
@@ -215,6 +218,8 @@ public class SettingsModel(
             user.CompanyContactPhone2 = NullIfWhiteSpace(Input.CompanyContactPhone2);
             user.CompanyContactName3 = NullIfWhiteSpace(Input.CompanyContactName3);
             user.CompanyContactPhone3 = NullIfWhiteSpace(Input.CompanyContactPhone3);
+            user.CompanyContactName4 = NullIfWhiteSpace(Input.CompanyContactName4);
+            user.CompanyContactPhone4 = NullIfWhiteSpace(Input.CompanyContactPhone4);
             user.CompanyLogoUrl = string.IsNullOrWhiteSpace(uploadedLogoUrl) ? null : uploadedLogoUrl.Trim();
             user.CompanyHeroBackgroundUrl = string.IsNullOrWhiteSpace(uploadedHeroBackgroundUrl) ? null : uploadedHeroBackgroundUrl.Trim();
         }
@@ -381,5 +386,11 @@ public class SettingsModel(
 
         [StringLength(32)]
         public string? CompanyContactPhone3 { get; set; }
+
+        [StringLength(120)]
+        public string? CompanyContactName4 { get; set; }
+
+        [StringLength(32)]
+        public string? CompanyContactPhone4 { get; set; }
     }
 }

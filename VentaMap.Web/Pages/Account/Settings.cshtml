@@ -80,7 +80,7 @@
                     <div class="settings-company-heading">
                         <span class="eyebrow">Contactos</span>
                         <h2>Personas que atienden</h2>
-                        <p>Podés publicar hasta tres teléfonos de atención.</p>
+                        <p>Podés publicar hasta cuatro teléfonos de atención.</p>
                     </div>
                     <div class="form-grid company-contact-primary-row">
                         <label>
@@ -115,6 +115,16 @@
                             <span>Contacto 3: teléfono (opcional)</span>
                             <input asp-for="Input.CompanyContactPhone3" type="tel" inputmode="tel" maxlength="32" placeholder="+54 9 3424566654" />
                             <span asp-validation-for="Input.CompanyContactPhone3" class="text-danger"></span>
+                        </label>
+                        <label>
+                            <span>Contacto 4: nombre (opcional)</span>
+                            <input asp-for="Input.CompanyContactName4" maxlength="120" placeholder="Ejemplo: Sofía López" />
+                            <span asp-validation-for="Input.CompanyContactName4" class="text-danger"></span>
+                        </label>
+                        <label>
+                            <span>Contacto 4: teléfono (opcional)</span>
+                            <input asp-for="Input.CompanyContactPhone4" type="tel" inputmode="tel" maxlength="32" placeholder="+54 9 3424566654" />
+                            <span asp-validation-for="Input.CompanyContactPhone4" class="text-danger"></span>
                         </label>
                     </div>
                 </section>

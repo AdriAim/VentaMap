@@ -50,6 +50,12 @@ public class ApplicationUser
     [StringLength(32)]
     public string? CompanyContactPhone3 { get; set; }
 
+    [StringLength(120)]
+    public string? CompanyContactName4 { get; set; }
+
+    [StringLength(32)]
+    public string? CompanyContactPhone4 { get; set; }
+
     public bool RespondsEmails { get; set; }
 
     public bool AcceptsCalls { get; set; }

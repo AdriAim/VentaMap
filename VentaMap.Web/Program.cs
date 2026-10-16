@@ -339,6 +339,8 @@ static async Task EnsureUserCompatibilityColumnsAsync(VentaMapDbContext db)
         await EnsureColumnAsync(connection, "Users", "CompanyContactPhone2", "varchar(32) CHARACTER SET utf8mb4 NULL");
         await EnsureColumnAsync(connection, "Users", "CompanyContactName3", "varchar(120) CHARACTER SET utf8mb4 NULL");
         await EnsureColumnAsync(connection, "Users", "CompanyContactPhone3", "varchar(32) CHARACTER SET utf8mb4 NULL");
+        await EnsureColumnAsync(connection, "Users", "CompanyContactName4", "varchar(120) CHARACTER SET utf8mb4 NULL");
+        await EnsureColumnAsync(connection, "Users", "CompanyContactPhone4", "varchar(32) CHARACTER SET utf8mb4 NULL");
     }
     finally
     {

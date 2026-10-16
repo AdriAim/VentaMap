@@ -82,6 +82,14 @@ namespace VentaMap.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("varchar(32)");
 
+                    b.Property<string>("CompanyContactName4")
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<string>("CompanyContactPhone4")
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
                     b.Property<string>("CompanyLogoUrl")
                         .HasMaxLength(260)
                         .HasColumnType("varchar(260)");

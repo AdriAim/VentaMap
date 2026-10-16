@@ -31,7 +31,8 @@ else
     var companyExtraContacts = new[]
     {
         new { Name = owner?.CompanyContactName2, Phone = owner?.CompanyContactPhone2 },
-        new { Name = owner?.CompanyContactName3, Phone = owner?.CompanyContactPhone3 }
+        new { Name = owner?.CompanyContactName3, Phone = owner?.CompanyContactPhone3 },
+        new { Name = owner?.CompanyContactName4, Phone = owner?.CompanyContactPhone4 }
     }
     .Where(contact => owner?.IsCompany == true && !string.IsNullOrWhiteSpace(contact.Phone))
     .ToList();
@@ -45,9 +46,16 @@ else
     var detailEyebrow = publication.OperationType.HasValue
         ? $"{publication.Group} · {publication.OperationType.Value.ToDisplayName()} · {(publication.Category?.Name ?? "Sin categoría")}"
         : $"{publication.Group} · {(publication.Category?.Name ?? "Sin categoría")}";
-    if (hasMapLocation && !string.IsNullOrWhiteSpace(publication.Locality))
+    var displayLocality = publication.Locality?.Trim() ?? string.Empty;
+    const string municipalityPrefix = "Municipio de ";
+    if (displayLocality.StartsWith(municipalityPrefix, StringComparison.OrdinalIgnoreCase))
     {
-        detailEyebrow = $"{detailEyebrow} · {publication.Locality}";
+        displayLocality = displayLocality[municipalityPrefix.Length..].Trim();
+    }
+
+    if (hasMapLocation && !string.IsNullOrWhiteSpace(displayLocality))
+    {
+        detailEyebrow = $"{detailEyebrow} · {displayLocality}";
     }
     var pricePeriod = operationLabel switch
     {
@@ -102,7 +110,7 @@ else
                     }
                 </strong>
             </span>
-            <span>@publication.Locality</span>
+            <span>@displayLocality</span>
             @if (owner?.IsCompany == true && !string.IsNullOrWhiteSpace(owner.CompanySlug))
             {
                 <a class="price-panel-company-link" href="/catalogo/@owner.CompanySlug">
