@@ -3406,6 +3406,64 @@ textarea:focus {
   animation: map-refresh-spin 0.85s linear infinite;
 }
 
+.monitor-metric-cell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 1.5rem;
+  justify-content: center;
+  border-bottom: 1px dashed var(--accent);
+  color: var(--accent-deep);
+  font-weight: 800;
+  cursor: help;
+}
+
+.monitor-metric-tooltip {
+  position: absolute;
+  z-index: 40;
+  left: 50%;
+  bottom: calc(100% + 0.6rem);
+  display: grid;
+  gap: 0.55rem;
+  width: min(19rem, 72vw);
+  padding: 0.8rem;
+  border-radius: 14px;
+  background: #1f2738;
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(31, 39, 56, 0.28);
+  font-size: 0.76rem;
+  line-height: 1.35;
+  text-align: left;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 0.25rem);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  visibility: hidden;
+}
+
+.monitor-metric-tooltip > span {
+  display: grid;
+  gap: 0.12rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.monitor-metric-tooltip b,
+.monitor-metric-tooltip small {
+  display: block;
+}
+
+.monitor-metric-tooltip small {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.monitor-metric-cell:hover .monitor-metric-tooltip,
+.monitor-metric-cell:focus-visible .monitor-metric-tooltip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  visibility: visible;
+}
+
 @keyframes map-refresh-spin {
   from {
     transform: rotate(0deg);

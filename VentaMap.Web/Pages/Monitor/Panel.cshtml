@@ -1,7 +1,9 @@
 @page "/Monitor/Panel"
 @model VentaMap.Pages.Monitor.PanelModel
+@using System.Globalization
 @{
     ViewData["Title"] = "Monitor";
+    var argentinaCulture = CultureInfo.GetCultureInfo("es-AR");
 }
 
 <section class="form-shell">
@@ -45,7 +47,48 @@
                 <tbody>
                 @foreach (var item in Model.Metrics)
                 {
-                    <tr><td>@item.Day.ToString("dd/MM/yyyy")</td><td>@item.RegisteredUsers</td><td>@item.NewPublications</td><td>@item.RepublishedPublications</td><td>@item.Visitors</td></tr>
+                    <tr>
+                        <td>@item.Day.ToString("dd/MM/yyyy")</td>
+                        <td>
+                            @if (item.NewUsers.Count > 0)
+                            {
+                                <span class="monitor-metric-cell" tabindex="0">
+                                    @item.RegisteredUsers
+                                    <span class="monitor-metric-tooltip" role="tooltip">
+                                        <strong>Usuarios nuevos</strong>
+                                        @foreach (var user in item.NewUsers)
+                                        {
+                                            <span><b>@user.Name</b><small>@user.Email</small></span>
+                                        }
+                                    </span>
+                                </span>
+                            }
+                            else { @item.RegisteredUsers }
+                        </td>
+                        <td>
+                            @if (item.NewPublications.Count > 0)
+                            {
+                                <span class="monitor-metric-cell" tabindex="0">
+                                    @item.NewPublications.Count
+                                    <span class="monitor-metric-tooltip" role="tooltip">
+                                        <strong>Anuncios nuevos</strong>
+                                        @foreach (var publication in item.NewPublications)
+                                        {
+                                            <span>
+                                                <b>@publication.UserName</b>
+                                                <small>@publication.ShortDescription</small>
+                                                <small>@publication.Locality · @publication.Currency @publication.Price.ToString("N0", argentinaCulture)</small>
+                                                <small>@publication.CreatedAtUtc.AddHours(-3).ToString("dd/MM/yyyy HH:mm")</small>
+                                            </span>
+                                        }
+                                    </span>
+                                </span>
+                            }
+                            else { @item.NewPublications.Count }
+                        </td>
+                        <td>@item.RepublishedPublications</td>
+                        <td>@item.Visitors</td>
+                    </tr>
                 }
                 </tbody>
             </table>

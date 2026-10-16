@@ -3342,6 +3342,15 @@
     }
     const attribution = String(mapElement.dataset.mapAttribution || "").trim();
     const mapMode = mapElement.dataset.mapMode || "home";
+    // La vista Mapa de Buscar recibe únicamente los anuncios que cumplen los
+    // filtros activos (localidad, radio, etc.). Su encuadre inicial debe usar
+    // ese conjunto, sin volver a la localidad base ni incorporar resultados
+    // del refresco posterior por viewport.
+    const isDesktopBrowseMap = Boolean(mapElement.closest("#api-page [data-map-layout]"))
+      && !window.matchMedia("(max-width: 780px)").matches;
+    const browseMapPadding = 60;
+    const browseMapSingleZoom = 12.8;
+    const browseMapMaxZoom = 12.8;
     const initialLat = Number.parseFloat(mapElement.dataset.mapInitialLat || "");
     const initialLng = Number.parseFloat(mapElement.dataset.mapInitialLng || "");
     const hasInitialCenter = Number.isFinite(initialLat) && Number.isFinite(initialLng);
@@ -3563,10 +3572,48 @@
       return bounds;
     };
 
+    const syncBrowseMapViewportWhenReady = callback => {
+      if (!isDesktopBrowseMap) return;
+
+      let attempts = 0;
+      const trySync = () => {
+        const { width, height } = mapElement.getBoundingClientRect();
+        if (width > 120 && height > 120) {
+          instance.resize?.();
+          callback?.();
+          return;
+        }
+
+        attempts += 1;
+        if (attempts < 20) {
+          window.requestAnimationFrame(trySync);
+        }
+      };
+
+      window.requestAnimationFrame(trySync);
+    };
+
     const fitInitialViewport = bounds => {
       if (!bounds || !markers.length) return;
 
-      if (mapMode === "home" && hasInitialCenter) {
+      if (isDesktopBrowseMap) {
+        const fitSearchResults = () => {
+          if (markers.length === 1) {
+            instance.jumpTo({
+              center: [markers[0].lng, markers[0].lat],
+              zoom: browseMapSingleZoom
+            });
+            return;
+          }
+
+          instance.fitBounds(bounds, {
+            padding: browseMapPadding,
+            maxZoom: browseMapMaxZoom,
+            duration: 0
+          });
+        };
+        syncBrowseMapViewportWhenReady(fitSearchResults);
+      } else if (mapMode === "home" && hasInitialCenter) {
         instance.flyTo({ center: [initialLng, initialLat], zoom: zoomOutLevel(11) });
       } else if (markers.length > 1) {
         instance.fitBounds(bounds, { padding: 60 });
@@ -5457,14 +5504,29 @@
     wirePrimaryMediaChoice(form);
     wirePublicationChargeEstimator(form);
 
+    const submitButton = form.querySelector('button[type="submit"]');
+    const submitButtonText = submitButton?.textContent || "Publicar";
+    const setCreateSubmissionState = isSubmitting => {
+      form.dataset.createSubmitting = String(isSubmitting);
+      form.setAttribute("aria-busy", String(isSubmitting));
+      if (!submitButton) return;
+
+      submitButton.disabled = isSubmitting;
+      submitButton.textContent = isSubmitting ? "Publicando…" : submitButtonText;
+    };
+
     form.addEventListener("submit", async event => {
       event.preventDefault();
+      if (form.dataset.createSubmitting === "true") return;
+
+      setCreateSubmissionState(true);
       clearCreateFormErrors(form);
 
       const hyperlinkErrors = validateCreateDescriptionHyperlinks(form);
       if (hyperlinkErrors.length) {
         renderCreateFormErrors(form, hyperlinkErrors);
         focusFirstCreateError(form, hyperlinkErrors);
+        setCreateSubmissionState(false);
         return;
       }
 
@@ -5477,6 +5539,7 @@
         if (feedback) {
           feedback.innerHTML = `<div class="status-banner warning">Espera a que terminen las subidas de imagenes y video.</div>`;
         }
+        setCreateSubmissionState(false);
         return;
       }
 
@@ -5498,6 +5561,7 @@
         if (feedback) {
           feedback.innerHTML = '<div class="status-banner warning">No se pudo conectar para publicar el anuncio. Verificá tu conexión e intentá nuevamente.</div>';
         }
+        setCreateSubmissionState(false);
         return;
       }
 
@@ -5536,6 +5600,7 @@
         }
 
         focusFirstCreateError(form, fieldErrors);
+        setCreateSubmissionState(false);
         return;
       }
 
@@ -5552,7 +5617,10 @@
           actionUrl: result.redirectUrl,
           shareTitle: result.shareTitle
         });
+        return;
       }
+
+      setCreateSubmissionState(false);
     });
 
     reloadCategoryOptions(form, true)

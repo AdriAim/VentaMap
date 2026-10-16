@@ -26,15 +26,22 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
         var utcFrom = from.AddHours(3);
         var utcUntil = until.AddHours(3);
 
-        var users = await db.Users.AsNoTracking()
+        var newUsers = await db.Users.AsNoTracking()
             .Where(x => !x.IsDebugUser && x.Email != MonitorAccess.Email && x.CreatedAtUtc >= utcFrom && x.CreatedAtUtc < utcUntil)
-            .Select(x => x.CreatedAtUtc)
+            .Select(x => new MonitorUser(x.Id, x.Name, x.Email, x.CreatedAtUtc))
             .ToListAsync();
-        var publications = await db.Publications.AsNoTracking()
+        var newPublications = await db.Publications.AsNoTracking()
             .Where(x => (x.User == null || !x.User.IsDebugUser)
                 && (x.OriginalCreatedAtUtc ?? x.CreatedAtUtc) >= utcFrom
                 && (x.OriginalCreatedAtUtc ?? x.CreatedAtUtc) < utcUntil)
-            .Select(x => x.OriginalCreatedAtUtc ?? x.CreatedAtUtc)
+            .Select(x => new MonitorPublication(
+                x.Id,
+                x.User == null ? "Anónimo" : x.User.Name,
+                x.ShortDescription,
+                x.Locality,
+                x.Price,
+                x.Currency,
+                x.OriginalCreatedAtUtc ?? x.CreatedAtUtc))
             .ToListAsync();
         var republications = await db.PublicationRepublications.AsNoTracking()
             .Where(x => (x.Publication.User == null || !x.Publication.User.IsDebugUser)
@@ -47,8 +54,8 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
             .Select(x => new { Day = x.Key, Count = x.Count() })
             .ToDictionaryAsync(x => x.Day, x => x.Count);
 
-        var userCounts = users.GroupBy(ToArgentinaDay).ToDictionary(x => x.Key, x => x.Count());
-        var publicationCounts = publications.GroupBy(ToArgentinaDay).ToDictionary(x => x.Key, x => x.Count());
+        var usersByDay = newUsers.GroupBy(x => ToArgentinaDay(x.CreatedAtUtc)).ToDictionary(x => x.Key, x => x.ToList());
+        var publicationsByDay = newPublications.GroupBy(x => ToArgentinaDay(x.CreatedAtUtc)).ToDictionary(x => x.Key, x => x.ToList());
         var republicationCounts = republications.GroupBy(ToArgentinaDay).ToDictionary(x => x.Key, x => x.Count());
         RecentSuggestions = await db.SiteSuggestions.AsNoTracking()
             .Include(x => x.User)
@@ -58,7 +65,12 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
         LatestSuggestionId = RecentSuggestions.Count == 0 ? 0 : RecentSuggestions.Max(x => x.Id);
         Metrics = Enumerable.Range(0, 30)
             .Select(offset => today.AddDays(-offset))
-            .Select(day => new DailyMetric(day, userCounts.GetValueOrDefault(day), publicationCounts.GetValueOrDefault(day), republicationCounts.GetValueOrDefault(day), visitors.GetValueOrDefault(day)))
+            .Select(day => new DailyMetric(
+                day,
+                usersByDay.GetValueOrDefault(day, []),
+                publicationsByDay.GetValueOrDefault(day, []),
+                republicationCounts.GetValueOrDefault(day),
+                visitors.GetValueOrDefault(day)))
             .ToList();
         return Page();
     }
@@ -95,5 +107,15 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
 
     private static DateTime ToArgentinaDay(DateTime utc) => utc.AddHours(-3).Date;
 
-    public sealed record DailyMetric(DateTime Day, int RegisteredUsers, int NewPublications, int RepublishedPublications, int Visitors);
+    public sealed record MonitorUser(int Id, string Name, string Email, DateTime CreatedAtUtc);
+    public sealed record MonitorPublication(int Id, string UserName, string ShortDescription, string Locality, decimal Price, string Currency, DateTime CreatedAtUtc);
+    public sealed record DailyMetric(
+        DateTime Day,
+        IReadOnlyList<MonitorUser> NewUsers,
+        IReadOnlyList<MonitorPublication> NewPublications,
+        int RepublishedPublications,
+        int Visitors)
+    {
+        public int RegisteredUsers => NewUsers.Count;
+    }
 }
