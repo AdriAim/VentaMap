@@ -3464,6 +3464,17 @@ textarea:focus {
   visibility: visible;
 }
 
+/* La primera métrica queda junto al borde izquierdo de la tabla en móvil. */
+.monitor-metric-cell--start .monitor-metric-tooltip {
+  left: 0;
+  transform: translate(0, 0.25rem);
+}
+
+.monitor-metric-cell--start:hover .monitor-metric-tooltip,
+.monitor-metric-cell--start:focus-visible .monitor-metric-tooltip {
+  transform: translate(0, 0);
+}
+
 @keyframes map-refresh-spin {
   from {
     transform: rotate(0deg);
