@@ -8,7 +8,7 @@
         : string.Empty;
 }
 
-<section class="favorites-strip favorites-page-strip">
+<section class="favorites-strip favorites-page-strip" data-page-kind="my-publications">
     <div class="favorites-strip-copy">
         <span class="eyebrow">Panel</span>
         <h2>@(Model.IsCompany && !string.IsNullOrWhiteSpace(Model.CompanyName) ? $"Panel de {Model.CompanyName}" : "Mis anuncios")</h2>
@@ -95,8 +95,8 @@
                 <span>Ordenar</span>
                 <select data-my-publications-sort aria-label="Ordenar anuncios">
                     <option value="alphabetical">Alfabético</option>
-                    <option value="date-asc" selected>Fecha publicación ascendente</option>
-                    <option value="date-desc">Fecha publicación descendente</option>
+                    <option value="date-asc">Fecha publicación ascendente</option>
+                    <option value="date-desc" selected>Fecha publicación descendente</option>
                 </select>
             </label>
             <div class="company-catalog-view-switch" role="group" aria-label="Modo de visualizacion">
@@ -415,7 +415,7 @@ else
             const allowedViews = new Set(["list", "gallery"]);
             let selectedStatus = "all";
             let selectedView = "list";
-            let selectedSort = "date-asc";
+            let selectedSort = "date-desc";
 
             const requestedStatus = new URLSearchParams(window.location.search).get("status");
             if (requestedStatus && statusButtons.some(button => button.dataset.myPublicationsStatus === requestedStatus)) {
@@ -538,7 +538,7 @@ else
 
             searchInput?.addEventListener("input", applyFilters);
             sortSelect?.addEventListener("change", () => {
-                selectedSort = sortSelect.value || "date-asc";
+                selectedSort = sortSelect.value || "date-desc";
                 sortItems();
                 applyFilters();
             });

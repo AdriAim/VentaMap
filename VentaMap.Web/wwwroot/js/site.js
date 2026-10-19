@@ -527,6 +527,7 @@
     initFavoritesPage();
     await initRealtimeChat();
     await loadApiPage();
+    restoreCreatePublicationCompletion(document.querySelector('[data-page-kind="my-publications"]'));
     setupMapSelectionLayoutSync(document);
     await initContentMaps();
     await resumePendingAuthAction();
@@ -4909,6 +4910,18 @@
     }
   }
 
+  function shouldOptimizeVideoForUpload(file) {
+    const contentType = String(file?.type || "").toLowerCase();
+    const fileName = String(file?.name || "").toLowerCase();
+    const acceptedFormat = ["video/mp4", "video/webm", "video/quicktime"].includes(contentType)
+      || /\.(mp4|webm|mov)$/i.test(fileName);
+    // The server accepts up to 80 MB. Keep a small safety margin and avoid
+    // device-side transcoding solely because a compatible video is 4K.
+    const isWithinDirectUploadSize = file.size <= 75 * 1024 * 1024;
+
+    return !acceptedFormat || !isWithinDirectUploadSize;
+  }
+
   async function optimizeImageForUpload(file, options = {}) {
     const maxSide = Number(options.maxSide || 2000);
     const preferredQuality = Number(options.quality || 0.9);
@@ -5028,6 +5041,26 @@
     return payload;
   }
 
+  function reportVideoUploadFailure(stage, error, file, statusCode = null) {
+    const message = String(error?.message || error || "Error desconocido").slice(0, 500);
+    const payload = {
+      stage,
+      message,
+      statusCode: Number.isInteger(statusCode) ? statusCode : null,
+      fileName: String(file?.name || "").slice(0, 255),
+      contentType: String(file?.type || "").slice(0, 100),
+      contentLength: Number.isFinite(file?.size) ? file.size : null
+    };
+
+    // This deliberately omits the pre-signed R2 URL and public object URL.
+    fetch("/api/content/report-video-upload-failure", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" },
+      body: JSON.stringify(payload),
+      keepalive: true
+    }).catch(() => {});
+  }
+
   function uploadVideoDirectly(uploadUrl, file, contentType, onProgress) {
     return new Promise((resolve, reject) => {
       const request = new XMLHttpRequest();
@@ -5036,7 +5069,9 @@
 
       request.onload = () => {
         if (request.status >= 200 && request.status < 300) return resolve();
-        reject(new Error("R2 rechazó la subida del video."));
+        const error = new Error("R2 rechazó la subida del video.");
+        error.statusCode = request.status;
+        reject(error);
       };
 
       request.onerror = () => {
@@ -5630,12 +5665,14 @@
 
       uploader.markPersisted();
       if (result.redirectUrl) {
+        const updatedPublication = result.completionUrl === "/MisAnuncios";
         completeCreatePublication({
-          title: "Anuncio publicado",
-          message: "Su anuncio se publicó correctamente.",
-          actionLabel: "Ver anuncio",
+          title: updatedPublication ? "Anuncio actualizado" : "Anuncio publicado",
+          message: updatedPublication ? "El anuncio se guardó correctamente." : "Su anuncio se publicó correctamente.",
+          actionLabel: updatedPublication ? "Ver mis anuncios" : "Ver anuncio",
           actionUrl: result.redirectUrl,
-          shareTitle: result.shareTitle
+          shareTitle: result.shareTitle,
+          completionUrl: result.completionUrl
         });
         return;
       }
@@ -5702,11 +5739,11 @@
   }
   function completeCreatePublication(completion) {
     sessionStorage.setItem("ventamap.create-publication-completion", JSON.stringify(completion));
-    window.location.href = "/Publications/Create";
+    window.location.href = completion.completionUrl || "/Publications/Create";
   }
 
   function restoreCreatePublicationCompletion(host) {
-    if (host?.dataset.pageKind !== "create") return;
+    if (!["create", "my-publications"].includes(host?.dataset.pageKind)) return;
 
     let completion;
     try {
@@ -7548,26 +7585,36 @@
       const currentState = state;
       render();
 
+      let fileToUpload = file;
+      let uploadStage = "optimization";
       const currentUpload = uploadChain.then(async () => {
-        let fileToUpload = file;
-        try {
-          currentState.statusText = "Comprimiendo...";
+        if (shouldOptimizeVideoForUpload(file)) {
+          try {
+            currentState.statusText = "Comprimiendo...";
+            render();
+            fileToUpload = await optimizeVideoForUpload(file, {
+              maxWidth: 1080,
+              maxHeight: 1920,
+              videoBitsPerSecond: 6_500_000,
+              audioBitsPerSecond: 128_000
+            });
+          } catch {
+            fileToUpload = file;
+          }
+        } else {
+          // Compatible, vertical videos under 75 MB are uploaded as-is. This
+          // avoids replaying up to one minute of video on the user's device.
+          currentState.statusText = "Video listo para subir.";
           render();
-          fileToUpload = await optimizeVideoForUpload(file, {
-            maxWidth: 1080,
-            maxHeight: 1920,
-            videoBitsPerSecond: 6_500_000,
-            audioBitsPerSecond: 128_000
-          });
-        } catch {
-          fileToUpload = file;
         }
 
         currentState.statusText = "Preparando subida directa...";
         render();
+        uploadStage = "prepare";
         const upload = await prepareDirectVideoUpload(fileToUpload);
         currentState.statusText = "Subiendo a almacenamiento... 0%";
         render();
+        uploadStage = "transfer";
         await uploadVideoDirectly(upload.uploadUrl, fileToUpload, upload.contentType, progress => {
           if (state?.id !== currentState.id) return;
           currentState.statusText = `Subiendo a almacenamiento... ${Math.round(progress * 100)}%`;
@@ -7575,6 +7622,7 @@
         });
         currentState.statusText = "Confirmando video...";
         render();
+        uploadStage = "confirmation";
         const uploadedUrl = await confirmDirectVideoUpload(upload, fileToUpload);
 
         if (state?.id === currentState.id) {
@@ -7589,6 +7637,9 @@
           }
         }
         render();
+      }).catch(error => {
+        reportVideoUploadFailure(uploadStage, error, fileToUpload, error?.statusCode);
+        throw error;
       });
 
       uploadChain = currentUpload.catch(() => {});

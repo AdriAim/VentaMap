@@ -134,8 +134,8 @@ public class PublicationService(
             .Include(x => x.Category)
             .Include(x => x.MediaItems)
             .Where(x => x.UserId == userId && x.Status != OwnerDeletedStatus)
-            .OrderByDescending(x => x.IsActive)
-            .ThenByDescending(x => x.CreatedAtUtc)
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .ThenByDescending(x => x.Id)
             .ToListAsync();
 
         if (publications.Count == 0)

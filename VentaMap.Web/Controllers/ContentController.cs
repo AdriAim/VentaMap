@@ -32,6 +32,7 @@ public partial class ContentController(
     PricingService pricingService,
     VentaMapDbContext db,
     ILogger<ContentController> logger,
+    ILogger<VideoUploadLog> videoUploadLogger,
     IConfiguration configuration) : Controller
 {
     private const int MaxMapPublications = 250;
@@ -1221,7 +1222,8 @@ public partial class ContentController(
         return Ok(new
         {
             message = "Anuncio actualizado.",
-            redirectUrl = BuildPublicationDetailsUrl(id, IsDebugModeRequested() || user.IsDebugUser)
+            redirectUrl = "/MisAnuncios",
+            completionUrl = "/MisAnuncios"
         });
     }
 
@@ -1292,11 +1294,13 @@ public partial class ContentController(
 
         if (file is null || file.Length <= 0)
         {
+            videoUploadLogger.LogWarning("Proxy video upload rejected for user {UserId}: no valid file was received.", currentUserAccessor.UserId);
             return BadRequest(new { message = "Subi un video valido." });
         }
 
         var fileInfo = new { file.FileName, file.Length, file.ContentType };
         logger.LogInformation("UploadVideo received file for user {UserId}: {@File}.", currentUserAccessor.UserId, fileInfo);
+        videoUploadLogger.LogInformation("Proxy video upload received for user {UserId}: {@File}.", currentUserAccessor.UserId, fileInfo);
 
         try
         {
@@ -1306,11 +1310,13 @@ public partial class ContentController(
         catch (InvalidOperationException ex)
         {
             logger.LogWarning(ex, "UploadVideo validation failure for user {UserId}. File info: {@File}.", currentUserAccessor.UserId, fileInfo);
+            videoUploadLogger.LogWarning(ex, "Proxy video upload rejected for user {UserId}. File info: {@File}.", currentUserAccessor.UserId, fileInfo);
             return BadRequest(new { message = ex.Message });
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "UploadVideo unexpected failure for user {UserId}. File info: {@File}.", currentUserAccessor.UserId, fileInfo);
+            videoUploadLogger.LogError(ex, "Proxy video upload failed for user {UserId}. File info: {@File}.", currentUserAccessor.UserId, fileInfo);
             return StatusCode(500, new { message = ex.Message });
         }
     }
@@ -1328,15 +1334,18 @@ public partial class ContentController(
         {
             var upload = imageStorageService.CreateDirectPublicationVideoUpload(request.FileName, request.ContentType, request.ContentLength);
             logger.LogInformation("Prepared direct R2 video upload for user {UserId}. File {FileName}, {Length} bytes.", currentUserAccessor.UserId, request.FileName, request.ContentLength);
+            videoUploadLogger.LogInformation("Prepared direct upload for user {UserId}. File {FileName}, content type {ContentType}, {Length} bytes.", currentUserAccessor.UserId, request.FileName, request.ContentType, request.ContentLength);
             return Ok(new { uploadUrl = upload.UploadUrl, publicUrl = upload.PublicUrl, contentType = upload.ContentType, contentLength = upload.ContentLength });
         }
         catch (InvalidOperationException ex)
         {
+            videoUploadLogger.LogWarning(ex, "Direct upload preparation rejected for user {UserId}. File {FileName}, content type {ContentType}, {Length} bytes.", currentUserAccessor.UserId, request.FileName, request.ContentType, request.ContentLength);
             return BadRequest(new { message = ex.Message });
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Could not prepare direct R2 video upload for user {UserId}.", currentUserAccessor.UserId);
+            videoUploadLogger.LogError(ex, "Direct upload preparation failed for user {UserId}. File {FileName}, content type {ContentType}, {Length} bytes.", currentUserAccessor.UserId, request.FileName, request.ContentType, request.ContentLength);
             return StatusCode(500, new { message = "No se pudo preparar la subida del video." });
         }
     }
@@ -1354,17 +1363,42 @@ public partial class ContentController(
         {
             var url = await imageStorageService.ConfirmDirectPublicationVideoUploadAsync(request.PublicUrl, request.ContentLength, request.ContentType, cancellationToken);
             logger.LogInformation("Confirmed direct R2 video upload for user {UserId}: {Url}", currentUserAccessor.UserId, url);
+            videoUploadLogger.LogInformation("Confirmed direct upload for user {UserId}. Content type {ContentType}, {Length} bytes.", currentUserAccessor.UserId, request.ContentType, request.ContentLength);
             return Ok(new { url });
         }
         catch (InvalidOperationException ex)
         {
+            videoUploadLogger.LogWarning(ex, "Direct upload confirmation rejected for user {UserId}. Content type {ContentType}, {Length} bytes.", currentUserAccessor.UserId, request.ContentType, request.ContentLength);
             return BadRequest(new { message = ex.Message });
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Could not confirm direct R2 video upload for user {UserId}.", currentUserAccessor.UserId);
+            videoUploadLogger.LogError(ex, "Direct upload confirmation failed for user {UserId}. Content type {ContentType}, {Length} bytes.", currentUserAccessor.UserId, request.ContentType, request.ContentLength);
             return StatusCode(500, new { message = "No se pudo confirmar la subida del video." });
         }
+    }
+
+    [HttpPost("report-video-upload-failure")]
+    [IgnoreAntiforgeryToken]
+    public IActionResult ReportVideoUploadFailure([FromBody] VideoUploadFailureReport request)
+    {
+        if (!currentUserAccessor.IsAuthenticated)
+        {
+            return Unauthorized();
+        }
+
+        videoUploadLogger.LogWarning(
+            "Browser video upload failed for user {UserId}. Stage {Stage}, status {StatusCode}, file {FileName}, content type {ContentType}, {Length} bytes. Message: {Message}",
+            currentUserAccessor.UserId,
+            NormalizeVideoUploadLogValue(request.Stage, 32),
+            request.StatusCode,
+            NormalizeVideoUploadLogValue(request.FileName, 255),
+            NormalizeVideoUploadLogValue(request.ContentType, 100),
+            request.ContentLength,
+            NormalizeVideoUploadLogValue(request.Message, 500));
+
+        return NoContent();
     }
 
     [HttpPost("delete-uploaded-media")]
@@ -1584,6 +1618,17 @@ public partial class ContentController(
         }
 
         return errors;
+    }
+
+    private static string NormalizeVideoUploadLogValue(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "(no informado)";
+        }
+
+        var normalized = value.Trim().Replace('\r', ' ').Replace('\n', ' ');
+        return normalized.Length <= maxLength ? normalized : normalized[..maxLength];
     }
 
     private static string NormalizeModelStateFieldName(string field)
@@ -2026,3 +2071,10 @@ public partial class ContentController(
 
 public sealed record DirectVideoUploadRequest(string? FileName, string? ContentType, long ContentLength);
 public sealed record ConfirmDirectVideoUploadRequest(string PublicUrl, string ContentType, long ContentLength);
+public sealed record VideoUploadFailureReport(
+    string? Stage,
+    string? Message,
+    int? StatusCode,
+    string? FileName,
+    string? ContentType,
+    long? ContentLength);

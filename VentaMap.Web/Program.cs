@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using ModelContextProtocol.AspNetCore;
 using Serilog;
+using Serilog.Filters;
 using System.Security.Claims;
 using System.Data;
 using System.Threading.RateLimiting;
@@ -22,7 +23,14 @@ builder.Host.UseSerilog((context, _, loggerConfiguration) => loggerConfiguration
         path: context.Configuration["Logging:File:Path"] ?? "/var/log/ventamap/web-.log",
         rollingInterval: RollingInterval.Day,
         retainedFileCountLimit: context.Configuration.GetValue<int?>("Logging:File:RetainedFileCountLimit") ?? 90,
-        shared: true));
+        shared: true)
+    .WriteTo.Logger(videoUploadLog => videoUploadLog
+        .Filter.ByIncludingOnly(Matching.FromSource<VideoUploadLog>())
+        .WriteTo.File(
+            path: context.Configuration["Logging:VideoUploadFile:Path"] ?? "/var/log/ventamap/video-upload-.log",
+            rollingInterval: RollingInterval.Day,
+            retainedFileCountLimit: context.Configuration.GetValue<int?>("Logging:VideoUploadFile:RetainedFileCountLimit") ?? 90,
+            shared: true)));
 var applyMigrationsOnStartup = GetBooleanSetting(builder.Configuration, "Database:ApplyMigrationsOnStartup");
 var runSeedDataOnStartup = GetBooleanSetting(builder.Configuration, "Database:RunSeedDataOnStartup");
 var configuredUrls = builder.Configuration["urls"]
