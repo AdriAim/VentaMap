@@ -497,7 +497,6 @@ else
                 let mobileTapPopup = null;
                 let selectedMarker = null;
                 let refreshButton = null;
-                let hasInitializedMapViewport = false;
                 let isInitializingMap = false;
                 const companyCatalogMapPadding = 60;
                 const companyCatalogMapSingleZoom = 12.8;
@@ -542,20 +541,6 @@ else
                             longitude >= -180 &&
                             longitude <= 180;
                     });
-                }
-
-                function getMarkersInsideCurrentBounds(sourceMarkers) {
-                    if (!map?.getBounds) {
-                        return sourceMarkers;
-                    }
-
-                    const bounds = map.getBounds();
-                    if (!bounds) {
-                        return sourceMarkers;
-                    }
-
-                    return sourceMarkers.filter(item =>
-                        bounds.contains([Number(item.longitude), Number(item.latitude)]));
                 }
 
                 function renderGallery() {
@@ -652,7 +637,10 @@ else
                         const height = mapCanvas.clientHeight || 0;
                         if (width > 120 && height > 120) {
                             map.resize();
-                            callback?.();
+                            // MapLibre needs one painted frame after a hidden map panel is
+                            // made visible.  Fitting before then uses the previous canvas
+                            // size and can leave the catalog much wider than its pins.
+                            window.requestAnimationFrame(() => callback?.());
                             return;
                         }
 
@@ -693,7 +681,6 @@ else
 
                     if (bounds && visibleMarkers.length) {
                         applyCompanyCatalogViewport(bounds, visibleMarkers);
-                        hasInitializedMapViewport = true;
                     }
                 }
 
@@ -858,11 +845,9 @@ else
                         refreshButton.classList.add("is-loading");
                         refreshButton.disabled = true;
                         try {
-                            const scopedMarkers = getMarkersInsideCurrentBounds(getFilteredCatalogMarkers());
-                            syncMapMarkers({
-                                preserveSelection: true,
-                                sourceMarkers: scopedMarkers
-                            });
+                            // A company catalog is a closed collection: refresh must retain
+                            // every currently visible catalog result and fit the viewport to it.
+                            renderAndFitCompanyMap({ preserveSelection: true });
                         } finally {
                             refreshButton.classList.remove("is-loading");
                             refreshButton.disabled = false;
@@ -908,11 +893,7 @@ else
 
                     if (map) {
                         syncCatalogMapViewportWhenReady(() => {
-                            if (hasInitializedMapViewport) {
-                                syncMapMarkers({ preserveSelection: true });
-                            } else {
-                                renderAndFitCompanyMap({ preserveSelection: true });
-                            }
+                            renderAndFitCompanyMap({ preserveSelection: true });
                         });
                         return;
                     }
