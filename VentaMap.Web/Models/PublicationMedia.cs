@@ -18,5 +18,12 @@ public class PublicationMedia
 
     public bool IsPrimary { get; set; }
 
+    [StringLength(20)]
+    public string VideoProcessingState { get; set; } = "Ready";
+
+    public DateTime? VideoProcessingStartedAtUtc { get; set; }
+
+    public DateTime? VideoProcessingFailedAtUtc { get; set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }

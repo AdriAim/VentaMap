@@ -1332,10 +1332,10 @@ public partial class ContentController(
 
         try
         {
-            var upload = imageStorageService.CreateDirectPublicationVideoUpload(request.FileName, request.ContentType, request.ContentLength);
+            var upload = imageStorageService.CreateDirectPublicationVideoUpload(request.FileName, request.ContentType, request.ContentLength, request.ProcessOnServer);
             logger.LogInformation("Prepared direct R2 video upload for user {UserId}. File {FileName}, {Length} bytes.", currentUserAccessor.UserId, request.FileName, request.ContentLength);
             videoUploadLogger.LogInformation("Prepared direct upload for user {UserId}. File {FileName}, content type {ContentType}, {Length} bytes.", currentUserAccessor.UserId, request.FileName, request.ContentType, request.ContentLength);
-            return Ok(new { uploadUrl = upload.UploadUrl, publicUrl = upload.PublicUrl, contentType = upload.ContentType, contentLength = upload.ContentLength });
+            return Ok(new { uploadUrl = upload.UploadUrl, publicUrl = upload.PublicUrl, contentType = upload.ContentType, contentLength = upload.ContentLength, processOnServer = upload.ProcessOnServer });
         }
         catch (InvalidOperationException ex)
         {
@@ -2069,7 +2069,7 @@ public partial class ContentController(
     }
 }
 
-public sealed record DirectVideoUploadRequest(string? FileName, string? ContentType, long ContentLength);
+public sealed record DirectVideoUploadRequest(string? FileName, string? ContentType, long ContentLength, bool ProcessOnServer);
 public sealed record ConfirmDirectVideoUploadRequest(string PublicUrl, string ContentType, long ContentLength);
 public sealed record VideoUploadFailureReport(
     string? Stage,

@@ -35,7 +35,8 @@ public static class PublicationMediaBuilder
         string? videoUrl,
         DateTime createdAtUtc,
         string? primaryMediaType = null,
-        int maxImages = 10)
+        int maxImages = 10,
+        bool videoPendingProcessing = false)
     {
         var items = new List<PublicationMedia>();
         var normalizedVideoUrl = NormalizeOptionalUrl(videoUrl);
@@ -53,6 +54,7 @@ public static class PublicationMediaBuilder
                 MediaType = PublicationMediaType.Video,
                 Url = normalizedVideoUrl,
                 IsPrimary = useVideoAsPrimary,
+                VideoProcessingState = videoPendingProcessing ? "Pending" : "Ready",
                 CreatedAtUtc = createdAtUtc
             });
         }

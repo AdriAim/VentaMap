@@ -66,6 +66,9 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
             .HasIndex(x => new { x.VisitorHash, x.VisitedOn })
             .IsUnique();
 
+        modelBuilder.Entity<SiteVisit>()
+            .HasIndex(x => new { x.VisitedOn, x.AcquisitionChannel });
+
         modelBuilder.Entity<ApplicationUser>()
             .Property(x => x.CanPublish)
             .HasDefaultValue(true);

@@ -64,7 +64,7 @@ else
         _ => string.Empty
     };
     var formattedPrice = $"{publication.Currency} {publication.Price.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-AR"))}";
-    var detailShareUrl = $"{Context.Request.PathBase}/Publications/Details/{publication.Id}{debugSuffix}";
+    var detailShareUrl = $"{Context.Request.PathBase}/anuncio/{publication.Id}{debugSuffix}";
     var detailShareImage = publication.ImageList.FirstOrDefault();
 
     <section class="detail-hero">

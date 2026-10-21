@@ -2,7 +2,14 @@ using System.Threading.Channels;
 
 namespace VentaMap.Services;
 
-public sealed record SiteVisitEvent(string VisitorHash, DateTime VisitedOn);
+public sealed record SiteVisitEvent(
+    string VisitorHash,
+    DateTime VisitedOn,
+    string AcquisitionChannel,
+    string? CampaignSource,
+    string? CampaignMedium,
+    string? CampaignName,
+    string? ReferrerHost);
 
 public class SiteVisitQueue
 {

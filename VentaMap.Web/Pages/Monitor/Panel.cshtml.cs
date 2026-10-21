@@ -48,11 +48,15 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
                 && x.RepublishedAtUtc >= utcFrom && x.RepublishedAtUtc < utcUntil)
             .Select(x => x.RepublishedAtUtc)
             .ToListAsync();
-        var visitors = await db.SiteVisits.AsNoTracking()
+        var visits = await db.SiteVisits.AsNoTracking()
             .Where(x => x.VisitedOn >= from && x.VisitedOn < until)
-            .GroupBy(x => x.VisitedOn)
-            .Select(x => new { Day = x.Key, Count = x.Count() })
-            .ToDictionaryAsync(x => x.Day, x => x.Count);
+            .Select(x => new VisitAttributionMetric(x.VisitedOn, x.AcquisitionChannel))
+            .ToListAsync();
+        var visitors = visits.GroupBy(x => x.Day).ToDictionary(x => x.Key, x => x.Count());
+        var socialCampaignVisits = visits.Where(x => x.Channel == "social_campaign")
+            .GroupBy(x => x.Day).ToDictionary(x => x.Key, x => x.Count());
+        var sharedLinkVisits = visits.Where(x => x.Channel == "shared_link")
+            .GroupBy(x => x.Day).ToDictionary(x => x.Key, x => x.Count());
 
         var usersByDay = newUsers.GroupBy(x => ToArgentinaDay(x.CreatedAtUtc)).ToDictionary(x => x.Key, x => x.ToList());
         var publicationsByDay = newPublications.GroupBy(x => ToArgentinaDay(x.CreatedAtUtc)).ToDictionary(x => x.Key, x => x.ToList());
@@ -70,7 +74,9 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
                 usersByDay.GetValueOrDefault(day, []),
                 publicationsByDay.GetValueOrDefault(day, []),
                 republicationCounts.GetValueOrDefault(day),
-                visitors.GetValueOrDefault(day)))
+                visitors.GetValueOrDefault(day),
+                socialCampaignVisits.GetValueOrDefault(day),
+                sharedLinkVisits.GetValueOrDefault(day)))
             .ToList();
         return Page();
     }
@@ -109,13 +115,17 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
 
     public sealed record MonitorUser(int Id, string Name, string Email, DateTime CreatedAtUtc);
     public sealed record MonitorPublication(int Id, string UserName, string ShortDescription, string Locality, decimal Price, string Currency, DateTime CreatedAtUtc);
+    public sealed record VisitAttributionMetric(DateTime Day, string Channel);
     public sealed record DailyMetric(
         DateTime Day,
         IReadOnlyList<MonitorUser> NewUsers,
         IReadOnlyList<MonitorPublication> NewPublications,
         int RepublishedPublications,
-        int Visitors)
+        int Visitors,
+        int SocialCampaignVisitors,
+        int SharedLinkVisitors)
     {
         public int RegisteredUsers => NewUsers.Count;
+        public int OtherVisitors => Visitors - SocialCampaignVisitors - SharedLinkVisitors;
     }
 }

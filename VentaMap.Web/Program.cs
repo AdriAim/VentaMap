@@ -43,7 +43,12 @@ var hasHttpsUrlConfigured = configuredUrls
 var sharedApplicationName = builder.Configuration["Authentication:SharedApplicationName"] ?? "VentaMap";
 var maxUploadRequestBytes = builder.Configuration.GetValue<long?>("Uploads:MaxRequestBodyBytes") ?? 100L * 1024 * 1024;
 
-builder.Services.AddRazorPages();
+builder.Services.AddRazorPages(options =>
+{
+    // URL pública y legible para compartir anuncios. La ruta histórica sigue
+    // disponible para no invalidar enlaces ya enviados.
+    options.Conventions.AddPageRoute("/Publications/Details", "/anuncio/{id:int}");
+});
 builder.Services.AddControllersWithViews();
 builder.Services.AddMcpServer()
     .WithHttpTransport(options => options.SessionMode = HttpServerSessionMode.StatefulForInitializeClients)
@@ -193,6 +198,7 @@ builder.Services.AddScoped<NavigationLocalityService>();
 builder.Services.AddScoped<PublicationGroupPreferenceService>();
 builder.Services.AddHttpClient<ArgentineLocalityLookupService>();
 builder.Services.AddHostedService<PublicationExpirationWorker>();
+builder.Services.AddHostedService<PublicationVideoProcessingWorker>();
 
 var app = builder.Build();
 app.UseForwardedHeaders();
@@ -528,6 +534,10 @@ static async Task EnsurePublicationMediaSchemaAsync(System.Data.Common.DbConnect
             CONSTRAINT `PK_PublicationMedia` PRIMARY KEY (`Id`)
         ) CHARACTER SET=utf8mb4;
         """);
+
+    await EnsureColumnAsync(connection, "PublicationMedia", "VideoProcessingState", "varchar(20) CHARACTER SET utf8mb4 NOT NULL DEFAULT 'Ready'");
+    await EnsureColumnAsync(connection, "PublicationMedia", "VideoProcessingStartedAtUtc", "datetime(6) NULL");
+    await EnsureColumnAsync(connection, "PublicationMedia", "VideoProcessingFailedAtUtc", "datetime(6) NULL");
 
     var hasImagesCsv = await ColumnExistsAsync(connection, "Publications", "ImagesCsv");
     var hasVideoUrl = await ColumnExistsAsync(connection, "Publications", "VideoUrl");
@@ -1049,12 +1059,23 @@ static async Task EnsureSiteAnalyticsSchemaAsync(System.Data.Common.DbConnection
             `Id` int NOT NULL AUTO_INCREMENT,
             `VisitorHash` varchar(64) CHARACTER SET utf8mb4 NOT NULL,
             `VisitedOn` datetime(6) NOT NULL,
+            `AcquisitionChannel` varchar(32) CHARACTER SET utf8mb4 NOT NULL DEFAULT 'other',
+            `CampaignSource` varchar(120) CHARACTER SET utf8mb4 NULL,
+            `CampaignMedium` varchar(120) CHARACTER SET utf8mb4 NULL,
+            `CampaignName` varchar(160) CHARACTER SET utf8mb4 NULL,
+            `ReferrerHost` varchar(255) CHARACTER SET utf8mb4 NULL,
             CONSTRAINT `PK_SiteVisits` PRIMARY KEY (`Id`)
         ) CHARACTER SET=utf8mb4;
         """);
 
+    await EnsureColumnAsync(connection, "SiteVisits", "AcquisitionChannel", "varchar(32) CHARACTER SET utf8mb4 NOT NULL DEFAULT 'other'");
+    await EnsureColumnAsync(connection, "SiteVisits", "CampaignSource", "varchar(120) CHARACTER SET utf8mb4 NULL");
+    await EnsureColumnAsync(connection, "SiteVisits", "CampaignMedium", "varchar(120) CHARACTER SET utf8mb4 NULL");
+    await EnsureColumnAsync(connection, "SiteVisits", "CampaignName", "varchar(160) CHARACTER SET utf8mb4 NULL");
+    await EnsureColumnAsync(connection, "SiteVisits", "ReferrerHost", "varchar(255) CHARACTER SET utf8mb4 NULL");
     await EnsureIndexAsync(connection, "SiteVisits", "IX_SiteVisits_VisitorHash_VisitedOn", "CREATE UNIQUE INDEX `IX_SiteVisits_VisitorHash_VisitedOn` ON `SiteVisits` (`VisitorHash`, `VisitedOn`)");
     await EnsureIndexAsync(connection, "SiteVisits", "IX_SiteVisits_VisitedOn", "CREATE INDEX `IX_SiteVisits_VisitedOn` ON `SiteVisits` (`VisitedOn`)");
+    await EnsureIndexAsync(connection, "SiteVisits", "IX_SiteVisits_VisitedOn_AcquisitionChannel", "CREATE INDEX `IX_SiteVisits_VisitedOn_AcquisitionChannel` ON `SiteVisits` (`VisitedOn`, `AcquisitionChannel`)");
 }
 
 static async Task EnsureColumnAsync(System.Data.Common.DbConnection connection, string tableName, string columnName, string definition)

@@ -308,7 +308,7 @@ public sealed class CloudflareR2ImageStorageService
     }
 
     /// <summary>Creates a short-lived, single-object R2 upload URL so video bytes do not traverse the web server.</summary>
-    public DirectVideoUpload CreateDirectPublicationVideoUpload(string? fileName, string? declaredContentType, long contentLength)
+    public DirectVideoUpload CreateDirectPublicationVideoUpload(string? fileName, string? declaredContentType, long contentLength, bool processOnServer = false)
     {
         if (contentLength <= 0)
         {
@@ -328,7 +328,9 @@ public sealed class CloudflareR2ImageStorageService
             throw new InvalidOperationException($"El video supera el limite de {options.MaxVideoBytes / (1024 * 1024)} MB.");
         }
 
-        var key = BuildObjectKey(options, ResolveVideoExtension(fileName, contentType));
+        var key = BuildObjectKey(
+            processOnServer ? options with { Prefix = $"{options.Prefix.Trim('/')}/pending" } : options,
+            ResolveVideoExtension(fileName, contentType));
         var uploadUrl = _client.Value.GetPreSignedURL(new GetPreSignedUrlRequest
         {
             BucketName = options.Bucket,
@@ -338,7 +340,71 @@ public sealed class CloudflareR2ImageStorageService
             ContentType = contentType
         });
 
-        return new DirectVideoUpload(uploadUrl, BuildPublicUrl(options.PublicBaseUrl, key), contentType, contentLength);
+        return new DirectVideoUpload(uploadUrl, BuildPublicUrl(options.PublicBaseUrl, key), contentType, contentLength, processOnServer);
+    }
+
+    public async Task<string> ProcessPendingPublicationVideoAsync(string pendingPublicUrl, CancellationToken cancellationToken = default)
+    {
+        var options = GetOptions();
+        ValidateConfiguration(options);
+        var sourceKey = TryExtractManagedObjectKey(pendingPublicUrl, options.PublicBaseUrl);
+        var pendingPrefix = $"{options.Prefix.Trim('/')}/pending/";
+        if (string.IsNullOrWhiteSpace(sourceKey) || !sourceKey.StartsWith(pendingPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("El video pendiente no pertenece a la cola de procesamiento.");
+        }
+
+        var inputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}{Path.GetExtension(sourceKey)}");
+        var outputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.mp4");
+        var fallbackOutputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}-fallback.mp4");
+        try
+        {
+            using (var source = await _client.Value.GetObjectAsync(options.Bucket, sourceKey, cancellationToken))
+            await using (var local = File.Create(inputPath))
+            {
+                await source.ResponseStream.CopyToAsync(local, cancellationToken);
+            }
+
+            var metadata = await ReadVideoMetadataAsync(inputPath, cancellationToken);
+            if (metadata.Width <= 0 || metadata.Height <= 0 || metadata.Width >= metadata.Height || metadata.DurationSeconds is > 60.5d)
+            {
+                throw new InvalidOperationException("El video pendiente no cumple las condiciones de publicación.");
+            }
+
+            await TranscodeVideoAsync(inputPath, outputPath, 1080, 1920, 23, 8000, 128, cancellationToken);
+            var chosenOutputPath = outputPath;
+            if (new FileInfo(chosenOutputPath).Length > options.MaxProcessedVideoBytes)
+            {
+                await TranscodeVideoAsync(inputPath, fallbackOutputPath, 720, 1280, 26, 4500, 128, cancellationToken);
+                chosenOutputPath = fallbackOutputPath;
+            }
+
+            if (new FileInfo(chosenOutputPath).Length > options.MaxProcessedVideoBytes)
+            {
+                throw new InvalidOperationException($"El video final supera el limite de {options.MaxProcessedVideoBytes / (1024 * 1024)} MB.");
+            }
+
+            await using var output = File.OpenRead(chosenOutputPath);
+            var targetKey = BuildObjectKey(options, ".mp4");
+            var request = new PutObjectRequest
+            {
+                BucketName = options.Bucket,
+                Key = targetKey,
+                InputStream = output,
+                ContentType = "video/mp4",
+                DisablePayloadSigning = true,
+                DisableDefaultChecksumValidation = true
+            };
+            request.Headers.CacheControl = "public, max-age=31536000, immutable";
+            await _client.Value.PutObjectAsync(request, cancellationToken);
+            return BuildPublicUrl(options.PublicBaseUrl, targetKey);
+        }
+        finally
+        {
+            TryDeleteTempFile(inputPath);
+            TryDeleteTempFile(outputPath);
+            TryDeleteTempFile(fallbackOutputPath);
+        }
     }
 
     public async Task<string> ConfirmDirectPublicationVideoUploadAsync(string publicUrl, long expectedLength, string expectedContentType, CancellationToken cancellationToken = default)
@@ -642,7 +708,7 @@ public sealed class CloudflareR2ImageStorageService
             : "application/octet-stream";
     }
 
-    public sealed record DirectVideoUpload(string UploadUrl, string PublicUrl, string ContentType, long ContentLength);
+    public sealed record DirectVideoUpload(string UploadUrl, string PublicUrl, string ContentType, long ContentLength, bool ProcessOnServer);
 
     private static string ResolveVideoExtension(string? fileName, string contentType)
     {

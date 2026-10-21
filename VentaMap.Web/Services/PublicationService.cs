@@ -293,7 +293,8 @@ public class PublicationService(
             input.VideoUrl,
             publication.CreatedAtUtc,
             input.PrimaryMediaType,
-            isCompany ? 30 : 10));
+            isCompany ? 30 : 10,
+            input.VideoPendingProcessing));
 
         string? rawAnonymousPassword = null;
         if (input.PublisherMode == "Anonymous")
@@ -719,7 +720,8 @@ public class PublicationService(
             input.VideoUrl,
             publication.CreatedAtUtc,
             input.PrimaryMediaType,
-            isCompany ? 30 : 10);
+            isCompany ? 30 : 10,
+            input.VideoPendingProcessing);
         var nextMediaUrls = nextMediaItems
             .Select(x => x.Url)
             .Where(x => !string.IsNullOrWhiteSpace(x))

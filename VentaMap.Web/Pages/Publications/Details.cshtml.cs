@@ -27,15 +27,17 @@ public class DetailsModel(VentaMapDbContext db) : PageModel
             var shortDescription = string.IsNullOrWhiteSpace(Publication.ShortDescription)
                 ? Publication.Title
                 : Publication.ShortDescription;
+            var companyName = Publication.User?.IsCompany == true
+                ? (string.IsNullOrWhiteSpace(Publication.User.CompanyName)
+                    ? Publication.User.Name
+                    : Publication.User.CompanyName)
+                : string.Empty;
 
             if (Publication.User?.IsCompany == true)
             {
-                var companyName = string.IsNullOrWhiteSpace(Publication.User.CompanyName)
-                    ? Publication.User.Name
-                    : Publication.User.CompanyName;
                 // WhatsApp displays the Open Graph title in bold and the site domain below it.
-                ViewData["OgTitle"] = companyName;
-                ViewData["MetaDescription"] = shortDescription;
+                ViewData["OgTitle"] = shortDescription;
+                ViewData["MetaDescription"] = $"{companyName} · {Publication.Locality}";
 
                 if (!string.IsNullOrWhiteSpace(Publication.User.CompanyLogoUrl))
                 {
@@ -51,7 +53,12 @@ public class DetailsModel(VentaMapDbContext db) : PageModel
             var publicationImage = Publication.ImageList.FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(publicationImage))
             {
-                ViewData["OgImageUrl"] = publicationImage;
+                // WhatsApp preserves this vertical 4:5 rendition much better in
+                // Status than a landscape source image.
+                ViewData["OgImageUrl"] = $"/anuncio/{Publication.Id}/vista-previa.jpg";
+                ViewData["OgImageWidth"] = "1080";
+                ViewData["OgImageHeight"] = "1350";
+                ViewData["OgImageType"] = "image/jpeg";
             }
         }
 

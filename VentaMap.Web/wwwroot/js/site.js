@@ -3345,10 +3345,9 @@
     const mapMode = mapElement.dataset.mapMode || "home";
     // La vista Mapa de Buscar recibe únicamente los anuncios que cumplen los
     // filtros activos (localidad, radio, etc.). Su encuadre inicial debe usar
-    // ese conjunto, sin volver a la localidad base ni incorporar resultados
-    // del refresco posterior por viewport.
-    const isDesktopBrowseMap = Boolean(mapElement.closest("#api-page [data-map-layout]"))
-      && !window.matchMedia("(max-width: 780px)").matches;
+    // ese conjunto en cualquier tamaño de pantalla, sin volver a la localidad
+    // base ni incorporar resultados del refresco posterior por viewport.
+    const isBrowseMap = Boolean(mapElement.closest("#api-page [data-map-layout]"));
     const browseMapPadding = 60;
     const browseMapSingleZoom = 12.8;
     const browseMapMaxZoom = 12.8;
@@ -3574,14 +3573,16 @@
     };
 
     const syncBrowseMapViewportWhenReady = callback => {
-      if (!isDesktopBrowseMap) return;
+      if (!isBrowseMap) return;
 
       let attempts = 0;
       const trySync = () => {
         const { width, height } = mapElement.getBoundingClientRect();
         if (width > 120 && height > 120) {
           instance.resize?.();
-          callback?.();
+          // En móvil el panel se termina de dimensionar un frame después de
+          // activarse. Ajustar antes usa el alto anterior y abre demasiado el mapa.
+          window.requestAnimationFrame(() => callback?.());
           return;
         }
 
@@ -3597,7 +3598,7 @@
     const fitInitialViewport = bounds => {
       if (!bounds || !markers.length) return;
 
-      if (isDesktopBrowseMap) {
+      if (isBrowseMap) {
         const fitSearchResults = () => {
           if (markers.length === 1) {
             instance.jumpTo({
@@ -5024,21 +5025,22 @@
     });
   }
 
-  async function prepareDirectVideoUpload(file) {
+  async function prepareDirectVideoUpload(file, processOnServer = false) {
     const response = await fetch("/api/content/prepare-direct-video-upload", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" },
       body: JSON.stringify({
         fileName: file.name || "video.mp4",
         contentType: file.type || "video/mp4",
-        contentLength: file.size
+        contentLength: file.size,
+        processOnServer
       })
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload?.uploadUrl || !payload?.publicUrl) {
       throw new Error(payload?.message || "No se pudo preparar la subida directa del video.");
     }
-    return payload;
+    return { ...payload, processOnServer };
   }
 
   function reportVideoUploadFailure(stage, error, file, statusCode = null) {
@@ -7362,7 +7364,12 @@
       if (!trigger) return;
       const modal = trigger.closest(".detail-hero")?.parentElement?.querySelector("[data-detail-share-modal]");
       if (!modal) return;
-      const url = new URL(trigger.getAttribute("data-detail-share-url") || window.location.href, window.location.origin).href;
+      const sharedUrl = new URL(trigger.getAttribute("data-detail-share-url") || window.location.href, window.location.origin);
+      sharedUrl.searchParams.set("vm_source", "share");
+      sharedUrl.searchParams.set("utm_source", "ventamap-share");
+      sharedUrl.searchParams.set("utm_medium", "shared_link");
+      sharedUrl.searchParams.set("utm_campaign", "publication_share");
+      const url = sharedUrl.href;
       const title = trigger.closest(".detail-hero")?.querySelector(".detail-title-text")?.textContent?.trim() || "Anuncio en VentaMap";
       const text = `${title} · ${url}`;
       if (event.target.closest("[data-detail-share-trigger]")) {
@@ -7381,7 +7388,15 @@
         modal.hidden = true;
         modal.previousElementSibling?.querySelector("[data-detail-share-trigger]")?.setAttribute("aria-expanded", "false");
       }
-      if (event.target.closest("[data-detail-share-copy]")) { await navigator.clipboard?.writeText(new URL(modal.closest(".detail-share-modal")?.previousElementSibling?.querySelector("[data-detail-share-url]")?.getAttribute("data-detail-share-url") || window.location.href, window.location.origin).href); modal.querySelector(".detail-share-status").textContent = "Enlace copiado."; }
+      if (event.target.closest("[data-detail-share-copy]")) {
+        const sharedUrl = new URL(modal.closest(".detail-share-modal")?.previousElementSibling?.querySelector("[data-detail-share-url]")?.getAttribute("data-detail-share-url") || window.location.href, window.location.origin);
+        sharedUrl.searchParams.set("vm_source", "share");
+        sharedUrl.searchParams.set("utm_source", "ventamap-share");
+        sharedUrl.searchParams.set("utm_medium", "shared_link");
+        sharedUrl.searchParams.set("utm_campaign", "publication_share");
+        await navigator.clipboard?.writeText(sharedUrl.href);
+        modal.querySelector(".detail-share-status").textContent = "Enlace copiado.";
+      }
     });
     document.addEventListener("keydown", event => {
       if (event.key !== "Escape") return;
@@ -7451,6 +7466,7 @@
     const previews = form.querySelector("[data-video-previews]");
     const statusNode = form.querySelector("[data-video-status]");
     const videoUrlInput = form.querySelector('input[name="videoUrl"]');
+    const videoPendingProcessingInput = form.querySelector("[data-video-pending-processing]");
     const primaryMediaTypeInput = form.querySelector("[data-primary-media-type]");
     const feedback = document.getElementById("create-feedback");
 
@@ -7478,7 +7494,8 @@
         file: { name: "Video actual" },
         previewUrl: existingUrl,
         uploadedUrl: existingUrl,
-        statusText: "Listo",
+        pendingProcessing: videoPendingProcessingInput?.value === "true",
+        statusText: videoPendingProcessingInput?.value === "true" ? "Procesando en el servidor..." : "Listo",
         deleteOnRemove: false,
         removed: false
       };
@@ -7487,6 +7504,9 @@
     const updateHiddenValue = () => {
       if (videoUrlInput) {
         videoUrlInput.value = state?.uploadedUrl || "";
+      }
+      if (videoPendingProcessingInput) {
+        videoPendingProcessingInput.value = state?.pendingProcessing ? "true" : "false";
       }
       form.dispatchEvent(new CustomEvent("create:video-state-changed", { bubbles: true }));
     };
@@ -7578,6 +7598,7 @@
         file,
         previewUrl: URL.createObjectURL(file),
         uploadedUrl: null,
+        pendingProcessing: false,
         statusText: "Preparando...",
         deleteOnRemove: true,
         removed: false
@@ -7586,6 +7607,7 @@
       render();
 
       let fileToUpload = file;
+      const processOnServer = !shouldOptimizeVideoForUpload(file);
       let uploadStage = "optimization";
       const currentUpload = uploadChain.then(async () => {
         if (shouldOptimizeVideoForUpload(file)) {
@@ -7611,7 +7633,7 @@
         currentState.statusText = "Preparando subida directa...";
         render();
         uploadStage = "prepare";
-        const upload = await prepareDirectVideoUpload(fileToUpload);
+        const upload = await prepareDirectVideoUpload(fileToUpload, processOnServer);
         currentState.statusText = "Subiendo a almacenamiento... 0%";
         render();
         uploadStage = "transfer";
@@ -7627,7 +7649,8 @@
 
         if (state?.id === currentState.id) {
           state.uploadedUrl = uploadedUrl;
-          state.statusText = "Listo";
+          state.pendingProcessing = upload.processOnServer === true;
+          state.statusText = state.pendingProcessing ? "Listo. Se optimizará en el servidor." : "Listo";
         }
         if (currentState.removed && currentState.deleteOnRemove) {
           try {

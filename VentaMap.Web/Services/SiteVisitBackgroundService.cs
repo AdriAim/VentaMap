@@ -14,7 +14,16 @@ public class SiteVisitBackgroundService(IServiceScopeFactory scopeFactory, SiteV
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var db = scope.ServiceProvider.GetRequiredService<VentaMapDbContext>();
-                db.SiteVisits.Add(new SiteVisit { VisitorHash = visit.VisitorHash, VisitedOn = visit.VisitedOn });
+                db.SiteVisits.Add(new SiteVisit
+                {
+                    VisitorHash = visit.VisitorHash,
+                    VisitedOn = visit.VisitedOn,
+                    AcquisitionChannel = visit.AcquisitionChannel,
+                    CampaignSource = visit.CampaignSource,
+                    CampaignMedium = visit.CampaignMedium,
+                    CampaignName = visit.CampaignName,
+                    ReferrerHost = visit.ReferrerHost
+                });
                 await db.SaveChangesAsync(stoppingToken);
             }
             catch (DbUpdateException)

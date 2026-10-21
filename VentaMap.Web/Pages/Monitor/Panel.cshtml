@@ -43,7 +43,7 @@
     <section class="detail-panel">
         <div class="table-responsive">
             <table class="table">
-                <thead><tr><th>Día</th><th>Usuarios registrados</th><th>Anuncios nuevos</th><th>Anuncios republicados</th><th>Visitantes</th></tr></thead>
+                <thead><tr><th>Día</th><th>Usuarios registrados</th><th>Anuncios nuevos</th><th>Anuncios republicados</th><th>Visitantes</th><th>Campañas de redes</th><th>Enlaces compartidos</th><th>Resto de ingresos</th></tr></thead>
                 <tbody>
                 @foreach (var item in Model.Metrics)
                 {
@@ -88,6 +88,9 @@
                         </td>
                         <td>@item.RepublishedPublications</td>
                         <td>@item.Visitors</td>
+                        <td>@item.SocialCampaignVisitors</td>
+                        <td>@item.SharedLinkVisitors</td>
+                        <td>@item.OtherVisitors</td>
                     </tr>
                 }
                 </tbody>
