@@ -4916,12 +4916,14 @@
     const fileName = String(file?.name || "").toLowerCase();
     const acceptedFormat = ["video/mp4", "video/webm", "video/quicktime"].includes(contentType)
       || /\.(mp4|webm|mov)$/i.test(fileName);
-    // The server accepts up to 80 MB. Keep a small safety margin and avoid
+    // The server accepts up to 150 MB. Keep a small safety margin and avoid
     // device-side transcoding solely because a compatible video is 4K.
-    const isWithinDirectUploadSize = file.size <= 75 * 1024 * 1024;
+    const isWithinDirectUploadSize = file.size <= 145 * 1024 * 1024;
 
     return !acceptedFormat || !isWithinDirectUploadSize;
   }
+
+  const maxVideoUploadBytes = 150 * 1024 * 1024;
 
   async function optimizeImageForUpload(file, options = {}) {
     const maxSide = Number(options.maxSide || 2000);
@@ -7589,6 +7591,14 @@
 
       if (metadata.duration > 60) {
         throw new Error("El video no puede durar mas de 1 minuto.");
+      }
+
+      if (file.size > maxVideoUploadBytes) {
+        const message = "Este video supera los 150 MB. Intentaremos comprimirlo antes de subirlo; si no se puede reducir dentro del límite, elegí un archivo más liviano.";
+        if (feedback) {
+          feedback.innerHTML = `<div class="status-banner warning">${escapeHtml(message)}</div>`;
+        }
+        window.alert(message);
       }
 
       await clearState();
