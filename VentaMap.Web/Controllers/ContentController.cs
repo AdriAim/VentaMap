@@ -1368,7 +1368,17 @@ public partial class ContentController(
         }
         catch (InvalidOperationException ex)
         {
-            videoUploadLogger.LogWarning(ex, "Direct upload confirmation rejected for user {UserId}. Content type {ContentType}, {Length} bytes.", currentUserAccessor.UserId, request.ContentType, request.ContentLength);
+            videoUploadLogger.LogWarning(
+                ex,
+                "Direct upload confirmation rejected for user {UserId}. Expected {ExpectedLength} bytes, R2 size {R2ActualLength} bytes, expected content type {ExpectedContentType}, R2 content type {R2ContentType}, ETag {R2ETag}, attempts {ConfirmationAttempts}, browser {UserAgent}.",
+                currentUserAccessor.UserId,
+                request.ContentLength,
+                ex.Data["R2ActualLength"] ?? "not available",
+                request.ContentType,
+                ex.Data["R2ContentType"] ?? "not available",
+                ex.Data["R2ETag"] ?? "not available",
+                ex.Data["ConfirmationAttempts"] ?? 1,
+                Request.Headers.UserAgent.ToString());
             return BadRequest(new { message = ex.Message });
         }
         catch (Exception ex)

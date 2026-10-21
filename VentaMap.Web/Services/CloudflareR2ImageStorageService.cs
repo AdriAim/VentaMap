@@ -417,10 +417,58 @@ public sealed class CloudflareR2ImageStorageService
             throw new InvalidOperationException("La URL del video no pertenece al almacenamiento de VentaMap.");
         }
 
-        var metadata = await _client.Value.GetObjectMetadataAsync(options.Bucket, key, cancellationToken);
-        if (metadata.ContentLength <= 0 || metadata.ContentLength > options.MaxVideoBytes || metadata.ContentLength != expectedLength)
+        GetObjectMetadataResponse? metadata = null;
+        const int confirmationAttempts = 5;
+        for (var attempt = 1; attempt <= confirmationAttempts; attempt++)
         {
-            throw new InvalidOperationException("El tamaño del video subido no es válido.");
+            metadata = await _client.Value.GetObjectMetadataAsync(options.Bucket, key, cancellationToken);
+            if (metadata.ContentLength > 0 && metadata.ContentLength <= options.MaxVideoBytes)
+            {
+                break;
+            }
+
+            if (attempt < confirmationAttempts)
+            {
+                _logger.LogInformation(
+                    "Direct video upload metadata is not ready yet for {ObjectKey}. Attempt {Attempt}/{Attempts}, R2 size {ActualLength} bytes.",
+                    key,
+                    attempt,
+                    confirmationAttempts,
+                    metadata.ContentLength);
+                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+            }
+        }
+
+        if (metadata is null || metadata.ContentLength <= 0 || metadata.ContentLength > options.MaxVideoBytes)
+        {
+            var failure = new InvalidOperationException("El tamaño del video subido no es válido.");
+            failure.Data["ExpectedLength"] = expectedLength;
+            failure.Data["R2ActualLength"] = metadata?.ContentLength ?? -1;
+            failure.Data["R2ContentType"] = metadata?.Headers.ContentType ?? string.Empty;
+            failure.Data["R2ETag"] = metadata?.ETag ?? string.Empty;
+            failure.Data["ConfirmationAttempts"] = confirmationAttempts;
+            _logger.LogWarning(
+                failure,
+                "Direct video upload has an invalid R2 size after confirmation retries. Expected {ExpectedLength} bytes, R2 reported {ActualLength} bytes, content type {ActualContentType}, ETag {ETag} for {ObjectKey}.",
+                expectedLength,
+                metadata?.ContentLength ?? -1,
+                metadata?.Headers.ContentType,
+                metadata?.ETag,
+                key);
+            throw failure;
+        }
+
+        // Mobile browsers and R2 can report a different representation of the
+        // original file length. The object size itself is authoritative: it is
+        // bounded above, non-empty, and the video will still be validated by
+        // ffmpeg before the background worker publishes its optimized version.
+        if (metadata.ContentLength != expectedLength)
+        {
+            _logger.LogWarning(
+                "Direct video upload size differs from the browser declaration. Expected {ExpectedLength} bytes, R2 stored {ActualLength} bytes for {ObjectKey}.",
+                expectedLength,
+                metadata.ContentLength,
+                key);
         }
 
         var actualContentType = NormalizeVideoContentType(key, metadata.Headers.ContentType);

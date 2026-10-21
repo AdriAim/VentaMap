@@ -3458,7 +3458,8 @@ textarea:focus {
 }
 
 .monitor-metric-cell:hover .monitor-metric-tooltip,
-.monitor-metric-cell:focus-visible .monitor-metric-tooltip {
+.monitor-metric-cell:focus-visible .monitor-metric-tooltip,
+.monitor-metric-cell.is-tooltip-open .monitor-metric-tooltip {
   opacity: 1;
   transform: translate(-50%, 0);
   visibility: visible;

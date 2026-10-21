@@ -50,11 +50,15 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
             .ToListAsync();
         var visits = await db.SiteVisits.AsNoTracking()
             .Where(x => x.VisitedOn >= from && x.VisitedOn < until)
-            .Select(x => new VisitAttributionMetric(x.VisitedOn, x.AcquisitionChannel))
+            .Select(x => new VisitAttributionMetric(x.VisitedOn, x.AcquisitionChannel, x.CampaignSource, x.CampaignName))
             .ToListAsync();
         var visitors = visits.GroupBy(x => x.Day).ToDictionary(x => x.Key, x => x.Count());
-        var socialCampaignVisits = visits.Where(x => x.Channel == "social_campaign")
-            .GroupBy(x => x.Day).ToDictionary(x => x.Key, x => x.Count());
+        var socialCampaigns = visits.Where(x => x.Channel == "social_campaign").ToList();
+        var instagramCampaigns = GetCampaignBreakdown(socialCampaigns, "instagram");
+        var facebookCampaigns = GetCampaignBreakdown(socialCampaigns, "facebook");
+        var tiktokCampaignVisits = CountCampaignsByPlatform(socialCampaigns, "tiktok");
+        var professionalOrXCampaignVisits = CountCampaignsByPlatform(socialCampaigns, "professional_or_x");
+        var otherSocialCampaignVisits = CountCampaignsByPlatform(socialCampaigns, "other_social");
         var sharedLinkVisits = visits.Where(x => x.Channel == "shared_link")
             .GroupBy(x => x.Day).ToDictionary(x => x.Key, x => x.Count());
 
@@ -75,7 +79,11 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
                 publicationsByDay.GetValueOrDefault(day, []),
                 republicationCounts.GetValueOrDefault(day),
                 visitors.GetValueOrDefault(day),
-                socialCampaignVisits.GetValueOrDefault(day),
+                instagramCampaigns.GetValueOrDefault(day, []),
+                facebookCampaigns.GetValueOrDefault(day, []),
+                tiktokCampaignVisits.GetValueOrDefault(day),
+                professionalOrXCampaignVisits.GetValueOrDefault(day),
+                otherSocialCampaignVisits.GetValueOrDefault(day),
                 sharedLinkVisits.GetValueOrDefault(day)))
             .ToList();
         return Page();
@@ -113,19 +121,57 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
 
     private static DateTime ToArgentinaDay(DateTime utc) => utc.AddHours(-3).Date;
 
+    private static Dictionary<DateTime, int> CountCampaignsByPlatform(
+        IEnumerable<VisitAttributionMetric> campaigns,
+        string platform) => campaigns
+            .Where(x => GetCampaignPlatform(x.Source) == platform)
+            .GroupBy(x => x.Day)
+            .ToDictionary(x => x.Key, x => x.Count());
+
+    private static Dictionary<DateTime, IReadOnlyList<CampaignMetric>> GetCampaignBreakdown(
+        IEnumerable<VisitAttributionMetric> campaigns,
+        string platform) => campaigns
+            .Where(x => GetCampaignPlatform(x.Source) == platform)
+            .GroupBy(x => new { x.Day, Name = string.IsNullOrWhiteSpace(x.CampaignName) ? "Sin nombre de campaña" : x.CampaignName.Trim() })
+            .GroupBy(x => x.Key.Day)
+            .ToDictionary(
+                x => x.Key,
+                x => (IReadOnlyList<CampaignMetric>)x
+                    .Select(group => new CampaignMetric(group.Key.Name, group.Count()))
+                    .OrderByDescending(group => group.Visitors)
+                    .ThenBy(group => group.Name)
+                    .ToList());
+
+    private static string GetCampaignPlatform(string? source) => source?.Trim().ToLowerInvariant() switch
+    {
+        "instagram" or "ig" => "instagram",
+        "facebook" or "fb" or "meta" => "facebook",
+        "tiktok" => "tiktok",
+        "linkedin" or "x" or "twitter" => "professional_or_x",
+        _ => "other_social"
+    };
+
     public sealed record MonitorUser(int Id, string Name, string Email, DateTime CreatedAtUtc);
     public sealed record MonitorPublication(int Id, string UserName, string ShortDescription, string Locality, decimal Price, string Currency, DateTime CreatedAtUtc);
-    public sealed record VisitAttributionMetric(DateTime Day, string Channel);
+    public sealed record VisitAttributionMetric(DateTime Day, string Channel, string? Source, string? CampaignName);
+    public sealed record CampaignMetric(string Name, int Visitors);
     public sealed record DailyMetric(
         DateTime Day,
         IReadOnlyList<MonitorUser> NewUsers,
         IReadOnlyList<MonitorPublication> NewPublications,
         int RepublishedPublications,
         int Visitors,
-        int SocialCampaignVisitors,
+        IReadOnlyList<CampaignMetric> InstagramCampaigns,
+        IReadOnlyList<CampaignMetric> FacebookCampaigns,
+        int TikTokCampaignVisitors,
+        int ProfessionalOrXCampaignVisitors,
+        int OtherSocialCampaignVisitors,
         int SharedLinkVisitors)
     {
         public int RegisteredUsers => NewUsers.Count;
+        public int InstagramCampaignVisitors => InstagramCampaigns.Sum(x => x.Visitors);
+        public int FacebookCampaignVisitors => FacebookCampaigns.Sum(x => x.Visitors);
+        public int SocialCampaignVisitors => InstagramCampaignVisitors + FacebookCampaignVisitors + TikTokCampaignVisitors + ProfessionalOrXCampaignVisitors + OtherSocialCampaignVisitors;
         public int OtherVisitors => Visitors - SocialCampaignVisitors - SharedLinkVisitors;
     }
 }
