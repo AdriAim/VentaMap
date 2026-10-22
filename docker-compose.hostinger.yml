@@ -62,6 +62,7 @@ services:
       Authentication__Google__ClientSecret: ${GOOGLE_CLIENT_SECRET}
       # Use the current browser origin; Traefik routes /api/chat and /hubs/chat.
       Chat__BaseUrl: ""
+      Uploads__MaxRequestBodyBytes: ${UPLOADS_MAX_REQUEST_BODY_BYTES:-167772160}
       Email__SmtpHost: ${SMTP_HOST}
       Email__SmtpPort: ${SMTP_PORT:-587}
       Email__SmtpUser: ${SMTP_USER}

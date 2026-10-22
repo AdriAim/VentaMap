@@ -307,6 +307,47 @@ public sealed class CloudflareR2ImageStorageService
         }
     }
 
+    /// <summary>
+    /// Used as a Safari/iPhone fallback when a cross-origin PUT to R2 creates
+    /// an empty object. The source is stored pending and transcoded by the
+    /// background worker, just like a direct pending upload.
+    /// </summary>
+    public async Task<string> UploadPendingPublicationVideoAsync(IFormFile file, CancellationToken cancellationToken = default)
+    {
+        if (file.Length <= 0)
+        {
+            throw new InvalidOperationException("El video esta vacio.");
+        }
+
+        var options = GetOptions();
+        ValidateConfiguration(options);
+        var contentType = NormalizeVideoContentType(file);
+        if (!AllowedVideoContentTypes.Contains(contentType))
+        {
+            throw new InvalidOperationException("El video debe estar en formato MP4, WEBM o MOV.");
+        }
+
+        if (file.Length > options.MaxVideoBytes)
+        {
+            throw new InvalidOperationException($"El video supera el limite de {options.MaxVideoBytes / (1024 * 1024)} MB.");
+        }
+
+        var key = BuildObjectKey(options with { Prefix = $"{options.Prefix.Trim('/')}/pending" }, ResolveVideoExtension(file.FileName, contentType));
+        await using var input = file.OpenReadStream();
+        var request = new PutObjectRequest
+        {
+            BucketName = options.Bucket,
+            Key = key,
+            InputStream = input,
+            ContentType = contentType,
+            DisablePayloadSigning = true,
+            DisableDefaultChecksumValidation = true
+        };
+        request.Headers.CacheControl = "public, max-age=31536000, immutable";
+        await _client.Value.PutObjectAsync(request, cancellationToken);
+        return BuildPublicUrl(options.PublicBaseUrl, key);
+    }
+
     /// <summary>Creates a short-lived, single-object R2 upload URL so video bytes do not traverse the web server.</summary>
     public DirectVideoUpload CreateDirectPublicationVideoUpload(string? fileName, string? declaredContentType, long contentLength, bool processOnServer = false)
     {

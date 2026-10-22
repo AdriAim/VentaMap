@@ -5093,6 +5093,56 @@
     });
   }
 
+  function isIPhoneSafari() {
+    const userAgent = navigator.userAgent || "";
+    return /iP(?:hone|od)/i.test(userAgent)
+      && /Safari/i.test(userAgent)
+      && !/(CriOS|FxiOS|EdgiOS|OPiOS)/i.test(userAgent);
+  }
+
+  function uploadVideoViaVentaMap(file, onProgress) {
+    return new Promise((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      request.open("POST", "/api/content/upload-video", true);
+      request.setRequestHeader("X-Requested-With", "fetch");
+      request.timeout = 20 * 60 * 1000;
+
+      request.onload = () => {
+        let payload = {};
+        try {
+          payload = request.responseText ? JSON.parse(request.responseText) : {};
+        } catch {
+          payload = {};
+        }
+
+        if (request.status >= 200 && request.status < 300 && payload?.url) {
+          resolve(payload);
+          return;
+        }
+
+        const error = new Error(payload?.message || "No se pudo subir el video desde este teléfono.");
+        error.statusCode = request.status;
+        reject(error);
+      };
+
+      request.onerror = () => {
+        reject(new Error("Falló la conexión al subir el video desde este teléfono."));
+      };
+
+      request.ontimeout = () => {
+        reject(new Error("La subida del video agotó el tiempo de espera."));
+      };
+
+      request.upload.onprogress = event => {
+        if (event.lengthComputable) onProgress?.(event.loaded / event.total);
+      };
+
+      const formData = new FormData();
+      formData.append("file", file, file.name || "video.mp4");
+      request.send(formData);
+    });
+  }
+
   async function confirmDirectVideoUpload(upload, file) {
     const response = await fetch("/api/content/confirm-direct-video-upload", {
       method: "POST",
@@ -7634,32 +7684,50 @@
             fileToUpload = file;
           }
         } else {
-          // Compatible, vertical videos under 75 MB are uploaded as-is. This
+          // Compatible, vertical videos under the direct-upload limit are uploaded as-is. This
           // avoids replaying up to one minute of video on the user's device.
           currentState.statusText = "Video listo para subir.";
           render();
         }
 
-        currentState.statusText = "Preparando subida directa...";
-        render();
-        uploadStage = "prepare";
-        const upload = await prepareDirectVideoUpload(fileToUpload, processOnServer);
-        currentState.statusText = "Subiendo a almacenamiento... 0%";
-        render();
-        uploadStage = "transfer";
-        await uploadVideoDirectly(upload.uploadUrl, fileToUpload, upload.contentType, progress => {
-          if (state?.id !== currentState.id) return;
-          currentState.statusText = `Subiendo a almacenamiento... ${Math.round(progress * 100)}%`;
+        let uploadedUrl;
+        let pendingProcessing = processOnServer;
+        if (isIPhoneSafari()) {
+          // Safari on iPhone can create an empty object when PUTing a large video
+          // directly to R2. Route only that browser through VentaMap instead.
+          currentState.statusText = "Subiendo desde el teléfono... 0%";
           render();
-        });
-        currentState.statusText = "Confirmando video...";
-        render();
-        uploadStage = "confirmation";
-        const uploadedUrl = await confirmDirectVideoUpload(upload, fileToUpload);
+          uploadStage = "server-transfer";
+          const upload = await uploadVideoViaVentaMap(fileToUpload, progress => {
+            if (state?.id !== currentState.id) return;
+            currentState.statusText = `Subiendo desde el teléfono... ${Math.round(progress * 100)}%`;
+            render();
+          });
+          uploadedUrl = upload.url;
+          pendingProcessing = upload.processOnServer === true;
+        } else {
+          currentState.statusText = "Preparando subida directa...";
+          render();
+          uploadStage = "prepare";
+          const upload = await prepareDirectVideoUpload(fileToUpload, processOnServer);
+          currentState.statusText = "Subiendo a almacenamiento... 0%";
+          render();
+          uploadStage = "transfer";
+          await uploadVideoDirectly(upload.uploadUrl, fileToUpload, upload.contentType, progress => {
+            if (state?.id !== currentState.id) return;
+            currentState.statusText = `Subiendo a almacenamiento... ${Math.round(progress * 100)}%`;
+            render();
+          });
+          currentState.statusText = "Confirmando video...";
+          render();
+          uploadStage = "confirmation";
+          uploadedUrl = await confirmDirectVideoUpload(upload, fileToUpload);
+          pendingProcessing = upload.processOnServer === true;
+        }
 
         if (state?.id === currentState.id) {
           state.uploadedUrl = uploadedUrl;
-          state.pendingProcessing = upload.processOnServer === true;
+          state.pendingProcessing = pendingProcessing;
           state.statusText = state.pendingProcessing ? "Listo. Se optimizará en el servidor." : "Listo";
         }
         if (currentState.removed && currentState.deleteOnRemove) {

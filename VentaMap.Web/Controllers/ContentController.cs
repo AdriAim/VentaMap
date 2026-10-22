@@ -1283,9 +1283,9 @@ public partial class ContentController(
 
     [HttpPost("upload-video")]
     [IgnoreAntiforgeryToken]
-    [RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)]
-    [RequestSizeLimit(100 * 1024 * 1024)]
-    public async Task<IActionResult> UploadVideo([FromForm] IFormFile? file)
+    [RequestFormLimits(MultipartBodyLengthLimit = 160 * 1024 * 1024)]
+    [RequestSizeLimit(160 * 1024 * 1024)]
+    public async Task<IActionResult> UploadVideo([FromForm] IFormFile? file, CancellationToken cancellationToken)
     {
         if (!currentUserAccessor.IsAuthenticated)
         {
@@ -1304,8 +1304,9 @@ public partial class ContentController(
 
         try
         {
-            var url = await imageStorageService.UploadPublicationVideoAsync(file);
-            return Ok(new { url });
+            var url = await imageStorageService.UploadPendingPublicationVideoAsync(file, cancellationToken);
+            videoUploadLogger.LogInformation("Proxy video upload stored as pending for server processing. User {UserId}, file {@File}.", currentUserAccessor.UserId, fileInfo);
+            return Ok(new { url, processOnServer = true });
         }
         catch (InvalidOperationException ex)
         {

@@ -41,7 +41,7 @@ var hasHttpsUrlConfigured = configuredUrls
     .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
     .Any(url => url.StartsWith("https://", StringComparison.OrdinalIgnoreCase));
 var sharedApplicationName = builder.Configuration["Authentication:SharedApplicationName"] ?? "VentaMap";
-var maxUploadRequestBytes = builder.Configuration.GetValue<long?>("Uploads:MaxRequestBodyBytes") ?? 100L * 1024 * 1024;
+var maxUploadRequestBytes = builder.Configuration.GetValue<long?>("Uploads:MaxRequestBodyBytes") ?? 160L * 1024 * 1024;
 
 builder.Services.AddRazorPages(options =>
 {

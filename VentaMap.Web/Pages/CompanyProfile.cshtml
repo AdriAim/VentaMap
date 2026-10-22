@@ -510,6 +510,18 @@ else
                     .replaceAll('"', "&quot;")
                     .replaceAll("'", "&#39;");
 
+                function buildCompanyCatalogPreviewUrl(publicationId) {
+                    const normalizedId = String(publicationId ?? "").trim();
+                    if (!/^\d+$/.test(normalizedId)) {
+                        return "";
+                    }
+
+                    const debugSuffix = new URLSearchParams(window.location.search).get("debug") === "1"
+                        ? "?debug=1"
+                        : "";
+                    return `/api/content/details/${normalizedId}${debugSuffix}`;
+                }
+
                 function buildCompanyCatalogChatAction(item) {
                     return "";
                 }
@@ -762,6 +774,7 @@ else
                             event?.stopPropagation?.();
 
                             if (window.matchMedia("(max-width: 900px)").matches) {
+                                const detailsUrl = buildCompanyCatalogPreviewUrl(item.id);
                                 hoverPopup?.remove();
                                 mobileTapPopup
                                     ?.setLngLat([Number(item.longitude), Number(item.latitude)])
@@ -769,8 +782,8 @@ else
                                         <div class="map-tap-card">
                                             <strong>${escapeHtml(String(item.shortDescription || "").trim() || item.title || "Publicación")}</strong>
                                             <span>${item.price || "Precio sin informar"}</span>
-                                            <a class="primary-pill compact" href="${item.url}">Ver anuncio</a>
-                                    </div>
+                                            <button type="button" class="primary-pill compact" data-map-open-preview="true" data-public-url="${escapeHtml(item.url)}" data-details-url="${detailsUrl}">Ver anuncio</button>
+                                        </div>
                                     `)
                                     .addTo(map);
                                 return;
