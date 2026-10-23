@@ -166,6 +166,12 @@ app.MapGet("/", () => Results.Ok(new
     status = "ok"
 }));
 
+app.MapGet("/health", () => Results.Ok(new
+{
+    service = "VentaMap.ChatService",
+    status = "healthy"
+}));
+
 app.MapGet("/error", () => Results.Problem("Se produjo un error en el servicio de chat."));
 
 app.MapControllers();
