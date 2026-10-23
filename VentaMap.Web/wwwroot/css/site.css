@@ -2568,6 +2568,14 @@ textarea:focus {
   clip-path: inset(0 round 22px 22px 0 0);
 }
 
+/* El recorte por clip-path fuerza una capa compuesta adicional para los
+   videos. En tarjetas reducidas puede generar bandas u ondulaciones al
+   escalar; el borde redondeado nativo del video conserva el acabado. */
+.card-image-wrap .gallery-carousel-video {
+  clip-path: none;
+  -webkit-clip-path: none;
+}
+
 .gallery-card-caption {
   position: absolute;
   top: 100%;
@@ -3835,6 +3843,73 @@ textarea:focus {
   aspect-ratio: 3 / 4;
 }
 
+.map-advertiser-card {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  margin-top: 0.85rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(67, 52, 43, 0.12);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+a.map-advertiser-card:hover,
+a.map-advertiser-card:focus-visible {
+  border-color: rgba(49, 70, 101, 0.32);
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(31, 26, 23, 0.08);
+}
+
+.map-advertiser-logo {
+  flex: 0 0 2.7rem;
+  width: 2.7rem;
+  height: 2.7rem;
+  border-radius: 14px;
+  object-fit: cover;
+  background: #f0f2f6;
+}
+
+.map-advertiser-logo-fallback {
+  display: grid;
+  place-items: center;
+  color: var(--accent-navy);
+}
+
+.map-advertiser-copy {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.map-advertiser-copy strong,
+.map-advertiser-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-advertiser-copy strong {
+  font-size: 0.9rem;
+  line-height: 1.2;
+}
+
+.map-advertiser-copy span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.map-advertiser-chevron {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
 .map-selection-text-card {
   width: 100%;
   display: grid;
@@ -4868,8 +4943,36 @@ textarea:focus {
   color: #334b72;
 }
 
-.company-mobile-extra-contacts {
+.company-contact-extra {
   display: none;
+}
+
+.company-mobile-extra-contacts {
+  display: block;
+  grid-column: 1 / -1;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.company-mobile-extra-contacts summary {
+  min-height: 2.8rem;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.65rem 1.05rem;
+  border: 1px solid rgba(108, 126, 150, 0.25);
+  border-radius: 999px;
+  background: rgba(239, 242, 246, 0.82);
+  color: #334b72;
+  font-size: 0.85rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.company-mobile-extra-contacts-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin-top: 0.9rem;
 }
 
 @media (max-width: 780px) {
@@ -4882,32 +4985,12 @@ textarea:focus {
     grid-column: auto;
   }
 
-  .company-contact-extra {
-    display: none;
-  }
-
   .company-mobile-extra-contacts {
-    display: block;
-    width: fit-content;
-    max-width: 100%;
-  }
-
-  .company-mobile-extra-contacts summary {
-    min-height: 2.8rem;
-    display: inline-flex;
-    align-items: center;
-    padding: 0.65rem 1.05rem;
-    border: 1px solid rgba(108, 126, 150, 0.25);
-    border-radius: 999px;
-    background: rgba(239, 242, 246, 0.82);
-    color: #334b72;
-    font-size: 0.85rem;
-    font-weight: 800;
-    cursor: pointer;
+    grid-column: auto;
   }
 
   .company-mobile-extra-contacts-list {
-    display: grid;
+    grid-template-columns: 1fr;
     gap: 0.72rem;
     margin-top: 0.72rem;
   }
@@ -4928,7 +5011,7 @@ textarea:focus {
   max-width: 100%;
   padding: 0.55rem 0.8rem;
   border-radius: 16px;
-  background: rgba(255, 253, 252, 0.96);
+  background: rgba(255, 255, 255, 0.82);
   box-shadow: 0 10px 26px rgba(15, 25, 38, 0.1);
 }
 

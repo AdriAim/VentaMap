@@ -3435,7 +3435,7 @@
         ? `<button type="submit" class="primary-pill compact shared-list-map-add" name="publicationIds" value="${escapeAttribute(selectedMarker.id)}" data-shared-list-map-add="true"><i class="fa-solid fa-check" aria-hidden="true"></i><span>Agregar a la lista</span></button>`
         : "";
       selectionPanel.innerHTML = selectedMarkerView === "text"
-        ? buildMapSelectionTextCard(selectedMarker)
+        ? buildMapSelectionTextCard(selectedMarker) + buildMapAdvertiserCard(selectedMarker)
         : buildGalleryCard({
             id: selectedMarker.id,
             title: selectedMarker.title,
@@ -3457,7 +3457,7 @@
             showReportButton: !isSharedListSelection,
             showFavoriteButton: !isSharedListSelection,
             extraActionHtml: sharedListAction
-          });
+          }) + buildMapAdvertiserCard(selectedMarker);
 
       wireGalleryCards();
       wireFavoriteActions(selectionPanel);
@@ -4645,6 +4645,27 @@
         </a>
       </article>
     `;
+  }
+
+  function buildMapAdvertiserCard(marker) {
+    const advertiserName = escapeHtml(marker?.advertiserName || "Anunciante no informado");
+    const companyCatalogUrl = String(marker?.companyCatalogUrl || "").trim();
+    const logoUrl = escapeAttribute(marker?.advertiserLogoUrl || "");
+    const logo = logoUrl
+      ? `<img src="${logoUrl}" alt="" class="map-advertiser-logo" />`
+      : `<span class="map-advertiser-logo map-advertiser-logo-fallback" aria-hidden="true"><i class="fa-solid fa-user"></i></span>`;
+    const content = `
+      ${logo}
+      <span class="map-advertiser-copy">
+        <strong>${advertiserName}</strong>
+        <span>${companyCatalogUrl ? "Ver catálogo de la empresa" : "Publicado por"}</span>
+      </span>
+      ${companyCatalogUrl ? '<i class="fa-solid fa-chevron-right map-advertiser-chevron" aria-hidden="true"></i>' : ""}
+    `;
+
+    return companyCatalogUrl
+      ? `<a class="map-advertiser-card" href="${escapeAttribute(companyCatalogUrl)}">${content}</a>`
+      : `<div class="map-advertiser-card">${content}</div>`;
   }
 
   function buildMapMarkerHoverCard(marker) {

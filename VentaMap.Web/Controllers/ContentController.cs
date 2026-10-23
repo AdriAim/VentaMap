@@ -226,6 +226,13 @@ public partial class ContentController(
                     images = x.ImageList.Take(31).ToList(),
                     operationLabel = x.OperationType.HasValue ? x.OperationType.Value.ToDisplayName() : null,
                     categoryLabel = x.Category != null ? x.Category.Name : null,
+                    advertiserName = x.User?.IsCompany == true
+                        ? (x.User.CompanyName ?? x.ContactName)
+                        : (x.User?.Name ?? x.ContactName),
+                    advertiserLogoUrl = x.User?.IsCompany == true ? x.User.CompanyLogoUrl : null,
+                    companyCatalogUrl = x.User?.IsCompany == true && !string.IsNullOrWhiteSpace(x.User.CompanySlug)
+                        ? $"/catalogo/{x.User.CompanySlug}"
+                        : null,
                     detailsUrl = BuildPublicationDetailsUrl(x.Id, includeDebug),
                     lat = x.Latitude,
                     lng = x.Longitude,
@@ -423,6 +430,13 @@ public partial class ContentController(
                     images = x.ImageList.Take(31).ToList(),
                     operationLabel = x.OperationType.HasValue ? x.OperationType.Value.ToDisplayName() : null,
                     categoryLabel = x.Category != null ? x.Category.Name : null,
+                    advertiserName = x.User?.IsCompany == true
+                        ? (x.User.CompanyName ?? x.ContactName)
+                        : (x.User?.Name ?? x.ContactName),
+                    advertiserLogoUrl = x.User?.IsCompany == true ? x.User.CompanyLogoUrl : null,
+                    companyCatalogUrl = x.User?.IsCompany == true && !string.IsNullOrWhiteSpace(x.User.CompanySlug)
+                        ? $"/catalogo/{x.User.CompanySlug}"
+                        : null,
                     detailsUrl = BuildPublicationDetailsUrl(x.Id, includeDebug),
                     lat = x.Latitude,
                     lng = x.Longitude,
@@ -551,6 +565,13 @@ public partial class ContentController(
                     images = item.ImageList.Take(31).ToList(),
                     operationLabel = item.OperationType.HasValue ? item.OperationType.Value.ToDisplayName() : null,
                     categoryLabel = item.Category != null ? item.Category.Name : null,
+                    advertiserName = item.User?.IsCompany == true
+                        ? (item.User.CompanyName ?? item.ContactName)
+                        : (item.User?.Name ?? item.ContactName),
+                    advertiserLogoUrl = item.User?.IsCompany == true ? item.User.CompanyLogoUrl : null,
+                    companyCatalogUrl = item.User?.IsCompany == true && !string.IsNullOrWhiteSpace(item.User.CompanySlug)
+                        ? $"/catalogo/{item.User.CompanySlug}"
+                        : null,
                     detailsUrl = BuildPublicationDetailsUrl(item.Id, includeDebug),
                     lat = item.Latitude,
                     lng = item.Longitude,

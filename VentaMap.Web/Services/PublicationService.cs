@@ -773,6 +773,7 @@ public class PublicationService(
         var now = DateTime.UtcNow;
         var items = ApplyDebugVisibility(db.Publications
             .AsNoTracking()
+            .Include(x => x.User)
             .Include(x => x.Category)
             .Include(x => x.MediaItems)
             .Where(x => x.IsActive
