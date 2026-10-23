@@ -11,6 +11,26 @@ namespace VentaMap.Controllers;
 [Route("api/payments/mercadopago")]
 public class MercadoPagoController(VentaMapDbContext db, CurrentUserAccessor currentUserAccessor, MercadoPagoService mercadoPagoService) : ControllerBase
 {
+    [AllowAnonymous]
+    [HttpPost("donation/checkout")]
+    public async Task<IActionResult> DonationCheckout([FromBody] DonationCheckoutRequest request)
+    {
+        if (request.Amount < 100m || request.Amount > 2_000_000m)
+        {
+            return BadRequest(new { message = "Elegí un importe entre $100 y $2.000.000." });
+        }
+
+        var checkout = await mercadoPagoService.CreateDonationCheckoutUrlAsync(decimal.Round(request.Amount, 2));
+        if (!checkout.IsConfigured)
+        {
+            return StatusCode(503, new { message = "Mercado Pago todavía no está configurado." });
+        }
+
+        return string.IsNullOrWhiteSpace(checkout.Url)
+            ? StatusCode(502, new { message = "Mercado Pago no pudo iniciar la donación. Intentá nuevamente en unos minutos." })
+            : Ok(new { checkoutUrl = checkout.Url });
+    }
+
     [Authorize]
     [HttpPost("checkout/{chargeId:int}")]
     public async Task<IActionResult> Checkout(int chargeId)
@@ -62,4 +82,9 @@ public class MercadoPagoController(VentaMapDbContext db, CurrentUserAccessor cur
         await db.SaveChangesAsync();
         return Ok();
     }
+}
+
+public class DonationCheckoutRequest
+{
+    public decimal Amount { get; set; }
 }

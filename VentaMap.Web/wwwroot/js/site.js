@@ -4048,7 +4048,7 @@
       const results = await geocodeCreateLocation(geocodingSearchUrlTemplate, query);
       const feature = results?.[0];
       if (!feature) {
-        if (summary) summary.textContent = "No encontramos esa dirección. Probá con otra búsqueda.";
+        if (summary) summary.textContent = "No encontramos esa dirección. Podés ubicarla manualmente haciendo clic en el mapa o arrastrando el pin.";
         return;
       }
 
@@ -4166,15 +4166,22 @@
   }
 
   async function geocodeCreateLocation(geocodingSearchUrlTemplate, query) {
-    const endpoint = geocodingSearchUrlTemplate.replace("{query}", encodeURIComponent(query));
-    const response = await fetch(endpoint, {
-      headers: {
-        Accept: "application/json"
-      }
-    });
-    if (!response.ok) return [];
-    const payload = await response.json();
-    return Array.isArray(payload) ? payload.map(normalizeNominatimFeature) : [];
+    const search = async searchQuery => {
+      const endpoint = geocodingSearchUrlTemplate.replace("{query}", encodeURIComponent(searchQuery));
+      const response = await fetch(endpoint, {
+        headers: {
+          Accept: "application/json"
+        }
+      });
+      if (!response.ok) return [];
+      const payload = await response.json();
+      return Array.isArray(payload) ? payload.map(normalizeNominatimFeature) : [];
+    };
+
+    const results = await search(query);
+    if (results.length || !/\bprimero\s+de\b/i.test(query)) return results;
+
+    return search(query.replace(/\bprimero\s+de\b/i, "1 de"));
   }
 
   async function reverseGeocodeCreateLocation(reverseGeocodingUrlTemplate, lng, lat) {
@@ -4655,11 +4662,13 @@
     const logo = logoUrl
       ? `<img src="${logoUrl}" alt="" class="map-advertiser-logo" />`
       : `<span class="map-advertiser-logo map-advertiser-logo-fallback" aria-hidden="true"><i class="fa-solid fa-user"></i></span>`;
+    const advertiserCopy = companyCatalogUrl
+      ? `<strong>${advertiserName}</strong><span>Ver catálogo de la empresa</span>`
+      : `<span>Publicado por</span><strong>${advertiserName}</strong>`;
     const content = `
       ${logo}
       <span class="map-advertiser-copy">
-        <strong>${advertiserName}</strong>
-        <span>${companyCatalogUrl ? "Ver catálogo de la empresa" : "Publicado por"}</span>
+        ${advertiserCopy}
       </span>
       ${companyCatalogUrl ? '<i class="fa-solid fa-chevron-right map-advertiser-chevron" aria-hidden="true"></i>' : ""}
     `;

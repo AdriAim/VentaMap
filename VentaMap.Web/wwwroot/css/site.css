@@ -309,6 +309,12 @@ img {
   height: 108px;
 }
 
+/* El detalle usa una cabecera reducida en pantallas angostas: destaca más la marca. */
+body.publication-details-page .brand-mark {
+  width: 132px;
+  height: 132px;
+}
+
 .brand-text {
   display: grid;
   gap: 0.1rem;
@@ -648,6 +654,12 @@ img {
     radial-gradient(circle at 0% 100%, rgba(255, 75, 95, 0.1), transparent 28%),
     rgba(255, 253, 252, 0.78);
   box-shadow: var(--shadow);
+}
+
+/* Separa los tres bloques principales de la portada. */
+.explore-launcher + .hero-shell,
+.hero-shell + .catalog-promo {
+  margin-top: 3mm;
 }
 
 .explore-launcher-heading .eyebrow {
@@ -7468,6 +7480,74 @@ a.map-advertiser-card:focus-visible {
   display: flex;
   gap: 1rem;
   align-items: center;
+}
+
+.donation-card {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1.5rem;
+  border: 1px solid rgba(255, 75, 95, 0.16);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.donation-brand {
+  color: #d91f2d;
+  font-weight: 800;
+}
+
+.donation-message {
+  background: linear-gradient(90deg, #d91f2d, #ff5b67, #b70e1a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 700;
+}
+
+.donation-location {
+  color: var(--accent-navy);
+  -webkit-text-fill-color: var(--accent-navy);
+}
+
+.donation-card p {
+  margin: 0;
+  text-align: center;
+}
+
+.donation-link {
+  justify-self: center;
+  min-width: min(100%, 220px);
+  min-height: 58px;
+  padding: 0.9rem 2.5rem;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #e52532, #b70e1a);
+  box-shadow: 0 16px 30px rgba(183, 14, 26, 0.28);
+  font-size: 1.15rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.donation-link:hover,
+.donation-link:focus-visible {
+  background: linear-gradient(135deg, #f02e3c, #cc1421);
+}
+
+.donation-amount-input {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.donation-amount-input input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  font: inherit;
+  font-weight: 800;
 }
 
 .trash-tags {

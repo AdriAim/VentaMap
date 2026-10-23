@@ -13,22 +13,27 @@ public class MercadoPagoService(HttpClient httpClient, IConfiguration configurat
     public bool IsWebhookConfigured => !string.IsNullOrWhiteSpace(configuration["MercadoPago:WebhookSecret"]);
 
     public async Task<CheckoutResult> CreateCheckoutUrlAsync(int chargeId, string description, decimal amount, string? payerEmail)
+        => await CreateOrderCheckoutUrlAsync(chargeId.ToString(), description, amount, payerEmail);
+
+    public async Task<CheckoutResult> CreateDonationCheckoutUrlAsync(decimal amount)
+        => await CreateOrderCheckoutUrlAsync($"donation-{Guid.NewGuid():N}", "Donación para apoyar a VentaMap", amount, null);
+
+    private async Task<CheckoutResult> CreateOrderCheckoutUrlAsync(string externalReference, string description, decimal amount, string? payerEmail)
     {
         var token = configuration["MercadoPago:AccessToken"];
         if (string.IsNullOrWhiteSpace(token)) return new(null, false);
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.mercadopago.com/v1/orders");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Add("X-Idempotency-Key", Guid.NewGuid().ToString());
-        request.Content = new StringContent(JsonSerializer.Serialize(new
+        var order = new Dictionary<string, object?>
         {
-            type = "online",
-            processing_mode = "manual",
-            capture_mode = "automatic_async",
-            total_amount = amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
-            external_reference = chargeId.ToString(),
-            description,
-            payer = string.IsNullOrWhiteSpace(payerEmail) ? null : new { email = payerEmail },
-            items = new[]
+            ["type"] = "online",
+            ["processing_mode"] = "manual",
+            ["capture_mode"] = "automatic_async",
+            ["total_amount"] = amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+            ["external_reference"] = externalReference,
+            ["description"] = description,
+            ["items"] = new[]
             {
                 new
                 {
@@ -37,14 +42,19 @@ public class MercadoPagoService(HttpClient httpClient, IConfiguration configurat
                     unit_price = amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
                 }
             }
-        }), Encoding.UTF8, "application/json");
+        };
+        if (!string.IsNullOrWhiteSpace(payerEmail))
+        {
+            order["payer"] = new { email = payerEmail };
+        }
+        request.Content = new StringContent(JsonSerializer.Serialize(order), Encoding.UTF8, "application/json");
         using var response = await httpClient.SendAsync(request);
         if (!response.IsSuccessStatusCode)
         {
             var errorBody = await response.Content.ReadAsStringAsync();
             logger.LogWarning(
-                "Mercado Pago rechazó la orden del cargo {ChargeId}. Estado: {StatusCode}. Respuesta: {Response}",
-                chargeId,
+                "Mercado Pago rechazó la orden {ExternalReference}. Estado: {StatusCode}. Respuesta: {Response}",
+                externalReference,
                 (int)response.StatusCode,
                 errorBody);
             return new(null, true);

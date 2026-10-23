@@ -1,0 +1,72 @@
+@page
+@model VentaMap.Pages.DonarModel
+@{
+    ViewData["Title"] = "Donar";
+    ViewData["MetaDescription"] = "Apoyá a VentaMap para seguir construyendo una comunidad local.";
+}
+
+<section class="form-shell narrow donation-shell">
+    <div class="section-heading">
+        <span class="eyebrow">Apoyá a VentaMap</span>
+        <h1>Gracias por aportar</h1>
+        <p>Elegí el importe que querés donar. El valor sugerido es $5.000 ARS.</p>
+    </div>
+
+    <div class="donation-card">
+        <i class="fa-solid fa-heart donation-heart" aria-hidden="true"></i>
+        <p>Tu aporte ayuda a que la comunidad y sus anuncios sigan creciendo.</p>
+        <label for="donationAmount">
+            <span>Elegí cuánto querés donar</span>
+            <div class="donation-amount-input">
+                <span aria-hidden="true">$</span>
+                <input id="donationAmount" type="number" min="100" max="2000000" step="1" value="5000" inputmode="numeric" />
+            </div>
+        </label>
+        <span class="field-hint">Importe sugerido: $5.000 ARS.</span>
+        <button id="donationCheckout" type="button" class="primary-pill mercadopago-pill">
+            <i class="fa-solid fa-heart" aria-hidden="true"></i>
+            Donar con Mercado Pago
+        </button>
+        <p id="donationStatus" class="field-hint" role="status" aria-live="polite"></p>
+    </div>
+</section>
+
+@section Scripts {
+    <script>
+        (() => {
+            const amountInput = document.getElementById("donationAmount");
+            const button = document.getElementById("donationCheckout");
+            const status = document.getElementById("donationStatus");
+
+            button.addEventListener("click", async () => {
+                const amount = Number(amountInput.value);
+                if (!Number.isFinite(amount) || amount < 100 || amount > 2000000) {
+                    status.textContent = "Elegí un importe entre $100 y $2.000.000.";
+                    return;
+                }
+
+                button.disabled = true;
+                status.textContent = "Abriendo Mercado Pago...";
+                try {
+                    const response = await fetch("/api/payments/mercadopago/donation/checkout", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ amount })
+                    });
+                    const responseText = await response.text();
+                    let payload;
+                    try {
+                        payload = responseText ? JSON.parse(responseText) : {};
+                    } catch {
+                        throw new Error("No pudimos iniciar la donación. Intentá nuevamente en unos minutos.");
+                    }
+                    if (!response.ok || !payload.checkoutUrl) throw new Error(payload.message || "No pudimos iniciar la donación.");
+                    window.location.assign(payload.checkoutUrl);
+                } catch (error) {
+                    status.textContent = error.message || "No pudimos iniciar la donación.";
+                    button.disabled = false;
+                }
+            });
+        })();
+    </script>
+}
