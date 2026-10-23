@@ -665,11 +665,25 @@ static async Task EnsurePublicationExpirationSchemaAsync(System.Data.Common.DbCo
     await EnsureColumnAsync(connection, "Publications", "DeactivationReason", "varchar(80) CHARACTER SET utf8mb4 NULL");
     await EnsureColumnAsync(connection, "Publications", "DeactivationComment", "varchar(1000) CHARACTER SET utf8mb4 NULL");
 
+    // Las publicaciones de empresas se mantienen vigentes hasta que la empresa
+    // las desactive. Esta corrección también repara instalaciones donde todavía
+    // no se aplicó la migración que eliminó los vencimientos de empresas.
     await ExecuteNonQueryAsync(connection,
         """
-        UPDATE `Publications`
-        SET `ExpiresAtUtc` = DATE_ADD(`CreatedAtUtc`, INTERVAL 30 DAY)
-        WHERE `ExpiresAtUtc` IS NULL;
+        UPDATE `Publications` AS p
+        INNER JOIN `Users` AS u ON u.`Id` = p.`UserId`
+        SET p.`ExpiresAtUtc` = NULL,
+            p.`ExpirationNoticeSentAtUtc` = NULL
+        WHERE u.`IsCompany` = TRUE;
+        """);
+
+    await ExecuteNonQueryAsync(connection,
+        """
+        UPDATE `Publications` AS p
+        LEFT JOIN `Users` AS u ON u.`Id` = p.`UserId`
+        SET p.`ExpiresAtUtc` = DATE_ADD(p.`CreatedAtUtc`, INTERVAL 30 DAY)
+        WHERE p.`ExpiresAtUtc` IS NULL
+          AND (u.`Id` IS NULL OR u.`IsCompany` = FALSE);
         """);
 }
 
