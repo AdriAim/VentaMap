@@ -585,6 +585,7 @@ public sealed class CloudflareR2ImageStorageService
     {
         await using var inputStream = file.OpenReadStream();
         using var image = await Image.LoadAsync(inputStream, cancellationToken);
+        image.Mutate(x => x.AutoOrient());
 
         if (Math.Max(image.Width, image.Height) > options.MaxImageSide)
         {

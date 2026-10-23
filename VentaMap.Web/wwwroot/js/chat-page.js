@@ -2,8 +2,6 @@
   let chatHubConnection = null;
   let chatHubStartPromise = null;
   let activeChatConversationId = 0;
-  let chatSidebarRefreshPromise = null;
-  let chatThreadRefreshPromise = null;
 
   document.addEventListener("DOMContentLoaded", async () => {
     const root = document.querySelector("[data-chat-page]");
@@ -91,30 +89,9 @@
     const composeForm = app.querySelector("[data-chat-compose-form]");
     const input = app.querySelector("[data-chat-compose-input]");
     const counter = app.querySelector("[data-chat-compose-counter]");
-    const thread = app.querySelector("[data-chat-thread]");
     const messageList = app.querySelector("[data-chat-message-list]");
-    const inbox = app.querySelector("[data-chat-inbox]");
-    activeChatConversationId = Number(thread?.dataset.conversationId || 0);
-
     if (messageList) {
       messageList.scrollTop = messageList.scrollHeight;
-    }
-
-    if (inbox && inbox.dataset.bound !== "true") {
-      inbox.dataset.bound = "true";
-      inbox.addEventListener("click", async event => {
-        const link = event.target.closest("[data-chat-inbox-item]");
-        if (!link) return;
-
-        event.preventDefault();
-        const conversationId = Number(link.dataset.conversationId || 0);
-        if (conversationId <= 0) return;
-
-        await selectChatConversation(conversationId, {
-          pushState: true,
-          revealThreadOnStackedLayout: true
-        });
-      });
     }
 
     if (counter && input) {
@@ -240,44 +217,42 @@
 
   async function refreshChatSidebar(conversationId = activeChatConversationId) {
     const container = document.querySelector("[data-chat-sidebar-content]");
-    if (!container || chatSidebarRefreshPromise) return chatSidebarRefreshPromise;
+    if (!container) return;
 
     const safeConversationId = Math.max(0, Number(conversationId || 0));
     const url = safeConversationId > 0
       ? `/api/chat/inbox/${safeConversationId}`
       : "/api/chat/inbox";
 
-    chatSidebarRefreshPromise = fetchChatJson(url)
-      .then(payload => {
-        container.innerHTML = renderInbox(payload?.inbox || [], Number(payload?.selectedConversationId || 0));
-        wireChatThread(document);
-      })
-      .finally(() => {
-        chatSidebarRefreshPromise = null;
-      });
+    const payload = await fetchChatJson(url);
 
-    return chatSidebarRefreshPromise;
+    // Una respuesta de una selección anterior no debe volver a activar otro hilo.
+    if (safeConversationId !== activeChatConversationId) {
+      return;
+    }
+
+    container.innerHTML = renderInbox(payload?.inbox || [], Number(payload?.selectedConversationId || 0));
+    wireChatThread(document);
   }
 
   async function refreshChatThread(conversationId = activeChatConversationId) {
     const container = document.querySelector("[data-chat-thread-container]");
-    if (!container || chatThreadRefreshPromise) return chatThreadRefreshPromise;
+    if (!container) return;
 
     const safeConversationId = Math.max(0, Number(conversationId || 0));
     const url = safeConversationId > 0
       ? `/api/chat/thread/${safeConversationId}`
       : "/api/chat/thread";
 
-    chatThreadRefreshPromise = fetchChatJson(url)
-      .then(payload => {
-        container.innerHTML = renderThread(payload?.selectedConversation || null);
-        wireChatThread(document);
-      })
-      .finally(() => {
-        chatThreadRefreshPromise = null;
-      });
+    const payload = await fetchChatJson(url);
 
-    return chatThreadRefreshPromise;
+    // Si el usuario ya eligió otro chat, se descarta esta respuesta tardía.
+    if (safeConversationId !== activeChatConversationId) {
+      return;
+    }
+
+    container.innerHTML = renderThread(payload?.selectedConversation || null);
+    wireChatThread(document);
   }
 
   function renderChatShell(model) {

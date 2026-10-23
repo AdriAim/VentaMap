@@ -517,6 +517,7 @@
     wireCatalogPromoZoom();
     wirePublicationPreviewModal();
     wireDetailMediaOverlay();
+    wireImageRotationPreview();
     wireDetailGalleryLayout();
     wireFavoriteModal();
     wireFavoriteListModal();
@@ -5382,6 +5383,45 @@
     });
   }
 
+  function wireImageRotationPreview() {
+    const keys = new Set([
+      "07065b490d374715a0184ec4099d0754", "1d0cb9a0acd149ddb432ee09c659705a",
+      "3b50c762e897446daa21b25bd7f78ec4", "c08669ae7fd74da28ae95336836cc80a",
+      "5059aa4df32b44a2839e8ffb25c4bcaf", "8a45b2baf21d43fc990b2381819f9e37"
+    ]);
+
+    const previewUrl = value => {
+      const match = String(value || "").match(/\/([a-f0-9]{32})\.webp(?:[?#]|$)/i);
+      const key = match?.[1]?.toLowerCase();
+      return key && keys.has(key) ? `/api/content/image-rotation-preview?key=${encodeURIComponent(key)}` : value;
+    };
+
+    const rewrite = root => {
+      if (!(root instanceof Element)) return;
+      const nodes = [root, ...root.querySelectorAll("img, [data-detail-media-src], [data-images]")];
+      nodes.forEach(node => {
+        if (node instanceof HTMLImageElement && node.dataset.imageRotationPreview !== "true") {
+          const url = previewUrl(node.getAttribute("src"));
+          if (url !== node.getAttribute("src")) {
+            node.src = url;
+            node.dataset.imageRotationPreview = "true";
+          }
+        }
+        if (node.hasAttribute("data-detail-media-src")) {
+          node.setAttribute("data-detail-media-src", previewUrl(node.getAttribute("data-detail-media-src")));
+        }
+        if (node.hasAttribute("data-images")) {
+          const images = String(node.getAttribute("data-images") || "").split("|||").map(previewUrl).join("|||");
+          node.setAttribute("data-images", images);
+        }
+      });
+    };
+
+    rewrite(document.body);
+    new MutationObserver(records => records.forEach(record => record.addedNodes.forEach(rewrite)))
+      .observe(document.body, { childList: true, subtree: true });
+  }
+
   function wireDetailMediaOverlay() {
     if (document.body.dataset.detailMediaOverlayBound === "true") return;
 
@@ -7032,7 +7072,11 @@
     };
 
     const showVerticalImageWarning = () => {
-      window.alert('VentaMap fue optimizada para mostrar imagenes "Verticales" tamaño celular si pones otro tipo de imagenes pueden cortarse en los listados de anuncios.\n\nLo óptimo sería que todas sean verticales o al menos la principal.');
+      window.alert('Detectamos una foto horizontal. VentaMap la guarda y la muestra, pero revisá la vista previa: si quedó acostada, girala en el teléfono y volvé a subirla.\n\nEste aviso no bloquea la publicación ni modifica el resto de las validaciones.');
+    };
+
+    const showImagePreviewOrientationWarning = () => {
+      window.alert('Revisá la vista previa de las fotos antes de continuar. Si alguna se ve acostada o cabeza abajo, girala en el teléfono y volvé a subirla.\n\nEste aviso no bloquea la publicación ni modifica el resto de las validaciones.');
     };
 
     const isSupportedImageFile = file => {
@@ -7193,6 +7237,7 @@
 
       state.push(...items);
       render();
+      showImagePreviewOrientationWarning();
 
       const currentUpload = uploadChain.then(async () => {
         let shouldShowVerticalWarning = false;
@@ -7260,9 +7305,6 @@
           render();
         }
 
-        if (shouldShowVerticalWarning) {
-          showVerticalImageWarning();
-        }
       });
 
       try {

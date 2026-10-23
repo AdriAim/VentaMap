@@ -226,7 +226,10 @@ public class ChatAppService(ChatDbContext db, VentaMapLookupDbContext lookupDb, 
         var conversations = db.ChatConversations
             .AsNoTracking()
             .Include(x => x.Messages)
-            .Where(x => x.BuyerUserId == userId || x.SellerUserId == userId);
+            // Opening a chat reserves a thread so the user can compose, but it
+            // must not become part of either inbox until somebody actually sends.
+            .Where(x => (x.BuyerUserId == userId || x.SellerUserId == userId)
+                && x.Messages.Any());
 
         if (onlyConversationId.HasValue)
         {
