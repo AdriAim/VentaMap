@@ -7545,6 +7545,16 @@ a.map-advertiser-card:focus-visible {
   font-size: 2.7rem;
 }
 
+.donation-failure-icon {
+  justify-self: center;
+  color: #d91f2d;
+  font-size: 2.7rem;
+}
+
+.donation-failure-card .donation-link + .donation-link {
+  margin-left: .55rem;
+}
+
 .donation-reminder {
   color: var(--accent-navy);
   font-style: italic;
@@ -7576,6 +7586,14 @@ a.map-advertiser-card:focus-visible {
 .donation-link:hover,
 .donation-link:focus-visible {
   background: linear-gradient(135deg, #f02e3c, #cc1421);
+}
+
+.donation-home-link,
+.donation-home-link:hover,
+.donation-home-link:focus-visible {
+  background: linear-gradient(135deg, #234778, #102b51);
+  color: #fff;
+  box-shadow: 0 16px 30px rgba(16, 43, 81, 0.28);
 }
 
 .donation-amount-input {

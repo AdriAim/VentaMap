@@ -1,0 +1,20 @@
+@page
+@{
+    ViewData["Title"] = "No se pudo completar el aporte";
+    ViewData["MetaDescription"] = "El aporte no pudo completarse.";
+}
+
+<section class="form-shell narrow donation-shell donation-success-shell">
+    <div class="section-heading">
+        <span class="eyebrow">Aporte no completado</span>
+        <h1>No se pudo realizar el aporte</h1>
+        <p class="donation-success-message">No se debitó ningún importe.</p>
+    </div>
+
+    <div class="donation-card donation-success-card donation-failure-card">
+        <i class="fa-solid fa-circle-xmark donation-failure-icon" aria-hidden="true"></i>
+        <p>El pago fue rechazado o cancelado. Podés intentarlo nuevamente cuando quieras.</p>
+        <a class="primary-pill donation-link" href="/Donar">Intentar nuevamente</a>
+        <a class="donation-link donation-home-link" href="/">Volver a la portada</a>
+    </div>
+</section>

@@ -21,7 +21,8 @@ public class MercadoPagoController(VentaMapDbContext db, CurrentUserAccessor cur
         }
 
         var successUrl = $"{Request.Scheme}://{Request.Host}{Url.Page("/DonacionExitosa")}";
-        var checkout = await mercadoPagoService.CreateDonationCheckoutUrlAsync(decimal.Round(request.Amount, 2), successUrl);
+        var failureUrl = $"{Request.Scheme}://{Request.Host}{Url.Page("/DonacionFallida")}";
+        var checkout = await mercadoPagoService.CreateDonationCheckoutUrlAsync(decimal.Round(request.Amount, 2), successUrl, failureUrl);
         if (!checkout.IsConfigured)
         {
             return StatusCode(503, new { message = "Mercado Pago todavía no está configurado." });
