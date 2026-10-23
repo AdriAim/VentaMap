@@ -7509,6 +7509,52 @@ a.map-advertiser-card:focus-visible {
   -webkit-text-fill-color: var(--accent-navy);
 }
 
+.donation-support-message {
+  background: linear-gradient(90deg, #d91f2d, #ff5b67, #b70e1a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 700;
+}
+
+.donation-checkout-button {
+  width: 100%;
+  border: 0;
+  background: linear-gradient(135deg, #e52532, #b70e1a);
+  box-shadow: 0 14px 30px rgba(183, 14, 26, 0.28);
+}
+
+.donation-checkout-button:hover,
+.donation-checkout-button:focus-visible {
+  background: linear-gradient(135deg, #f02e3c, #cc1421);
+}
+
+.donation-success-shell .section-heading,
+.donation-success-card {
+  text-align: center;
+}
+
+.donation-success-message {
+  color: var(--accent-navy);
+  font-weight: 800;
+}
+
+.donation-success-icon {
+  justify-self: center;
+  color: #d91f2d;
+  font-size: 2.7rem;
+}
+
+.donation-reminder {
+  color: var(--accent-navy);
+  font-style: italic;
+  font-weight: 700;
+}
+
+.donation-reminder i {
+  color: #d91f2d;
+}
+
 .donation-card p {
   margin: 0;
   text-align: center;

@@ -20,7 +20,8 @@ public class MercadoPagoController(VentaMapDbContext db, CurrentUserAccessor cur
             return BadRequest(new { message = "Elegí un importe entre $100 y $2.000.000." });
         }
 
-        var checkout = await mercadoPagoService.CreateDonationCheckoutUrlAsync(decimal.Round(request.Amount, 2));
+        var successUrl = $"{Request.Scheme}://{Request.Host}{Url.Page("/DonacionExitosa")}";
+        var checkout = await mercadoPagoService.CreateDonationCheckoutUrlAsync(decimal.Round(request.Amount, 2), successUrl);
         if (!checkout.IsConfigured)
         {
             return StatusCode(503, new { message = "Mercado Pago todavía no está configurado." });

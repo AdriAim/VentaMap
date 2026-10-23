@@ -15,10 +15,10 @@ public class MercadoPagoService(HttpClient httpClient, IConfiguration configurat
     public async Task<CheckoutResult> CreateCheckoutUrlAsync(int chargeId, string description, decimal amount, string? payerEmail)
         => await CreateOrderCheckoutUrlAsync(chargeId.ToString(), description, amount, payerEmail);
 
-    public async Task<CheckoutResult> CreateDonationCheckoutUrlAsync(decimal amount)
-        => await CreateOrderCheckoutUrlAsync($"donation-{Guid.NewGuid():N}", "Donación para apoyar a VentaMap", amount, null);
+    public async Task<CheckoutResult> CreateDonationCheckoutUrlAsync(decimal amount, string successUrl)
+        => await CreateOrderCheckoutUrlAsync($"donation-{Guid.NewGuid():N}", "Donación para apoyar a VentaMap", amount, null, successUrl);
 
-    private async Task<CheckoutResult> CreateOrderCheckoutUrlAsync(string externalReference, string description, decimal amount, string? payerEmail)
+    private async Task<CheckoutResult> CreateOrderCheckoutUrlAsync(string externalReference, string description, decimal amount, string? payerEmail, string? successUrl = null)
     {
         var token = configuration["MercadoPago:AccessToken"];
         if (string.IsNullOrWhiteSpace(token)) return new(null, false);
@@ -46,6 +46,17 @@ public class MercadoPagoService(HttpClient httpClient, IConfiguration configurat
         if (!string.IsNullOrWhiteSpace(payerEmail))
         {
             order["payer"] = new { email = payerEmail };
+        }
+        if (!string.IsNullOrWhiteSpace(successUrl))
+        {
+            order["config"] = new
+            {
+                online = new
+                {
+                    success_url = successUrl,
+                    auto_return = "approved"
+                }
+            };
         }
         request.Content = new StringContent(JsonSerializer.Serialize(order), Encoding.UTF8, "application/json");
         using var response = await httpClient.SendAsync(request);
