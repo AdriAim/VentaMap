@@ -13,6 +13,7 @@ public class VentaMapParameterService(VentaMapDbContext db)
     public const string ReviewPublicationDelayDays = "Reviews.PublicationDelayDays";
     public const string ReviewResponseDeadlineDays = "Reviews.ResponseDeadlineDays";
     public const string PaidSiteEnabled = "PaidSite.Enabled";
+    public const string PersonalPublicationDurationDays = "Publications.Personal.DurationDays";
 
     private Dictionary<string, string>? values;
 

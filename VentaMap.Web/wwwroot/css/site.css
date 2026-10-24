@@ -3607,14 +3607,32 @@ textarea:focus {
   padding: 0.45rem 0.8rem;
 }
 
-.detail-map-canvas.is-map-fullscreen {
+.map-mobile-fullscreen-action {
+  display: none;
+}
+
+.detail-map-canvas.is-map-fullscreen,
+.map-canvas.is-map-fullscreen {
   position: fixed;
   inset: 0;
   z-index: 1200;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   max-height: none;
   border-radius: 0;
+}
+
+.map-mobile-fullscreen-action.is-map-fullscreen-control {
+  position: fixed;
+  top: auto;
+  bottom: max(0.85rem, env(safe-area-inset-bottom));
+  right: max(0.85rem, env(safe-area-inset-right));
+  z-index: 1201;
+}
+
+.map-fullscreen-search {
+  display: none;
 }
 
 .compact-empty {
@@ -7061,6 +7079,14 @@ a.map-advertiser-card:focus-visible {
   overflow: hidden;
 }
 
+/* El mapa vive dentro de .page-shell, que forma su propio contexto de capas.
+   Ocultar la navegación y el footer evita que queden por encima del mapa fijo
+   en navegadores móviles. */
+.map-fullscreen-open .site-header,
+.map-fullscreen-open .site-footer {
+  display: none !important;
+}
+
 .system-loading-overlay {
   position: fixed;
   inset: 0;
@@ -8556,6 +8582,57 @@ textarea.input-validation-error,
     height: min(72svh, 135vw);
     min-height: 0;
     max-height: none;
+  }
+
+  .map-mobile-fullscreen-action {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: -0.15rem;
+  }
+
+  .map-fullscreen-search:not([hidden]) {
+    position: fixed;
+    top: max(0.7rem, env(safe-area-inset-top));
+    left: max(0.7rem, env(safe-area-inset-left));
+    right: max(0.7rem, env(safe-area-inset-right));
+    z-index: 1202;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.45rem;
+    padding: 0.45rem;
+    border: 1px solid rgba(53, 64, 91, 0.16);
+    border-radius: 18px;
+    background: rgba(255, 253, 252, 0.96);
+    box-shadow: 0 12px 28px rgba(18, 22, 31, 0.2);
+  }
+
+  .map-fullscreen-search:not([hidden]):not(.company-catalog-fullscreen-search) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .map-fullscreen-search input,
+  .map-fullscreen-search select {
+    width: 100%;
+    min-height: 2.65rem;
+    border: 0;
+    border-radius: 13px;
+    background: rgba(245, 241, 236, 0.92);
+    color: var(--ink);
+    font: inherit;
+    padding: 0 0.8rem;
+  }
+
+  .map-fullscreen-search .primary-pill {
+    min-height: 2.65rem;
+    padding-inline: 0.85rem;
+  }
+
+  .map-fullscreen-search .map-fullscreen-operation {
+    grid-column: 1 / -1;
+  }
+
+  .map-fullscreen-search.company-catalog-fullscreen-search:not([hidden]) {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .map-view-row {

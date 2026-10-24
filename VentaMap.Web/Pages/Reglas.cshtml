@@ -20,7 +20,7 @@
             <p><strong>El incumplimiento puede dar lugar al baneo de la cuenta sin aviso previo.</strong> Esta medida puede aplicarse sin esperar los umbrales de denuncias ni los avisos del proceso automático descrito a continuación.</p>
         </div>
         <p>Si un anuncio recibe denuncias, puede entrar en revisión automática según las reglas del sitio.</p>
-        <p>Cada anuncio realizado por un usuario dura 30 días desde su creación.</p>
+        <p>Cada anuncio realizado por una persona dura @Model.PersonalPublicationDurationDays días desde su creación.</p>
     </div>
 
     <div class="detail-panel">
@@ -68,7 +68,7 @@
 
     <div class="detail-panel">
         <h2>7. Vencimiento de anuncios</h2>
-        <p>Cuando un anuncio cumple 30 días, deja de estar activo automáticamente.</p>
+        <p>Cuando un anuncio de una persona cumple @Model.PersonalPublicationDurationDays días, deja de estar activo automáticamente.</p>
         <p>En ese momento el usuario recibe un correo indicando que, para volver a publicarlo, debe ingresar a <strong>Mis anuncios</strong> dentro de su cuenta.</p>
     </div>
 
@@ -77,7 +77,7 @@
         <p>Desde <strong>Mis anuncios</strong>:</p>
         <ul>
             <li>si un anuncio está activo, el usuario puede darlo de baja,</li>
-            <li>si un anuncio está inactivo o vencido, el usuario puede volver a publicarlo por otros 30 días.</li>
+            <li>si un anuncio está inactivo o vencido, el usuario puede volver a publicarlo por otros @Model.PersonalPublicationDurationDays días.</li>
         </ul>
     </div>
 

@@ -9,7 +9,7 @@ namespace VentaMap.Controllers;
 
 [ApiController]
 [Route("api/payments/mercadopago")]
-public class MercadoPagoController(VentaMapDbContext db, CurrentUserAccessor currentUserAccessor, MercadoPagoService mercadoPagoService) : ControllerBase
+public class MercadoPagoController(VentaMapDbContext db, CurrentUserAccessor currentUserAccessor, MercadoPagoService mercadoPagoService, VentaMapParameterService parameters) : ControllerBase
 {
     [AllowAnonymous]
     [HttpPost("donation/checkout")]
@@ -77,7 +77,9 @@ public class MercadoPagoController(VentaMapDbContext db, CurrentUserAccessor cur
             {
                 publication.Status = PublicationStatus.Active;
                 publication.IsActive = true;
-                publication.ExpiresAtUtc = DateTime.UtcNow.AddDays(30);
+                var durationDays = await parameters.GetIntAsync(
+                    VentaMapParameterService.PersonalPublicationDurationDays, fallback: 60, min: 1, max: 365);
+                publication.ExpiresAtUtc = DateTime.UtcNow.AddDays(durationDays);
                 charge.Status = "Used";
             }
         }

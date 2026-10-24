@@ -249,6 +249,11 @@ else
                  data-map-style-url="@Model.MapStyleUrl"
                  data-map-tiles-url="@Model.MapTilesUrlTemplate"
                  data-map-attribution="@Model.MapAttributionHtml"></div>
+            <div class="map-mobile-fullscreen-action" data-company-map-fullscreen-action>
+                <button type="button" class="ghost-pill compact map-fullscreen-trigger" data-company-map-fullscreen-trigger>
+                    Ver mapa en pantalla completa
+                </button>
+            </div>
             <div class="map-results">
                 <div class="map-results-copy">
                     <span class="gallery-kicker">Pin seleccionado</span>
@@ -279,6 +284,7 @@ else
                          data-company-title="@publication.Title"
                          data-company-locality="@publication.Locality"
                          data-company-category="@(publication.Category?.Name ?? string.Empty)"
+                         data-company-operation="@(publication.OperationType?.ToDisplayName() ?? string.Empty)"
                          data-company-price="@($"{publication.Currency} {publication.Price:0}")"
                          data-company-description="@publication.ShortDescription"
                          data-company-latitude="@(publication.Latitude?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty)"
@@ -481,6 +487,8 @@ else
                 const mapPanel = document.querySelector("[data-company-catalog-map-panel='true']");
                 const mapCanvas = document.querySelector("[data-company-catalog-map='true']");
                 const selectionPanel = document.querySelector("[data-company-map-selection-card='true']");
+                const fullscreenAction = mapPanel?.querySelector("[data-company-map-fullscreen-action]");
+                const fullscreenTrigger = fullscreenAction?.querySelector("[data-company-map-fullscreen-trigger]");
                 const catalogAnchor = document.querySelector("[data-company-catalog-anchor='true']");
                 const viewButtons = Array.from(toolbar.querySelectorAll("[data-company-catalog-view]"));
                 const galleryItems = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(galleryItems));
@@ -498,6 +506,7 @@ else
                 let selectedMarker = null;
                 let refreshButton = null;
                 let isInitializingMap = false;
+                let fullscreenOperationSelect = null;
                 const companyCatalogMapPadding = 60;
                 const companyCatalogMapSingleZoom = 12.8;
                 const companyCatalogMapMaxZoom = 12.8;
@@ -620,6 +629,7 @@ else
 
                 function applyFilter() {
                     const query = normalized(searchInput?.value);
+                    const operation = normalized(fullscreenOperationSelect?.value);
                     items.forEach(item => {
                         const haystack = normalized([
                             item.dataset.companyTitle,
@@ -628,7 +638,9 @@ else
                             item.dataset.companyDescription,
                             item.dataset.companyPrice
                         ].join(" "));
-                        item.hidden = query.length > 0 && !haystack.includes(query);
+                        const matchesQuery = query.length === 0 || haystack.includes(query);
+                        const matchesOperation = !operation || normalized(item.dataset.companyOperation) === operation;
+                        item.hidden = !matchesQuery || !matchesOperation;
                     });
 
                     updateCount();
@@ -786,6 +798,7 @@ else
                                         </div>
                                     `)
                                     .addTo(map);
+                                mapCanvas?.dispatchEvent(new CustomEvent("ventamap:map-popup-open"));
                                 return;
                             }
 
@@ -973,6 +986,7 @@ else
                         offset: 20,
                         className: "map-tap-popup"
                     });
+                    mobileTapPopup.on("close", () => mapCanvas?.dispatchEvent(new CustomEvent("ventamap:map-popup-close")));
 
                     map.addControl(new window.maplibregl.NavigationControl(), "top-right");
                     map.addControl(new window.maplibregl.AttributionControl({ compact: true }), "bottom-right");
@@ -984,7 +998,79 @@ else
                     });
                 }
 
+                function wireCompanyCatalogFullscreen() {
+                    if (!mapCanvas || !fullscreenAction || !fullscreenTrigger || fullscreenTrigger.dataset.bound === "true") return;
+                    fullscreenTrigger.dataset.bound = "true";
+
+                    const fullscreenSearch = document.createElement("label");
+                    fullscreenSearch.className = "map-fullscreen-search company-catalog-fullscreen-search";
+                    fullscreenSearch.innerHTML = '<input type="search" aria-label="Buscar en el catálogo" placeholder="Buscar por título, categoría o localidad" autocomplete="off" />';
+                    const fullscreenSearchInput = fullscreenSearch.querySelector("input");
+                    let isMarkerPopupOpen = false;
+                    const isPropertyCatalog = markerData.length > 0
+                        && markerData.every(item => normalized(item.groupName) === "inmuebles");
+                    const operationOptions = [...new Set(markerData
+                        .map(item => String(item.operationLabel || "").trim())
+                        .filter(Boolean))];
+                    if (isPropertyCatalog && operationOptions.length) {
+                        fullscreenOperationSelect = document.createElement("select");
+                        fullscreenOperationSelect.className = "map-fullscreen-operation";
+                        fullscreenOperationSelect.setAttribute("aria-label", "Tipo de operación");
+                        fullscreenOperationSelect.innerHTML = '<option value="">Operación: todas</option>';
+                        operationOptions.forEach(operation => {
+                            const option = document.createElement("option");
+                            option.value = operation;
+                            option.textContent = operation;
+                            fullscreenOperationSelect.append(option);
+                        });
+                        fullscreenOperationSelect.addEventListener("change", applyFilter);
+                        fullscreenSearch.append(fullscreenOperationSelect);
+                    }
+                    fullscreenSearch.hidden = true;
+                    document.body.append(fullscreenSearch);
+
+                    fullscreenSearchInput?.addEventListener("input", () => {
+                        if (searchInput) {
+                            searchInput.value = fullscreenSearchInput.value;
+                        }
+                        applyFilter();
+                    });
+
+                    const sync = () => {
+                        const isFullscreen = mapCanvas.classList.contains("is-map-fullscreen");
+                        fullscreenTrigger.textContent = isFullscreen ? "Salir de pantalla completa" : "Ver mapa en pantalla completa";
+                        fullscreenAction.classList.toggle("is-map-fullscreen-control", isFullscreen);
+                        document.body.classList.toggle("map-fullscreen-open", isFullscreen);
+                        fullscreenSearch.hidden = !isFullscreen || isMarkerPopupOpen;
+                    };
+
+                    fullscreenTrigger.addEventListener("click", event => {
+                        event.preventDefault();
+                        mapCanvas.classList.toggle("is-map-fullscreen");
+                        sync();
+                        if (!fullscreenSearch.hidden && fullscreenSearchInput) {
+                            fullscreenSearchInput.value = searchInput?.value || "";
+                            window.setTimeout(() => fullscreenSearchInput.focus(), 0);
+                        }
+                        map?.resize?.();
+                        window.requestAnimationFrame(() => map?.resize?.());
+                        window.setTimeout(() => map?.resize?.(), 120);
+                    });
+
+                    mapCanvas.addEventListener("ventamap:map-popup-open", () => {
+                        isMarkerPopupOpen = true;
+                        sync();
+                    });
+                    mapCanvas.addEventListener("ventamap:map-popup-close", () => {
+                        isMarkerPopupOpen = false;
+                        sync();
+                    });
+
+                    sync();
+                }
+
                 searchInput?.addEventListener("input", applyFilter);
+                wireCompanyCatalogFullscreen();
                 viewButtons.forEach(button => {
                     button.addEventListener("click", () => setView(button.dataset.companyCatalogView || "list", { scroll: true }));
                 });

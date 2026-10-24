@@ -157,7 +157,9 @@ else
         @foreach (var item in Model.Publications)
         {
             var publication = item.Publication;
-            var detailUrl = $"/Publications/Details/{publication.Id}";
+            // La ruta corta es la URL pública que se comparte fuera del sitio.
+            // Conservamos la ruta interna sólo donde hace falta para la API.
+            var detailUrl = $"/anuncio/{publication.Id}";
             var ownerPreviewUrl = $"{detailUrl}?ownerView=1";
             var ownerPreviewApiUrl = $"/api/content/details/{publication.Id}?ownerView=1";
             var imageUrl = publication.ImageList.FirstOrDefault();
@@ -242,7 +244,7 @@ else
                         <span>Fecha de publicación: @publication.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy")</span>
                         @if (isPendingPayment)
                         {
-                            <span>Vigencia: 30 días desde la acreditación del pago</span>
+                            <span>Vigencia: @Model.PersonalPublicationDurationDays días desde la acreditación del pago</span>
                         }
                         else if (!Model.IsCompany && publication.ExpiresAtUtc.HasValue)
                         {
@@ -252,7 +254,7 @@ else
                     <div class="publication-admin-actions">
                         @if (!Model.IsCompany && Model.PaymentHistoryByPublicationId.TryGetValue(publication.Id, out var paymentHistory))
                         {
-                            <div class="field-hint wide">@foreach (var payment in paymentHistory) { <span>Pago acreditado: @payment.PaidAtUtc!.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm") · Vigencia hasta: @payment.PaidAtUtc!.Value.AddDays(30).ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span> }</div>
+                            <div class="field-hint wide">@foreach (var payment in paymentHistory) { <span>Pago acreditado: @payment.PaidAtUtc!.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm") · Vigencia hasta: @payment.PaidAtUtc!.Value.AddDays(Model.PersonalPublicationDurationDays).ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span> }</div>
                         }
                         @if (isPendingPayment && Model.PendingChargeIdsByPublicationId.TryGetValue(publication.Id, out var chargeId))
                         {
@@ -377,7 +379,7 @@ else
                             @if (!isPendingPayment)
                             {
                                 <form method="post" asp-page-handler="Republish" asp-route-id="@publication.Id" data-republish-form>
-                                    <button type="submit" class="primary-pill">Republicar 30 dias</button>
+                                    <button type="submit" class="primary-pill">Republicar @Model.PersonalPublicationDurationDays dias</button>
                                 </form>
                             }
                             <form method="post" asp-page-handler="DeletePermanent" asp-route-id="@publication.Id" onsubmit="return confirm('Esta accion eliminara el anuncio de Mis anuncios y borrara sus archivos multimedia de Cloudflare R2.');">

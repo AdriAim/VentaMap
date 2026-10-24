@@ -531,6 +531,7 @@
     restoreCreatePublicationCompletion(document.querySelector('[data-page-kind="my-publications"]'));
     setupMapSelectionLayoutSync(document);
     await initContentMaps();
+    scrollToRequestedAnchor(document);
     await resumePendingAuthAction();
     clearPersistedSystemLoading();
     forceHideSystemLoading();
@@ -1118,6 +1119,8 @@
 
     if (!hash && /^\/Publications\/Details\/\d+$/i.test(window.location.pathname)) {
       target = document.getElementById("publication-start");
+    } else if (!hash && /^\/Donar\/?$/i.test(window.location.pathname)) {
+      target = document.getElementById("donation-start");
     } else if (hash === "#publication-start") {
       target = document.getElementById("publication-start");
     } else if (hash === "#search-panel") {
@@ -1134,7 +1137,7 @@
 
     window.requestAnimationFrame(() => {
       target.scrollIntoView({
-        behavior: hash === "#search-panel" || hash === "#browse-results" ? "smooth" : "auto",
+        behavior: hash === "#search-panel" || hash === "#browse-results" || target.id === "donation-start" ? "smooth" : "auto",
         block: "start"
       });
     });
@@ -3372,6 +3375,19 @@
     mapElement.innerHTML = "";
     mapElement.getBoundingClientRect();
 
+    // El gesto de dos dedos pertenece al mapa. Sin este bloqueo explícito,
+    // algunos navegadores móviles interpretan el pinch como zoom de página;
+    // los popups HTML quedan entonces ampliados junto con toda la interfaz.
+    const keepPinchZoomInsideMap = event => {
+      if (event.touches?.length > 1) {
+        event.preventDefault();
+      }
+    };
+    mapElement.addEventListener("touchmove", keepPinchZoomInsideMap, { passive: false });
+    // Safari iOS también expone los eventos gesture para su zoom nativo.
+    mapElement.addEventListener("gesturestart", event => event.preventDefault(), { passive: false });
+    mapElement.addEventListener("gesturechange", event => event.preventDefault(), { passive: false });
+
     const instance = new sdk.Map({
       container: mapElement,
       style: buildMapStyle(styleUrl, tilesUrlTemplate, attribution, { preferRaster: mapMode === "detail" }),
@@ -3407,9 +3423,11 @@
       offset: 20,
       className: "map-tap-popup"
     });
+    mobileTapPopup.on("close", () => mapElement.dispatchEvent(new CustomEvent("ventamap:map-popup-close")));
     let selectedMarker = null;
     let selectedMarkerView = selectionViewToggle?.dataset.currentView === "text" ? "text" : "gallery";
     let markerInstances = [];
+    let fullscreenMapFilter = { query: "", operation: "" };
 
     const syncSelectionViewButtons = () => {
       selectionViewToggle?.querySelectorAll("[data-map-selection-view]").forEach(button => {
@@ -3496,26 +3514,43 @@
           .setLngLat([marker.lng, marker.lat])
           .setHTML(buildMapMarkerTapCard(marker))
           .addTo(instance);
+        mapElement.dispatchEvent(new CustomEvent("ventamap:map-popup-open"));
         return;
       }
 
       setSelectedMarker(marker);
     };
 
-    const renderMapMarkers = ({ preserveSelection = false } = {}) => {
+    const renderMapMarkers = ({ preserveSelection = false, sourceMarkers = markers } = {}) => {
+      const candidateMarkers = Array.isArray(sourceMarkers) ? sourceMarkers : markers;
+      const normalizedQuery = String(fullscreenMapFilter.query || "").trim().toLocaleLowerCase("es-AR");
+      const normalizedOperation = String(fullscreenMapFilter.operation || "").trim().toLocaleLowerCase("es-AR");
+      const visibleMarkers = candidateMarkers.filter(marker => {
+        const searchableText = [
+          marker.title,
+          marker.shortDescription,
+          marker.locality,
+          marker.categoryLabel,
+          marker.price
+        ].join(" ").toLocaleLowerCase("es-AR");
+        const matchesQuery = !normalizedQuery || searchableText.includes(normalizedQuery);
+        const matchesOperation = !normalizedOperation
+          || String(marker.operationLabel || "").trim().toLocaleLowerCase("es-AR") === normalizedOperation;
+        return matchesQuery && matchesOperation;
+      });
       hoverPopup.remove();
       mobileTapPopup.remove();
       markerInstances.forEach(markerInstance => markerInstance.remove());
       markerInstances = [];
 
-      if (!markers.length) {
+      if (!visibleMarkers.length) {
         selectedMarker = null;
         renderEmptySelection();
         return null;
       }
 
       const bounds = new sdk.LngLatBounds();
-      markers.forEach(marker => {
+      visibleMarkers.forEach(marker => {
         const markerInstance = new sdk.Marker({ color: "#ff5a5f" })
           .setLngLat([marker.lng, marker.lat])
           .addTo(instance);
@@ -3560,17 +3595,22 @@
       });
 
       const nextSelectedMarker = preserveSelection && selectedMarker
-        ? markers.find(marker => String(marker.id) === String(selectedMarker.id)) || null
+        ? visibleMarkers.find(marker => String(marker.id) === String(selectedMarker.id)) || null
         : null;
 
       if (!isMobileMapInteractionContext()) {
-        setSelectedMarker(nextSelectedMarker || markers[0]);
+        setSelectedMarker(nextSelectedMarker || visibleMarkers[0]);
       } else {
-        selectedMarker = nextSelectedMarker || markers[0] || null;
+        selectedMarker = nextSelectedMarker || visibleMarkers[0] || null;
       }
 
       instance.resize?.();
       return bounds;
+    };
+
+    const filterFullscreenMapMarkers = (query, operation) => {
+      fullscreenMapFilter = { query: query || "", operation: operation || "" };
+      renderMapMarkers({ preserveSelection: true });
     };
 
     const syncBrowseMapViewportWhenReady = callback => {
@@ -3803,7 +3843,97 @@
 
     mapElement._mapInstance = instance;
     mapElement.dataset.mapInitialized = "true";
+    if (isBrowseMap) {
+      wireBrowseMapFullscreen(mapElement, filterFullscreenMapMarkers);
+    }
     return instance;
+  }
+
+  function wireBrowseMapFullscreen(mapElement, onFilterChange = null) {
+    if (!mapElement || mapElement.dataset.browseFullscreenBound === "true") return;
+
+    const layout = mapElement.closest("[data-map-layout]");
+    const action = layout?.querySelector("[data-map-mobile-fullscreen-action]");
+    const trigger = action?.querySelector("[data-map-mobile-fullscreen-trigger]");
+    if (!action || !trigger || !mapElement._mapInstance) return;
+
+    mapElement.dataset.browseFullscreenBound = "true";
+    const sourceForm = document.querySelector("[data-browse-search-form], #search-panel form[data-group-aware-search-form='true']");
+    const sourceQuery = sourceForm?.querySelector('input[name="query"]');
+    const sourceGroup = sourceForm?.querySelector('select[name="group"]');
+    const sourceOperation = sourceForm?.querySelector('select[name="operation"]');
+    const isPropertySearch = String(sourceGroup?.value || "").trim().toLowerCase() === "inmuebles";
+    let fullscreenSearch = null;
+    let isMarkerPopupOpen = false;
+
+    if (sourceForm && sourceQuery) {
+      fullscreenSearch = document.createElement("div");
+      fullscreenSearch.className = "map-fullscreen-search";
+      fullscreenSearch.setAttribute("role", "search");
+      fullscreenSearch.innerHTML = `
+        <label class="map-fullscreen-query">
+          <input name="query" aria-label="Buscar anuncios" placeholder="${escapeAttribute(sourceQuery.placeholder || "Buscar anuncios")}" value="${escapeAttribute(sourceQuery.value || "")}" />
+        </label>
+      `;
+
+      if (isPropertySearch && sourceOperation) {
+        const operation = sourceOperation.cloneNode(true);
+        operation.classList.add("map-fullscreen-operation");
+        operation.removeAttribute("data-group-operation-select");
+        fullscreenSearch.querySelector(".map-fullscreen-query")?.insertAdjacentElement("afterend", operation);
+      }
+
+      const filterMap = () => {
+        const query = fullscreenSearch.querySelector('input[name="query"]')?.value || "";
+        const operation = fullscreenSearch.querySelector('select[name="operation"]')?.value || "";
+        if (sourceQuery) sourceQuery.value = query;
+        if (sourceOperation) sourceOperation.value = operation;
+        onFilterChange?.(query, operation);
+      };
+      fullscreenSearch.querySelector('input[name="query"]')?.addEventListener("input", filterMap);
+      fullscreenSearch.querySelector('select[name="operation"]')?.addEventListener("change", filterMap);
+
+      fullscreenSearch.hidden = true;
+      document.body.append(fullscreenSearch);
+    }
+
+    const sync = () => {
+      const isFullscreen = mapElement.classList.contains("is-map-fullscreen");
+      trigger.textContent = isFullscreen ? "Salir de pantalla completa" : "Ver mapa en pantalla completa";
+      action.classList.toggle("is-map-fullscreen-control", isFullscreen);
+      document.body.classList.toggle("map-fullscreen-open", isFullscreen);
+      if (fullscreenSearch) fullscreenSearch.hidden = !isFullscreen || isMarkerPopupOpen;
+    };
+
+    const resizeMap = () => {
+      const mapInstance = mapElement._mapInstance;
+      if (!mapInstance) return;
+      mapInstance.resize?.();
+      window.requestAnimationFrame(() => mapInstance.resize?.());
+      window.setTimeout(() => mapInstance.resize?.(), 120);
+    };
+
+    const toggle = () => {
+      // Avoid the browser Fullscreen API here: on mobile it hides this exit
+      // control and can leave MapLibre popups outside the visible surface.
+      mapElement.classList.toggle("is-map-fullscreen");
+      sync();
+      resizeMap();
+    };
+
+    trigger.addEventListener("click", event => {
+      event.preventDefault();
+      toggle();
+    });
+    mapElement.addEventListener("ventamap:map-popup-open", () => {
+      isMarkerPopupOpen = true;
+      sync();
+    });
+    mapElement.addEventListener("ventamap:map-popup-close", () => {
+      isMarkerPopupOpen = false;
+      sync();
+    });
+    sync();
   }
 
   function wireDetailMapFullscreen(mapElement, sdk) {
@@ -4350,6 +4480,7 @@
     const queryInput = form.querySelector("[data-group-aware-query-input='true']");
     const categorySelect = form.querySelector("[data-group-category-select='true']");
     const operationSelect = form.querySelector("[data-group-operation-select='true']");
+    const modeInput = form.querySelector('input[name="mode"]');
     if (!groupSelect || !queryInput) return;
 
     form.dataset.groupAwarePlaceholderBound = "true";
@@ -4467,7 +4598,13 @@
     syncPlaceholder();
     syncCategories().catch(console.error);
     syncOperations().catch(console.error);
+    let previousGroup = String(groupSelect.value || "").trim().toLowerCase();
     groupSelect.addEventListener("change", () => {
+      const currentGroup = String(groupSelect.value || "").trim().toLowerCase();
+      if (previousGroup === "inmuebles" && currentGroup !== "inmuebles" && modeInput) {
+        modeInput.value = "Galeria";
+      }
+      previousGroup = currentGroup;
       syncPlaceholder();
       if (categorySelect) {
         categorySelect.dataset.selectedCategoryId = "";
@@ -5848,7 +5985,7 @@
 
       const url = new URL(rawUrl, window.location.origin).href;
       const title = button.getAttribute("data-share-title") || "Anuncio en VentaMap";
-      const text = `Mirá este anuncio en VentaMap: ${url}`;
+      const text = "Mirá este anuncio en VentaMap.";
       try {
         if (navigator.share) {
           await navigator.share({ title, text, url });
@@ -5858,7 +5995,7 @@
         if (error?.name === "AbortError") return;
       }
 
-      window.location.assign(`https://wa.me/?text=${encodeURIComponent(text)}`);
+      window.location.assign(`https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`);
     });
   }
   function completeCreatePublication(completion) {
@@ -5907,7 +6044,7 @@
       whatsappShare.innerHTML = '<i class="fa-brands fa-whatsapp" aria-hidden="true"></i><span>Compartir en estado de WhatsApp</span>';
       whatsappShare.addEventListener("click", async () => {
         const url = new URL(completion.actionUrl, window.location.origin).href;
-        const text = `Mirá mi anuncio en VentaMap: ${url}`;
+        const text = "Mirá mi anuncio en VentaMap.";
         try {
           if (navigator.share) {
             await navigator.share({ title: completion.shareTitle || "Anuncio en VentaMap", text, url });
@@ -5918,7 +6055,7 @@
           if (error?.name === "AbortError") return;
         }
 
-        window.location.assign(`https://wa.me/?text=${encodeURIComponent(text)}`);
+        window.location.assign(`https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`);
       });
       overlay.querySelector(".create-completion-actions")?.append(whatsappShare);
     }

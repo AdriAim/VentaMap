@@ -43,6 +43,7 @@ public class MyPublicationsModel(
     public Dictionary<int, List<BillingCharge>> PaymentHistoryByPublicationId { get; private set; } = [];
     public string PersonPublicationAmountText { get; private set; } = string.Empty;
     public string CompanyMonthlyAmountText { get; private set; } = string.Empty;
+    public int PersonalPublicationDurationDays { get; private set; } = 60;
 
     [TempData]
     public string? SuccessMessage { get; set; }
@@ -77,6 +78,8 @@ public class MyPublicationsModel(
             || await parameters.GetBoolAsync(VentaMapParameterService.PaidSiteEnabled, fallback: false);
         PersonPublicationAmountText = PricingService.FormatAmount(await pricingService.GetCurrentPersonPublicationAmountAsync());
         CompanyMonthlyAmountText = PricingService.FormatAmount(await pricingService.GetCurrentCompanyMonthlyAmountAsync());
+        PersonalPublicationDurationDays = await parameters.GetIntAsync(
+            VentaMapParameterService.PersonalPublicationDurationDays, fallback: 60, min: 1, max: 365);
         if (BillingEnabled)
         {
             await billingService.EnsureCompanyCurrentMonthChargeAsync(user);
@@ -234,13 +237,15 @@ public class MyPublicationsModel(
         var success = await publicationService.RepublishOwnedAsync(id, userId);
         if (success)
         {
+            var durationDays = await parameters.GetIntAsync(
+                VentaMapParameterService.PersonalPublicationDurationDays, fallback: 60, min: 1, max: 365);
             if (needsPersonPack) await billingService.ConsumePaidPersonPublicationPackAsync(userId);
             if (isAjax) return new JsonResult(new
             {
-                message = "El anuncio fue republicado por 30 días más.",
+                message = $"El anuncio fue republicado por {durationDays} días más.",
                 detailsUrl = Url.Page("/Publications/Details", new { id })
             });
-            SuccessMessage = "El anuncio fue republicado por 30 dias mas.";
+            SuccessMessage = $"El anuncio fue republicado por {durationDays} dias mas.";
         }
         else
         {

@@ -681,7 +681,7 @@ static async Task EnsurePublicationExpirationSchemaAsync(System.Data.Common.DbCo
         """
         UPDATE `Publications` AS p
         LEFT JOIN `Users` AS u ON u.`Id` = p.`UserId`
-        SET p.`ExpiresAtUtc` = DATE_ADD(p.`CreatedAtUtc`, INTERVAL 30 DAY)
+        SET p.`ExpiresAtUtc` = DATE_ADD(p.`CreatedAtUtc`, INTERVAL 60 DAY)
         WHERE p.`ExpiresAtUtc` IS NULL
           AND (u.`Id` IS NULL OR u.`IsCompany` = FALSE);
         """);
@@ -961,6 +961,7 @@ static async Task EnsureReviewSchemaAsync(System.Data.Common.DbConnection connec
             ('Reviews.DisplayExisting.Enabled', 'true', 'Boolean', 'Muestra reseñas publicadas existentes.', UTC_TIMESTAMP(6), NULL),
             ('Reviews.PublicationDelayDays', '7', 'Integer', 'Dias de espera antes de publicar las respuestas.', UTC_TIMESTAMP(6), NULL),
             ('Reviews.ResponseDeadlineDays', '14', 'Integer', 'Dias maximos para esperar la respuesta de la otra persona.', UTC_TIMESTAMP(6), NULL),
+            ('Publications.Personal.DurationDays', '60', 'Integer', 'Dias de vigencia de los anuncios publicados por personas.', UTC_TIMESTAMP(6), NULL),
             ('PaidSite.Enabled', 'false', 'Boolean', 'Activa las leyendas, los cargos y los bloqueos de facturación del sitio.', UTC_TIMESTAMP(6), NULL);
         """);
 }

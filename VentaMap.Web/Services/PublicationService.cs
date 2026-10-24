@@ -9,10 +9,14 @@ public class PublicationService(
     VentaMapDbContext db,
     CloudflareR2ImageStorageService imageStorageService,
     BillingService billingService,
+    VentaMapParameterService parameters,
     ILogger<PublicationService> logger,
     IConfiguration configuration)
 {
     public const PublicationStatus OwnerDeletedStatus = PublicationStatus.OwnerDeleted;
+
+    private Task<int> GetPersonalPublicationDurationDaysAsync() => parameters.GetIntAsync(
+        VentaMapParameterService.PersonalPublicationDurationDays, fallback: 60, min: 1, max: 365);
 
     public Task<List<Publication>> SearchActivePublicationsAsync(PublicationGroup? group, string? query, bool includeDebug = false)
         => SearchActivePublicationsAsync(group, query, null, includeDebug);
@@ -262,6 +266,7 @@ public class PublicationService(
             .Where(user => user.Id == userId.Value)
             .Select(user => user.IsCompany)
             .FirstOrDefaultAsync();
+        var personalPublicationDurationDays = await GetPersonalPublicationDurationDaysAsync();
 
         var publication = new Publication
         {
@@ -285,7 +290,7 @@ public class PublicationService(
             HideFromMap = input.NoLocation,
             UserId = userId,
             IsActive = status == PublicationStatus.Active,
-            ExpiresAtUtc = status == PublicationStatus.Active && !isCompany ? DateTime.UtcNow.AddDays(30) : null
+            ExpiresAtUtc = status == PublicationStatus.Active && !isCompany ? DateTime.UtcNow.AddDays(personalPublicationDurationDays) : null
         };
 
         publication.MediaItems.AddRange(PublicationMediaBuilder.Build(
@@ -516,10 +521,11 @@ public class PublicationService(
         publication.IsActive = true;
         publication.Status = PublicationStatus.Active;
         var republishedAtUtc = DateTime.UtcNow;
+        var personalPublicationDurationDays = await GetPersonalPublicationDurationDaysAsync();
         publication.OriginalCreatedAtUtc ??= publication.CreatedAtUtc;
         publication.CreatedAtUtc = republishedAtUtc;
         var user = await db.Users.FindAsync(userId);
-        publication.ExpiresAtUtc = user?.IsCompany == true ? null : republishedAtUtc.AddDays(30);
+        publication.ExpiresAtUtc = user?.IsCompany == true ? null : republishedAtUtc.AddDays(personalPublicationDurationDays);
         db.PublicationRepublications.Add(new PublicationRepublication
         {
             PublicationId = publication.Id,
@@ -545,7 +551,7 @@ public class PublicationService(
 
         publication.Status = PublicationStatus.Active;
         publication.IsActive = true;
-        publication.ExpiresAtUtc = DateTime.UtcNow.AddDays(30);
+        publication.ExpiresAtUtc = DateTime.UtcNow.AddDays(await GetPersonalPublicationDurationDaysAsync());
         await db.SaveChangesAsync();
         return true;
     }
@@ -584,6 +590,7 @@ public class PublicationService(
     public async Task<int> ExpirePublicationsAndSendNotificationsAsync(IEmailSender emailSender, ILogger logger, CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
+        var personalPublicationDurationDays = await GetPersonalPublicationDurationDaysAsync();
         var expired = await db.Publications
             .Include(x => x.User)
             .Where(x => x.IsActive
@@ -613,15 +620,15 @@ public class PublicationService(
                 var siteUrl = (configuration["Site:PublicBaseUrl"] ?? "https://ventamap.com.ar").TrimEnd('/');
                 var republishUrl = $"{siteUrl}/RepublicarAnuncio/{publication.Id}";
                 var html = $"""
-                    <p>Tu anuncio <strong>{System.Net.WebUtility.HtmlEncode(publicationLabel)}</strong> finalizó luego de 30 días de estar activo.</p>
-                    <p>Para republicarlo por 30 días más, usa el siguiente enlace. Si no tienes sesión iniciada, te pediremos ingresar a tu cuenta.</p>
+                    <p>Tu anuncio <strong>{System.Net.WebUtility.HtmlEncode(publicationLabel)}</strong> finalizó luego de {personalPublicationDurationDays} días de estar activo.</p>
+                    <p>Para republicarlo por {personalPublicationDurationDays} días más, usa el siguiente enlace. Si no tienes sesión iniciada, te pediremos ingresar a tu cuenta.</p>
                     <p><a href="{System.Net.WebUtility.HtmlEncode(republishUrl)}" style="display:inline-block;padding:12px 20px;background:#176b45;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;">Republicar este anuncio</a></p>
                     <p>También puedes hacerlo desde <strong>Mis anuncios</strong>.</p>
                     """;
                 var text = $"""
-                    Tu anuncio "{publicationLabel}" finalizó luego de 30 días de estar activo.
+                    Tu anuncio "{publicationLabel}" finalizó luego de {personalPublicationDurationDays} días de estar activo.
 
-                    Para republicarlo por 30 días más, abre este enlace:
+                    Para republicarlo por {personalPublicationDurationDays} días más, abre este enlace:
                     {republishUrl}
 
                     Si no tienes sesión iniciada, te pediremos ingresar a tu cuenta. También puedes hacerlo desde Mis anuncios.
