@@ -805,6 +805,12 @@
       wireChatExperience(host);
       restoreCreatePublicationCompletion(host);
       scrollToRequestedAnchor(host);
+      if (host.dataset.pageKind === "details"
+          && new URLSearchParams(window.location.search).get("vm_source") === "share"
+          && window.matchMedia?.("(max-width: 780px)")?.matches
+          && !window.location.hash) {
+        host.querySelector(".detail-hero")?.scrollIntoView({ block: "start", behavior: "instant" });
+      }
     } finally {
       endSystemLoading(loadingTicket);
     }
