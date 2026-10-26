@@ -824,11 +824,12 @@ public class PublicationService(
         var longitude = referenceLongitude.Value;
         items = ApplyRadiusFilter(items, latitude, longitude, filters);
 
+        var longitudeScale = Math.Max(Math.Abs(Math.Cos(latitude * Math.PI / 180d)), 0.01d);
         return items
             .OrderBy(x => x.Latitude.HasValue && x.Longitude.HasValue ? 0 : 1)
             .ThenBy(x => x.Latitude.HasValue && x.Longitude.HasValue
                 ? ((x.Latitude ?? 0d) - latitude) * ((x.Latitude ?? 0d) - latitude)
-                    + ((x.Longitude ?? 0d) - longitude) * ((x.Longitude ?? 0d) - longitude)
+                    + ((x.Longitude ?? 0d) - longitude) * ((x.Longitude ?? 0d) - longitude) * longitudeScale * longitudeScale
                 : double.MaxValue)
             .ThenByDescending(x => x.Featured)
             .ThenByDescending(x => x.CreatedAtUtc);

@@ -8232,20 +8232,22 @@
 
         const payload = await response.json();
         const items = Array.isArray(payload?.items) ? payload.items : [];
-        const usedExpandedRadius = Boolean(payload?.usedExpandedRadius);
+        const expandedStartIndex = Number(payload?.expandedStartIndex ?? -1);
         const expandedRadiusKm = Number(payload?.expandedRadiusKm || 0);
         const expandedRadiusTotalResults = Number(payload?.expandedRadiusTotalResults || 0);
-        if (state.offset === 0 && usedExpandedRadius && !state.usingExpandedRadius) {
+        const imageLoading = state.offset === 0 ? "eager" : "lazy";
+        items.forEach((item, index) => {
+        if (index === expandedStartIndex && !state.usingExpandedRadius) {
           rail.insertAdjacentHTML("beforeend", `
             <section class="classified-toolbar">
-              <div class="classified-summary">Resultados fuera de ese radio</div>
+              <div class="classified-summary">Más anuncios fuera del radio seleccionado</div>
               <div class="classified-page-size">Hasta ${expandedRadiusKm} km${expandedRadiusTotalResults > 0 ? ` · ${expandedRadiusTotalResults} resultados` : ""}</div>
             </section>
           `);
           state.usingExpandedRadius = true;
         }
-        const imageLoading = state.offset === 0 ? "eager" : "lazy";
-        rail.insertAdjacentHTML("beforeend", items.map((item, index) => buildGalleryCard(item, state.offset + index === 0, { imageLoading })).join(""));
+        rail.insertAdjacentHTML("beforeend", buildGalleryCard(item, state.offset + index === 0, { imageLoading }));
+        });
         state.offset = Number(payload?.nextOffset ?? (state.offset + items.length));
         state.hasMore = Boolean(payload?.hasMore);
 

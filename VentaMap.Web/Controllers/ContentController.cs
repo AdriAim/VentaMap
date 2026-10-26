@@ -501,36 +501,46 @@ public partial class ContentController(
             effectiveLocality?.Longitude,
             filters,
             includeDebug);
-        var usedExpandedRadius = false;
+        var insideCount = await publicationService.CountActivePublicationsAsync(selectedGroup, query,
+            effectiveLocality?.Latitude, effectiveLocality?.Longitude, filters, includeDebug);
+        var expandedStartIndex = -1;
         var expandedRadiusTotalResults = 0;
-        var expandedRadiusKm = 0;
-        if (safeOffset == 0 && items.Count == 0 && ShouldLoadExpandedRadiusFallback(filters, 0))
+        var payloadItems = items.Take(safeLimit).ToList();
+        var hasMore = items.Count > safeLimit;
+        if (selectedGroup == PublicationGroup.Inmuebles && insideCount < 50
+            && effectiveLocality?.Latitude != null && effectiveLocality?.Longitude != null
+            && filters.RadiusKm is > 0 and < ExpandedSearchRadiusKm
+            && filters.North is null && filters.South is null && filters.East is null && filters.West is null)
         {
             var expandedFilters = CloneFiltersWithRadius(filters, ExpandedSearchRadiusKm);
-            expandedRadiusTotalResults = await publicationService.CountActivePublicationsAsync(
+            var expandedCount = await publicationService.CountActivePublicationsAsync(
                 selectedGroup,
                 query,
                 effectiveLocality?.Latitude,
                 effectiveLocality?.Longitude,
                 expandedFilters,
                 includeDebug);
-            if (expandedRadiusTotalResults > 0)
+            expandedRadiusTotalResults = Math.Max(0, expandedCount - insideCount);
+            var outsideOffset = Math.Max(0, safeOffset - insideCount);
+            var remaining = safeLimit - payloadItems.Count;
+            if (remaining > 0 && outsideOffset < expandedRadiusTotalResults)
             {
-                items = await publicationService.SearchActivePublicationsPageAsync(
+                var outside = await publicationService.SearchActivePublicationsPageAsync(
                     selectedGroup,
                     query,
-                    safeOffset,
-                    safeLimit + 1,
+                    insideCount + outsideOffset,
+                    remaining + 1,
                     effectiveLocality?.Latitude,
                     effectiveLocality?.Longitude,
                     expandedFilters,
                     includeDebug);
-                usedExpandedRadius = true;
-                expandedRadiusKm = ExpandedSearchRadiusKm;
+                expandedStartIndex = payloadItems.Count;
+                payloadItems.AddRange(outside.Take(remaining));
+                hasMore = outside.Count > remaining;
             }
+            else if (safeOffset + payloadItems.Count >= insideCount && expandedRadiusTotalResults > outsideOffset)
+                hasMore = true;
         }
-        var hasMore = items.Count > safeLimit;
-        var payloadItems = items.Take(safeLimit).ToList();
         var favoritePublicationIds = currentUserAccessor.UserId is int currentUserId
             ? await favoriteService.GetFavoritePublicationIdsAsync(currentUserId, payloadItems.Select(x => x.Id))
             : [];
@@ -543,8 +553,8 @@ public partial class ContentController(
             items = payload,
             hasMore,
             nextOffset = safeOffset + payload.Count,
-            usedExpandedRadius,
-            expandedRadiusKm,
+            expandedStartIndex,
+            expandedRadiusKm = ExpandedSearchRadiusKm,
             expandedRadiusTotalResults
         });
     }
