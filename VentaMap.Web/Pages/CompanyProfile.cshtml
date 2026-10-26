@@ -286,6 +286,8 @@ else
                          data-company-category="@(publication.Category?.Name ?? string.Empty)"
                          data-company-operation="@(publication.OperationType?.ToDisplayName() ?? string.Empty)"
                          data-company-price="@($"{publication.Currency} {publication.Price:0}")"
+                         data-company-price-value="@publication.Price.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                         data-company-currency="@publication.Currency"
                          data-company-description="@publication.ShortDescription"
                          data-company-latitude="@(publication.Latitude?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty)"
                          data-company-longitude="@(publication.Longitude?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty)"
@@ -502,7 +504,7 @@ else
                 let popup = null;
                 let markers = [];
                 let hoverPopup = null;
-                let mobileTapPopup = null;
+                let mobileMarkerCard = null;
                 let selectedMarker = null;
                 let refreshButton = null;
                 let isInitializingMap = false;
@@ -630,6 +632,12 @@ else
                 function applyFilter() {
                     const query = normalized(searchInput?.value);
                     const operation = normalized(fullscreenOperationSelect?.value);
+                    const priceFilter = document.querySelector("[data-company-fullscreen-price]");
+                    const from = priceFilter?.querySelector('[name="priceFrom"]');
+                    const to = priceFilter?.querySelector('[name="priceTo"]');
+                    if (to && !to.validity.valid) return;
+                    const currency = priceFilter?.querySelector('[name="priceCurrency"]')?.value || "USD";
+                    const rate = Number(priceFilter?.dataset.exchangeRate) || 0;
                     items.forEach(item => {
                         const haystack = normalized([
                             item.dataset.companyTitle,
@@ -640,7 +648,17 @@ else
                         ].join(" "));
                         const matchesQuery = query.length === 0 || haystack.includes(query);
                         const matchesOperation = !operation || normalized(item.dataset.companyOperation) === operation;
-                        item.hidden = !matchesQuery || !matchesOperation;
+                        let matchesPrice = true;
+                        if (from?.value || to?.value) {
+                            const itemCurrency = item.dataset.companyCurrency === "U$D" ? "USD" : item.dataset.companyCurrency === "AR$" ? "ARS" : item.dataset.companyCurrency;
+                            let price = Number(item.dataset.companyPriceValue);
+                            if (itemCurrency !== currency) {
+                                if (!rate || !["USD", "ARS"].includes(itemCurrency)) matchesPrice = false;
+                                else price = itemCurrency === "USD" ? price * rate : price / rate;
+                            }
+                            matchesPrice = matchesPrice && Number.isFinite(price) && (!from.value || price >= Number(from.value)) && (!to.value || price <= Number(to.value));
+                        }
+                        item.hidden = !matchesQuery || !matchesOperation || !matchesPrice;
                     });
 
                     updateCount();
@@ -648,7 +666,7 @@ else
                         renderGallery();
                     }
                     if (currentView === "map") {
-                        renderAndFitCompanyMap({ preserveSelection: true });
+                        syncMapMarkers({ preserveSelection: true });
                     }
                 }
 
@@ -732,6 +750,7 @@ else
                         renderGallery();
                     }
                     if (nextView === "map") {
+                        wireCompanyCatalogFullscreen();
                         ensureMap();
                     }
 
@@ -748,6 +767,7 @@ else
                 function syncMapMarkers(options = {}) {
                     if (!map || !window.maplibregl) return;
 
+                    if (mobileMarkerCard) { mobileMarkerCard.hidden = true; mobileMarkerCard.replaceChildren(); }
                     markers.forEach(marker => marker.remove());
                     markers = [];
                     const preserveSelection = options.preserveSelection === true;
@@ -785,20 +805,18 @@ else
                             event?.preventDefault?.();
                             event?.stopPropagation?.();
 
-                            if (window.matchMedia("(max-width: 900px)").matches) {
+                            if (window.matchMedia("(max-width: 780px)").matches || window.matchMedia("(pointer: coarse)").matches) {
+                                window.__ventamapBlurFullscreenMapFilter?.();
                                 const detailsUrl = buildCompanyCatalogPreviewUrl(item.id);
                                 hoverPopup?.remove();
-                                mobileTapPopup
-                                    ?.setLngLat([Number(item.longitude), Number(item.latitude)])
-                                    .setHTML(`
-                                        <div class="map-tap-card">
-                                            <strong>${escapeHtml(String(item.shortDescription || "").trim() || item.title || "Publicación")}</strong>
-                                            <span>${item.price || "Precio sin informar"}</span>
-                                            <button type="button" class="primary-pill compact" data-map-open-preview="true" data-public-url="${escapeHtml(item.url)}" data-details-url="${detailsUrl}">Ver anuncio</button>
-                                        </div>
-                                    `)
-                                    .addTo(map);
-                                mapCanvas?.dispatchEvent(new CustomEvent("ventamap:map-popup-open"));
+                                mobileMarkerCard.innerHTML = `<div class="map-mobile-marker-content">
+                                    <img src="${escapeHtml(item.images?.[0] || item.image || "/images/logo4.png")}" alt="">
+                                    <div class="map-mobile-marker-copy"><strong>${item.operationLabel ? `${escapeHtml(item.operationLabel)} · ` : ""}${escapeHtml(item.price || "Precio sin informar")}</strong>
+                                    <span>${escapeHtml(String(item.shortDescription || "").trim() || item.title || "Publicación")}</span>
+                                    <small>${escapeHtml(item.locality || "")}</small>
+                                    <button type="button" class="primary-pill compact" data-map-open-preview="true" data-public-url="${escapeHtml(item.url)}" data-details-url="${escapeHtml(detailsUrl)}">Mostrar anuncio</button></div>
+                                    <button type="button" class="map-mobile-marker-close" data-map-card-close aria-label="Cerrar anuncio">×</button></div>`;
+                                mobileMarkerCard.hidden = false;
                                 return;
                             }
 
@@ -806,6 +824,8 @@ else
                             setSelectedMarker(item);
                         };
 
+                        markerElement.addEventListener("touchstart", event => { window.__ventamapBlurFullscreenMapFilter?.(); event.stopPropagation(); }, { passive: true });
+                        markerElement.addEventListener("pointerdown", event => { if (event.pointerType === "touch") { window.__ventamapBlurFullscreenMapFilter?.(); event.stopPropagation(); } });
                         markerElement.addEventListener("click", event => {
                             if (Date.now() - lastTouchSelectionAt < 500) {
                                 event.preventDefault();
@@ -980,13 +1000,16 @@ else
                         offset: 18,
                         className: "map-hover-popup"
                     });
-                    mobileTapPopup = new window.maplibregl.Popup({
-                        closeButton: false,
-                        closeOnClick: true,
-                        offset: 20,
-                        className: "map-tap-popup"
+                    mobileMarkerCard = document.createElement("div");
+                    mobileMarkerCard.className = "map-mobile-marker-card";
+                    mobileMarkerCard.hidden = true;
+                    mapCanvas.append(mobileMarkerCard);
+                    mobileMarkerCard.addEventListener("click", event => {
+                        if (event.target.closest("[data-map-card-close]")) {
+                            mobileMarkerCard.hidden = true;
+                            mobileMarkerCard.replaceChildren();
+                        }
                     });
-                    mobileTapPopup.on("close", () => mapCanvas?.dispatchEvent(new CustomEvent("ventamap:map-popup-close")));
 
                     map.addControl(new window.maplibregl.NavigationControl(), "top-right");
                     map.addControl(new window.maplibregl.AttributionControl({ compact: true }), "bottom-right");
@@ -1002,8 +1025,25 @@ else
                     if (!mapCanvas || !fullscreenAction || !fullscreenTrigger || fullscreenTrigger.dataset.bound === "true") return;
                     fullscreenTrigger.dataset.bound = "true";
 
-                    const fullscreenSearch = document.createElement("label");
-                    fullscreenSearch.className = "map-fullscreen-search company-catalog-fullscreen-search";
+                    let fullscreenTip = null;
+                    if (window.matchMedia?.("(max-width: 780px)")?.matches || window.matchMedia?.("(pointer: coarse)")?.matches) {
+                        const tipKey = "ventamap.companyMap.fullscreenTipSeen";
+                        let seen = false;
+                        try { seen = localStorage.getItem(tipKey) === "1"; } catch { }
+                        if (!seen) {
+                            fullscreenTip = document.createElement("div");
+                            fullscreenTip.className = "map-fullscreen-tip";
+                            fullscreenTip.setAttribute("role", "note");
+                            fullscreenTip.innerHTML = '<span>Para una mejor experiencia de búsqueda utiliza pantalla completa</span><button type="button" aria-label="Cerrar aviso">×</button>';
+                            fullscreenTip.querySelector("button")?.addEventListener("click", () => fullscreenTip?.remove());
+                            fullscreenAction.append(fullscreenTip);
+                            try { localStorage.setItem(tipKey, "1"); } catch { }
+                        }
+                    }
+
+                    const fullscreenSearch = document.createElement("div");
+                    fullscreenSearch.className = "map-fullscreen-search";
+                    fullscreenSearch.setAttribute("role", "search");
                     fullscreenSearch.innerHTML = '<input type="search" aria-label="Buscar en el catálogo" placeholder="Buscar por título, categoría o localidad" autocomplete="off" />';
                     const fullscreenSearchInput = fullscreenSearch.querySelector("input");
                     let isMarkerPopupOpen = false;
@@ -1012,7 +1052,7 @@ else
                     const operationOptions = [...new Set(markerData
                         .map(item => String(item.operationLabel || "").trim())
                         .filter(Boolean))];
-                    if (isPropertyCatalog && operationOptions.length) {
+                    if (isPropertyCatalog && operationOptions.length > 1) {
                         fullscreenOperationSelect = document.createElement("select");
                         fullscreenOperationSelect.className = "map-fullscreen-operation";
                         fullscreenOperationSelect.setAttribute("aria-label", "Tipo de operación");
@@ -1026,6 +1066,26 @@ else
                         fullscreenOperationSelect.addEventListener("change", applyFilter);
                         fullscreenSearch.append(fullscreenOperationSelect);
                     }
+                    const priceFilter = document.createElement("div");
+                    priceFilter.className = "price-range-filter price-filter-compact";
+                    priceFilter.dataset.companyFullscreenPrice = "true";
+                    priceFilter.dataset.exchangeRate = "@(Model.PriceExchangeRate?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "")";
+                    const rate = Number(priceFilter.dataset.exchangeRate) || 0;
+                    const prices = items.map(item => ({ value: Number(item.dataset.companyPriceValue) || 0, currency: item.dataset.companyCurrency }));
+                    priceFilter.dataset.maxUsd = String(Math.max(1, ...prices.map(p => ["USD", "U$D"].includes(p.currency) ? p.value : rate ? p.value / rate : 0)));
+                    priceFilter.dataset.maxArs = String(Math.max(1, ...prices.map(p => ["ARS", "AR$"].includes(p.currency) ? p.value : rate ? p.value * rate : 0)));
+                    priceFilter.innerHTML = `<div class="price-filter-row"><span>Precio</span>
+                        <input type="number" name="priceFrom" min="0" step="any" placeholder="Desde" aria-label="Precio desde" data-price-from-value>
+                        <input type="number" name="priceTo" min="0" step="any" placeholder="Hasta" aria-label="Precio hasta" data-price-to-value>
+                        <select name="priceCurrency" aria-label="Moneda del precio"><option value="USD">USD</option><option value="ARS">ARS</option></select></div>
+                        <div class="price-range-slider"><div class="price-range-line"></div><div class="price-range-fill" data-price-range-fill></div>
+                        <input type="range" min="0" step="any" data-price-from-range aria-label="Deslizar precio desde">
+                        <input type="range" min="0" step="any" data-price-to-range aria-label="Deslizar precio hasta"></div>`;
+                    if (!rate) priceFilter.insertAdjacentHTML("beforeend", "<small>No se pudo obtener la cotización: se usan solo precios de la moneda elegida.</small>");
+                    fullscreenSearch.append(priceFilter);
+                    window.__ventamapWirePriceRangeFilter?.(priceFilter);
+                    priceFilter.addEventListener("input", () => queueMicrotask(applyFilter));
+                    priceFilter.addEventListener("change", () => queueMicrotask(applyFilter));
                     fullscreenSearch.hidden = true;
                     document.body.append(fullscreenSearch);
 
@@ -1038,6 +1098,8 @@ else
 
                     const sync = () => {
                         const isFullscreen = mapCanvas.classList.contains("is-map-fullscreen");
+                        if (isFullscreen) { map?.cooperativeGestures?.disable(); fullscreenTip?.remove(); }
+                        else if (window.matchMedia?.("(max-width: 780px)")?.matches || window.matchMedia?.("(pointer: coarse)")?.matches) map?.cooperativeGestures?.enable();
                         fullscreenTrigger.textContent = isFullscreen ? "Salir de pantalla completa" : "Ver mapa en pantalla completa";
                         fullscreenAction.classList.toggle("is-map-fullscreen-control", isFullscreen);
                         document.body.classList.toggle("map-fullscreen-open", isFullscreen);
@@ -1050,7 +1112,6 @@ else
                         sync();
                         if (!fullscreenSearch.hidden && fullscreenSearchInput) {
                             fullscreenSearchInput.value = searchInput?.value || "";
-                            window.setTimeout(() => fullscreenSearchInput.focus(), 0);
                         }
                         map?.resize?.();
                         window.requestAnimationFrame(() => map?.resize?.());
@@ -1070,7 +1131,6 @@ else
                 }
 
                 searchInput?.addEventListener("input", applyFilter);
-                wireCompanyCatalogFullscreen();
                 viewButtons.forEach(button => {
                     button.addEventListener("click", () => setView(button.dataset.companyCatalogView || "list", { scroll: true }));
                 });

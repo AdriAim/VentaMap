@@ -3514,6 +3514,7 @@
     syncSelectionViewButtons();
     const handleMarkerSelection = marker => {
       if (isMobileMapInteractionContext()) {
+        blurFullscreenMapFilter();
         hoverPopup.remove();
         mobileMarkerCard.innerHTML = buildMapMarkerTapCard(marker);
         mobileMarkerCard.hidden = false;
@@ -3561,10 +3562,10 @@
         let lastTouchSelectionAt = 0;
         // Do not let the map start a pan gesture when a finger begins on a pin.
         markerElement.addEventListener("touchstart", event => {
-          if (isMobileMapInteractionContext()) event.stopPropagation();
+          if (isMobileMapInteractionContext()) { blurFullscreenMapFilter(); event.stopPropagation(); }
         }, { passive: true });
         markerElement.addEventListener("pointerdown", event => {
-          if (event.pointerType === "touch") event.stopPropagation();
+          if (event.pointerType === "touch") { blurFullscreenMapFilter(); event.stopPropagation(); }
         });
         markerElement.addEventListener("click", event => {
           if (Date.now() - lastTouchSelectionAt < 500) {
@@ -3871,6 +3872,15 @@
     }
     return instance;
   }
+
+  function blurFullscreenMapFilter() {
+    const active = document.activeElement;
+    if (!active?.matches(".map-fullscreen-search input, .map-fullscreen-search select")) return;
+    const suppressBlurChange = event => event.stopImmediatePropagation();
+    active.addEventListener("change", suppressBlurChange, { capture: true });
+    try { active.blur(); } finally { active.removeEventListener("change", suppressBlurChange, { capture: true }); }
+  }
+  window.__ventamapBlurFullscreenMapFilter = blurFullscreenMapFilter;
 
   function wireBrowseMapFullscreen(mapElement, onFilterChange = null) {
     if (!mapElement || mapElement.dataset.browseFullscreenBound === "true") return;
@@ -4779,6 +4789,8 @@
     syncInputs();
   }
 
+  window.__ventamapWirePriceRangeFilter = wirePriceRangeFilter;
+
   function wireRadiusRangeFilter(wrapper) {
     if (!wrapper || wrapper.dataset.radiusRangeBound === "true") return;
 
@@ -4949,7 +4961,7 @@
     return `
       <div class="map-mobile-marker-content">
         <img src="${photo}" alt="" />
-        <div class="map-mobile-marker-copy"><strong>${price}</strong><span>${title || "Publicación"}</span><small>${locality}</small>
+        <div class="map-mobile-marker-copy"><strong>${marker?.operationLabel ? `${escapeHtml(marker.operationLabel)} · ` : ""}${price}</strong><span>${title || "Publicación"}</span><small>${locality}</small>
           <button type="button" class="primary-pill compact" data-map-open-preview="true" data-details-url="${detailsUrl}">Mostrar anuncio</button>
         </div>
         <button type="button" class="map-mobile-marker-close" data-map-card-close aria-label="Cerrar anuncio">×</button>

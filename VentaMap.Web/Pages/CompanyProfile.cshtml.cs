@@ -7,7 +7,7 @@ using VentaMap.Services;
 
 namespace VentaMap.Pages;
 
-public class CompanyProfileModel(VentaMapDbContext db, IConfiguration configuration, FavoriteService favoriteService) : PageModel
+public class CompanyProfileModel(VentaMapDbContext db, IConfiguration configuration, FavoriteService favoriteService, ExchangeRateService exchangeRateService) : PageModel
 {
     public ApplicationUser? Company { get; private set; }
     public List<Publication> Publications { get; private set; } = [];
@@ -17,6 +17,7 @@ public class CompanyProfileModel(VentaMapDbContext db, IConfiguration configurat
     public string MapTilesUrlTemplate { get; private set; } = string.Empty;
     public string MapAttributionHtml { get; private set; } = string.Empty;
     public bool DebugEnabled { get; private set; }
+    public decimal? PriceExchangeRate { get; private set; }
 
     public async Task<IActionResult> OnGetAsync(string companySlug)
     {
@@ -60,6 +61,7 @@ public class CompanyProfileModel(VentaMapDbContext db, IConfiguration configurat
             FavoritePublicationIds = await favoriteService.GetFavoritePublicationIdsAsync(currentUserId, Publications.Select(x => x.Id));
         }
 
+        PriceExchangeRate = await exchangeRateService.GetRateAsync();
         MapStyleUrl = configuration["Map:StyleUrl"] ?? string.Empty;
         MapTilesUrlTemplate = configuration["Map:TilesUrlTemplate"] ?? string.Empty;
         MapAttributionHtml = configuration["Map:AttributionHtml"] ?? string.Empty;

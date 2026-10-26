@@ -7075,6 +7075,10 @@ a.map-advertiser-card:focus-visible {
   display: none;
 }
 
+.preview-open .map-fullscreen-search {
+  display: none !important;
+}
+
 .map-fullscreen-open {
   overflow: hidden;
 }
