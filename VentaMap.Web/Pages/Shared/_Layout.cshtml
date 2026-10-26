@@ -12,7 +12,12 @@
     var ogTitle = ViewData["OgTitle"]?.ToString() ?? $"{pageTitle} - VentaMap";
     var metaDescription = ViewData["MetaDescription"]?.ToString()
         ?? "VentaMap es una plataforma de compra venta en Argentina para publicar anuncios clasificados de inmuebles, rodados y mas con precios claros.";
-    var canonicalUrl = $"{Context.Request.Scheme}://{Context.Request.Host}{Context.Request.PathBase}{Context.Request.Path}";
+    var canonicalHost = Context.Request.Host.Host.EndsWith(".ventamap.com.ar", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Context.Request.Host.Host, "ventamap.com.ar", StringComparison.OrdinalIgnoreCase)
+        ? "https://ventamap.com.ar"
+        : $"{Context.Request.Scheme}://{Context.Request.Host}";
+    var canonicalPath = ViewData["CanonicalPath"]?.ToString() ?? Context.Request.Path.Value;
+    var canonicalUrl = $"{canonicalHost}{Context.Request.PathBase}{canonicalPath}";
     var siteUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/";
     var siteOgImageUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/images/ventamap-social-transparent-lighter.png?v=20261011d";
     var requestedOgImageUrl = ViewData["OgImageUrl"]?.ToString()?.Trim();

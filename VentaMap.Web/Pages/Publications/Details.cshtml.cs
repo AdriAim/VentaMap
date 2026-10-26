@@ -24,9 +24,11 @@ public class DetailsModel(VentaMapDbContext db) : PageModel
 
         if (Publication is not null)
         {
+            ViewData["CanonicalPath"] = $"/Publications/Details/{Publication.Id}";
             var shortDescription = string.IsNullOrWhiteSpace(Publication.ShortDescription)
                 ? Publication.Title
                 : Publication.ShortDescription;
+            ViewData["Title"] = shortDescription;
             var companyName = Publication.User?.IsCompany == true
                 ? (string.IsNullOrWhiteSpace(Publication.User.CompanyName)
                     ? Publication.User.Name

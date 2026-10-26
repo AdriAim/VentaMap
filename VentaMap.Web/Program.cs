@@ -269,17 +269,23 @@ app.MapMcp("/mcp").RequireRateLimiting("mcp-public");
 app.MapGet("/MisPublicaciones", () => Results.Redirect("/MisAnuncios", permanent: true));
 app.MapGet("/sitemap.xml", async (HttpContext context, VentaMapDbContext db) =>
 {
-    var baseUrl = $"{context.Request.Scheme}://{context.Request.Host}".TrimEnd('/');
+    var host = context.Request.Host.Host;
+    var baseUrl = string.Equals(host, "ventamap.com.ar", StringComparison.OrdinalIgnoreCase)
+        || host.EndsWith(".ventamap.com.ar", StringComparison.OrdinalIgnoreCase)
+        ? "https://ventamap.com.ar"
+        : $"{context.Request.Scheme}://{context.Request.Host}".TrimEnd('/');
     var urls = new List<(string Location, DateTime? LastModified)>
     {
         ($"{baseUrl}/", null),
         ($"{baseUrl}/Precios", null)
     };
 
+    var now = DateTime.UtcNow;
     var publications = await db.Publications
         .AsNoTracking()
         .Where(publication => publication.IsActive
             && publication.Status == PublicationStatus.Active
+            && (publication.ExpiresAtUtc == null || publication.ExpiresAtUtc > now)
             && (publication.User == null || !publication.User.IsDebugUser))
         .Select(publication => new { publication.Id, publication.CreatedAtUtc })
         .ToListAsync();
