@@ -3427,7 +3427,9 @@
     let selectedMarker = null;
     let selectedMarkerView = selectionViewToggle?.dataset.currentView === "text" ? "text" : "gallery";
     let markerInstances = [];
-    let fullscreenMapFilter = { query: "", operation: "" };
+    let fullscreenMapFilter = { query: "", operation: "", priceFrom: "", priceTo: "", priceCurrency: "" };
+    let fullscreenPriceActive = false;
+    let fullscreenFilterTimer = null;
 
     const syncSelectionViewButtons = () => {
       selectionViewToggle?.querySelectorAll("[data-map-selection-view]").forEach(button => {
@@ -3608,9 +3610,14 @@
       return bounds;
     };
 
-    const filterFullscreenMapMarkers = (query, operation) => {
-      fullscreenMapFilter = { query: query || "", operation: operation || "" };
+    const filterFullscreenMapMarkers = (query, operation, price = null) => {
+      fullscreenMapFilter = { query: query || "", operation: operation || "", ...(price || {}) };
+      fullscreenPriceActive = true;
       renderMapMarkers({ preserveSelection: true });
+      window.clearTimeout(fullscreenFilterTimer);
+      fullscreenFilterTimer = window.setTimeout(() => refreshVisibleMapMarkers({ force: true }).catch(error => {
+        if (error?.name !== "AbortError") console.error(error);
+      }), 400);
     };
 
     const syncBrowseMapViewportWhenReady = callback => {
@@ -3705,6 +3712,13 @@
       const requestId = ++visibleMarkersRequestId;
 
       const endpointUrl = new URL(markersEndpoint, window.location.origin);
+      if (fullscreenPriceActive) {
+        for (const key of ["query", "operation", "priceFrom", "priceTo", "priceCurrency"]) {
+          const value = fullscreenMapFilter[key];
+          if (value) endpointUrl.searchParams.set(key, value);
+          else endpointUrl.searchParams.delete(key);
+        }
+      }
       endpointUrl.searchParams.set("north", String(viewport.north));
       endpointUrl.searchParams.set("south", String(viewport.south));
       endpointUrl.searchParams.set("east", String(viewport.east));
@@ -3864,6 +3878,9 @@
     const sourceOperation = sourceForm?.querySelector('select[name="operation"]');
     const isPropertySearch = String(sourceGroup?.value || "").trim().toLowerCase() === "inmuebles";
     let fullscreenSearch = null;
+    const sourcePrice = sourceForm?.querySelector("[data-price-range-filter]");
+    const priceHome = sourcePrice?.parentElement;
+    const priceNext = sourcePrice?.nextSibling;
     let isMarkerPopupOpen = false;
 
     if (sourceForm && sourceQuery) {
@@ -3883,15 +3900,24 @@
         fullscreenSearch.querySelector(".map-fullscreen-query")?.insertAdjacentElement("afterend", operation);
       }
 
+      const price = sourcePrice;
+      const readPrice = () => ({
+        priceFrom: price?.querySelector('[name="priceFrom"]')?.value || "",
+        priceTo: price?.querySelector('[name="priceTo"]')?.value || "",
+        priceCurrency: price?.querySelector('[name="priceCurrency"]')?.value || ""
+      });
       const filterMap = () => {
         const query = fullscreenSearch.querySelector('input[name="query"]')?.value || "";
-        const operation = fullscreenSearch.querySelector('select[name="operation"]')?.value || "";
+        const operation = fullscreenSearch.querySelector('select[name="operation"]')?.value ?? sourceOperation?.value ?? "";
         if (sourceQuery) sourceQuery.value = query;
-        if (sourceOperation) sourceOperation.value = operation;
-        onFilterChange?.(query, operation);
+        if (sourceOperation && sourceOperation.value !== operation) { sourceOperation.value = operation; sourceOperation.dispatchEvent(new Event("change")); }
+        if (price && !price.querySelector('[name="priceTo"]')?.validity.valid) return;
+        onFilterChange?.(query, operation, readPrice());
       };
       fullscreenSearch.querySelector('input[name="query"]')?.addEventListener("input", filterMap);
       fullscreenSearch.querySelector('select[name="operation"]')?.addEventListener("change", filterMap);
+      price?.addEventListener("input", () => queueMicrotask(filterMap));
+      price?.addEventListener("change", () => queueMicrotask(filterMap));
 
       fullscreenSearch.hidden = true;
       document.body.append(fullscreenSearch);
@@ -3902,7 +3928,11 @@
       trigger.textContent = isFullscreen ? "Salir de pantalla completa" : "Ver mapa en pantalla completa";
       action.classList.toggle("is-map-fullscreen-control", isFullscreen);
       document.body.classList.toggle("map-fullscreen-open", isFullscreen);
-      if (fullscreenSearch) fullscreenSearch.hidden = !isFullscreen || isMarkerPopupOpen;
+      if (fullscreenSearch) {
+        fullscreenSearch.hidden = !isFullscreen || isMarkerPopupOpen;
+        if (sourcePrice && isFullscreen && sourcePrice.parentElement !== fullscreenSearch) fullscreenSearch.append(sourcePrice);
+        else if (sourcePrice && !isFullscreen && priceHome && sourcePrice.parentElement !== priceHome) priceHome.insertBefore(sourcePrice, priceNext);
+      }
     };
 
     const resizeMap = () => {
@@ -4595,6 +4625,16 @@
       }
     };
 
+    const currencySelect = form.querySelector('select[name="priceCurrency"]');
+    const syncDefaultCurrency = () => {
+      if (currencySelect) {
+        const next = groupSelect.value.trim().toLowerCase() === "inmuebles" &&
+          ["", "venta"].includes(String(operationSelect?.value || "").trim().toLowerCase()) ? "USD" : "ARS";
+        if (currencySelect.value !== next) { currencySelect.value = next; currencySelect.dispatchEvent(new Event("change")); }
+      }
+    };
+    operationSelect?.addEventListener("change", syncDefaultCurrency);
+
     syncPlaceholder();
     syncCategories().catch(console.error);
     syncOperations().catch(console.error);
@@ -4613,57 +4653,100 @@
         operationSelect.dataset.selectedOperation = "";
       }
       syncCategories().catch(console.error);
-      syncOperations().catch(console.error);
+      syncOperations().then(() => { syncDefaultCurrency(); form.dispatchEvent(new Event("price-range-refresh")); }).catch(console.error);
     });
   }
 
   function wirePriceRangeFilter(wrapper) {
     if (!wrapper || wrapper.dataset.priceRangeBound === "true") return;
-
-    const max = Number(wrapper.dataset.priceMax || 0) || 100000;
     const fromRange = wrapper.querySelector("[data-price-from-range]");
     const toRange = wrapper.querySelector("[data-price-to-range]");
     const fromValue = wrapper.querySelector("[data-price-from-value]");
     const toValue = wrapper.querySelector("[data-price-to-value]");
-    const fromLabel = wrapper.querySelector("[data-price-from-label]");
-    const toLabel = wrapper.querySelector("[data-price-to-label]");
     const fill = wrapper.querySelector("[data-price-range-fill]");
     if (!fromRange || !toRange || !fromValue || !toValue) return;
-
     wrapper.dataset.priceRangeBound = "true";
-
-    const formatPrice = value => new Intl.NumberFormat("es-AR", {
-      maximumFractionDigits: 0
-    }).format(Math.max(0, Number(value || 0)));
-
-    const sync = source => {
-      let from = Number(fromRange.value || 0);
-      let to = Number(toRange.value || max);
-
-      if (from > to) {
-        if (source === "from") {
-          to = from;
-          toRange.value = String(to);
-        } else {
-          from = to;
-          fromRange.value = String(from);
-        }
-      }
-
-      fromValue.value = String(from);
-      toValue.value = String(to);
-      if (fromLabel) fromLabel.textContent = formatPrice(from);
-      if (toLabel) toLabel.textContent = formatPrice(to);
-
+    const currency = wrapper.querySelector('select[name="priceCurrency"]');
+    const rate = Number(wrapper.dataset.exchangeRate);
+    let previousCurrency = currency?.value || "ARS";
+    const baseMax = code => Math.max(1, Number(code === "USD" ? wrapper.dataset.maxUsd : wrapper.dataset.maxArs) || 1);
+    let max = Math.max(baseMax(previousCurrency), Number(fromValue.value) || 0, Number(toValue.value) || 0);
+    const syncInputs = () => {
+      const from = fromValue.value === "" ? 0 : Math.max(0, Number(fromValue.value) || 0);
+      const to = toValue.value === "" ? max : Math.max(0, Number(toValue.value) || 0);
+      max = Math.max(max, from, to);
+      fromRange.max = toRange.max = String(max);
+      fromRange.value = String(from);
+      toRange.value = String(toValue.value === "" ? max : to);
+      const invalid = fromValue.value !== "" && toValue.value !== "" && from > to;
+      toValue.setCustomValidity(invalid ? "El precio hasta debe ser mayor o igual al precio desde." : "");
       if (fill) {
-        fill.style.left = `${Math.max(0, Math.min(100, (from / max) * 100))}%`;
-        fill.style.right = `${Math.max(0, Math.min(100, 100 - ((to / max) * 100)))}%`;
+        fill.style.left = Math.min(100, from / max * 100) + "%";
+        fill.style.right = Math.max(0, 100 - Number(toRange.value) / max * 100) + "%";
       }
     };
-
-    fromRange.addEventListener("input", () => sync("from"));
-    toRange.addEventListener("input", () => sync("to"));
-    sync();
+    currency?.addEventListener("change", () => {
+      const next = currency.value;
+      if (next === previousCurrency) return;
+      for (const input of [fromValue, toValue]) {
+        if (input.value === "") continue;
+        if (rate > 0) {
+          const converted = previousCurrency === "USD" ? Number(input.value) * rate : Number(input.value) / rate;
+          input.value = String(Math.round(converted * 100) / 100);
+        } else input.value = "";
+      }
+      previousCurrency = next;
+      max = Math.max(baseMax(next), Number(fromValue.value) || 0, Number(toValue.value) || 0);
+      syncInputs();
+    });
+    const form = wrapper.closest("form");
+    const operation = form?.querySelector('select[name="operation"]');
+    const group = form?.querySelector('select[name="group"]');
+    let requestVersion = 0;
+    const refreshRange = async () => {
+      const endpoint = wrapper.dataset.priceRangeEndpoint;
+      if (!endpoint) return;
+      const version = ++requestVersion;
+      const params = new URLSearchParams({ group: group?.value || "", operation: operation?.value || "" });
+      try {
+        const response = await fetch(endpoint + "?" + params, { headers: { "X-Requested-With": "fetch" } });
+        if (!response.ok) return;
+        const result = await response.json();
+        if (version !== requestVersion) return;
+        wrapper.dataset.maxArs = String(result.ars || 1);
+        wrapper.dataset.maxUsd = String(result.usd || 1);
+        max = Math.max(baseMax(previousCurrency), Number(fromValue.value) || 0, Number(toValue.value) || 0);
+        syncInputs();
+      } catch (error) { console.error(error); }
+    };
+    const resetRange = () => {
+      fromValue.value = "";
+      toValue.value = "";
+      max = baseMax(previousCurrency);
+      syncInputs();
+    };
+    operation?.addEventListener("change", () => {
+      resetRange();
+      refreshRange();
+    });
+    group?.addEventListener("change", () => {
+      requestVersion++;
+      resetRange();
+    });
+    form?.addEventListener("price-range-refresh", refreshRange);
+    fromValue.addEventListener("input", syncInputs);
+    toValue.addEventListener("input", syncInputs);
+    fromRange.addEventListener("input", () => {
+      fromValue.value = String(Math.round(Number(fromRange.value)));
+      if (toValue.value !== "" && Number(toValue.value) < Number(fromRange.value)) toValue.value = fromRange.value;
+      syncInputs();
+    });
+    toRange.addEventListener("input", () => {
+      toValue.value = String(Math.round(Number(toRange.value)));
+      if (fromValue.value !== "" && Number(fromValue.value) > Number(toRange.value)) fromValue.value = toRange.value;
+      syncInputs();
+    });
+    syncInputs();
   }
 
   function wireRadiusRangeFilter(wrapper) {

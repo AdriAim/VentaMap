@@ -6,6 +6,10 @@
             ? "Texto"
             : "Galeria";
     var currentGroup = string.IsNullOrWhiteSpace(Model.Group) ? "Inmuebles" : Model.Group;
+    var requestedCurrency = Context?.Request.Query["priceCurrency"].ToString();
+    var priceCurrency = requestedCurrency == "ARS" || requestedCurrency == "USD"
+        ? requestedCurrency
+        : string.Equals(currentGroup, "Inmuebles", StringComparison.OrdinalIgnoreCase) && (string.IsNullOrWhiteSpace(Model.Operation) || string.Equals(Model.Operation, "Venta", StringComparison.OrdinalIgnoreCase)) ? "USD" : "ARS";
     var previousPage = Math.Max(1, Model.Page - 1);
     var nextPage = Math.Min(Math.Max(1, Model.TotalPages), Model.Page + 1);
     var searchPath = "/Buscar";
@@ -37,6 +41,7 @@
         baseQueryParts.Add($"categoryId={Model.SelectedCategoryId.Value}");
     }
 
+    baseQueryParts.Add($"priceCurrency={priceCurrency}");
     if (Model.PriceFrom.HasValue)
     {
         baseQueryParts.Add($"priceFrom={Uri.EscapeDataString(Model.PriceFrom.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))}");
@@ -219,19 +224,23 @@
         <details class="search-advanced-panel">
             <summary class="search-advanced-summary">Mas filtros</summary>
             <div class="search-advanced-body">
-                <div class="price-range-filter" data-price-range-filter data-price-max="@priceSliderMax.ToString(System.Globalization.CultureInfo.InvariantCulture)">
-                    <div class="price-range-head">
+                <div class="price-range-filter price-filter-compact" data-price-range-filter data-price-range-endpoint="/api/content/price-range" data-price-max="@priceSliderMax.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-max-ars="@(((decimal)ViewData["PriceMaxArs"]!).ToString(System.Globalization.CultureInfo.InvariantCulture))" data-max-usd="@(((decimal)ViewData["PriceMaxUsd"]!).ToString(System.Globalization.CultureInfo.InvariantCulture))" data-exchange-rate="@((ViewData["PriceExchangeRate"] as decimal?)?.ToString(System.Globalization.CultureInfo.InvariantCulture))">
+                    <div class="price-filter-row">
                         <span>Precio</span>
-                        <strong><span data-price-from-label>@priceFromValue.ToString("0")</span> - <span data-price-to-label>@priceToValue.ToString("0")</span></strong>
+                        <input type="number" name="priceFrom" min="0" step="any" placeholder="Desde" aria-label="Precio desde" data-price-from-value value="@(Model.PriceFrom?.ToString(System.Globalization.CultureInfo.InvariantCulture))" />
+                        <input type="number" name="priceTo" min="0" step="any" placeholder="Hasta" aria-label="Precio hasta" data-price-to-value value="@(Model.PriceTo?.ToString(System.Globalization.CultureInfo.InvariantCulture))" />
+                        <select name="priceCurrency" aria-label="Moneda del precio">
+                            <option value="USD" selected="@(priceCurrency == "USD")">USD</option>
+                            <option value="ARS" selected="@(priceCurrency == "ARS")">ARS</option>
+                        </select>
                     </div>
-                    <input type="hidden" name="priceFrom" value="@priceFromValue.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-price-from-value />
-                    <input type="hidden" name="priceTo" value="@priceToValue.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-price-to-value />
                     <div class="price-range-slider">
                         <div class="price-range-line"></div>
                         <div class="price-range-fill" data-price-range-fill></div>
-                        <input type="range" min="0" max="@priceSliderMax.ToString(System.Globalization.CultureInfo.InvariantCulture)" step="1000" value="@priceFromValue.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-price-from-range aria-label="Precio desde" />
-                        <input type="range" min="0" max="@priceSliderMax.ToString(System.Globalization.CultureInfo.InvariantCulture)" step="1000" value="@priceToValue.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-price-to-range aria-label="Precio hasta" />
+                        <input type="range" min="0" max="@priceSliderMax.ToString(System.Globalization.CultureInfo.InvariantCulture)" step="any" value="@priceFromValue.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-price-from-range aria-label="Deslizar precio desde" />
+                        <input type="range" min="0" max="@priceSliderMax.ToString(System.Globalization.CultureInfo.InvariantCulture)" step="any" value="@priceToValue.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-price-to-range aria-label="Deslizar precio hasta" />
                     </div>
+                    @if (ViewData["ExchangeRateUnavailable"] is true) { <small>No se pudo obtener la cotización: se usan solo precios de la moneda elegida.</small> }
                 </div>
                 <div class="price-range-filter radius-range-filter"
                      data-radius-range-filter

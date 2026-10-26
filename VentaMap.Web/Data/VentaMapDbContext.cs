@@ -25,6 +25,7 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
     public DbSet<PublicationView> PublicationViews => Set<PublicationView>();
     public DbSet<SiteVisit> SiteVisits => Set<SiteVisit>();
     public DbSet<SiteSuggestion> SiteSuggestions => Set<SiteSuggestion>();
+    public DbSet<ExchangeRateQuote> ExchangeRateQuotes => Set<ExchangeRateQuote>();
     public DbSet<VentaMapParameter> VentaMapParameters => Set<VentaMapParameter>();
     public DbSet<VerifiedOperation> VerifiedOperations => Set<VerifiedOperation>();
     public DbSet<OperationReview> OperationReviews => Set<OperationReview>();
@@ -34,6 +35,8 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<ExchangeRateQuote>().Property(x => x.Rate).HasPrecision(18, 4);
+        modelBuilder.Entity<ExchangeRateQuote>().HasIndex(x => x.ObtainedAtUtc);
         modelBuilder.Entity<PublicationRepublication>()
             .HasIndex(x => x.RepublishedAtUtc);
 

@@ -47,25 +47,21 @@ public class PublicationService(
         return items.CountAsync();
     }
 
-    public async Task<decimal> GetActiveMaxPriceAsync(PublicationGroup? group, bool includeDebug = false)
+    public async Task<(decimal Ars, decimal Usd)> GetActiveMaxPricesAsync(PublicationGroup? group, string? operation, bool includeDebug = false)
     {
         var now = DateTime.UtcNow;
-        var items = db.Publications
-            .AsNoTracking()
-            .Where(x => x.IsActive
-                && x.Status != PublicationStatus.Sold
-                && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now));
-
+        var items = db.Publications.AsNoTracking().Where(x => x.IsActive && x.Status != PublicationStatus.Sold && (x.ExpiresAtUtc == null || x.ExpiresAtUtc > now));
         items = ApplyDebugVisibility(items, includeDebug);
-
-        if (group is not null)
+        if (group is not null) items = items.Where(x => x.Group == group.Value);
+        if (!string.IsNullOrWhiteSpace(operation))
         {
-            items = items.Where(x => x.Group == group.Value);
+            var operationType = PublicationOperationTypeExtensions.ParseOrNull(operation.Trim());
+            items = operationType is null ? items.Where(_ => false) : items.Where(x => x.OperationType == operationType.Value);
         }
-
-        return await items.AnyAsync()
-            ? await items.MaxAsync(x => x.Price)
-            : 1000000m;
+        var prices = await items.Where(x => x.Currency == "ARS" || x.Currency == "AR$" || x.Currency == "USD" || x.Currency == "U$D")
+            .GroupBy(x => x.Currency).Select(g => new { Currency = g.Key, Max = g.Max(x => x.Price) }).ToListAsync();
+        return (prices.Where(x => x.Currency == "ARS" || x.Currency == "AR$").Select(x => x.Max).DefaultIfEmpty(0).Max(),
+            prices.Where(x => x.Currency == "USD" || x.Currency == "U$D").Select(x => x.Max).DefaultIfEmpty(0).Max());
     }
 
     public Task<List<Publication>> SearchActivePublicationsPageAsync(PublicationGroup? group, string? query, int skip, int take, bool includeDebug = false)
@@ -882,7 +878,9 @@ public class PublicationService(
 
         if (filters.PriceFrom is decimal priceFrom)
         {
-            items = items.Where(x => x.Price >= priceFrom);
+            if (filters.PriceCurrency == null) items = items.Where(x => x.Price >= priceFrom);
+            else { var other = filters.ExchangeRate is decimal r ? (filters.PriceCurrency == "ARS" ? priceFrom / r : priceFrom * r) : decimal.MaxValue;
+                items = filters.PriceCurrency == "ARS" ? items.Where(x => (x.Currency == "ARS" || x.Currency == "AR$") ? x.Price >= priceFrom : (x.Currency == "USD" || x.Currency == "U$D") && x.Price >= other) : items.Where(x => (x.Currency == "USD" || x.Currency == "U$D") ? x.Price >= priceFrom : (x.Currency == "ARS" || x.Currency == "AR$") && x.Price >= other); }
         }
 
         if (!string.IsNullOrWhiteSpace(filters.Operation))
@@ -900,7 +898,9 @@ public class PublicationService(
 
         if (filters.PriceTo is decimal priceTo)
         {
-            items = items.Where(x => x.Price <= priceTo);
+            if (filters.PriceCurrency == null) items = items.Where(x => x.Price <= priceTo);
+            else { var other = filters.ExchangeRate is decimal r ? (filters.PriceCurrency == "ARS" ? priceTo / r : priceTo * r) : -1m;
+                items = filters.PriceCurrency == "ARS" ? items.Where(x => (x.Currency == "ARS" || x.Currency == "AR$") ? x.Price <= priceTo : (x.Currency == "USD" || x.Currency == "U$D") && x.Price <= other) : items.Where(x => (x.Currency == "USD" || x.Currency == "U$D") ? x.Price <= priceTo : (x.Currency == "ARS" || x.Currency == "AR$") && x.Price <= other); }
         }
 
         if (filters.North.HasValue && filters.South.HasValue && filters.East.HasValue && filters.West.HasValue)

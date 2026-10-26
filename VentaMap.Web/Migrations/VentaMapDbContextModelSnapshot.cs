@@ -22,6 +22,18 @@ namespace VentaMap.Migrations
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
 
+            modelBuilder.Entity("VentaMap.Models.ExchangeRateQuote", b =>
+                {
+                    b.Property<long>("Id").ValueGeneratedOnAdd().HasColumnType("bigint");
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+                    b.Property<DateTime>("ObtainedAtUtc").HasColumnType("datetime(6)");
+                    b.Property<decimal>("Rate").HasPrecision(18, 4).HasColumnType("decimal(18,4)");
+                    b.Property<string>("Source").IsRequired().HasMaxLength(30).HasColumnType("varchar(30)");
+                    b.HasKey("Id");
+                    b.HasIndex("ObtainedAtUtc");
+                    b.ToTable("ExchangeRateQuotes");
+                });
+
             modelBuilder.Entity("VentaMap.Models.ApplicationUser", b =>
                 {
                     b.Property<int>("Id")

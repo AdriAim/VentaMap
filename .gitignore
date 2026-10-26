@@ -41,3 +41,7 @@ artifacts/r2-seed-vertical/
 /Publicidad/Facebook-Instagram
 /assets/banners
 /output/tiktok
+
+# Registros locales de despliegue de Codex.
+/.codex-deploy-*.log
+/.codex-deploy-*.err

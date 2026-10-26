@@ -27,6 +27,10 @@
         queryParts.Add($"categoryId={Model.CategoryId.Value}");
     }
 
+    if (Request.Query["priceCurrency"] == "ARS" || Request.Query["priceCurrency"] == "USD")
+    {
+        queryParts.Add($"priceCurrency={Request.Query["priceCurrency"]}");
+    }
     if (Model.PriceFrom.HasValue)
     {
         queryParts.Add($"priceFrom={Uri.EscapeDataString(Model.PriceFrom.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))}");

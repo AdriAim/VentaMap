@@ -174,6 +174,8 @@ builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 builder.Services.AddSingleton<CloudflareR2ImageStorageService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PublicationService>();
+builder.Services.AddSingleton<ExchangeRateService>();
+builder.Services.AddHostedService<ExchangeRateWorker>();
 builder.Services.AddScoped<McpListingTools>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<McpDailyQueryLimitService>();
@@ -389,6 +391,7 @@ static async Task EnsureDatabaseSchemaAsync(VentaMapDbContext db, IWebHostEnviro
             await db.Database.MigrateAsync();
         }
 
+        await EnsureExchangeRateSchemaAsync(connection);
         await EnsurePublicationCategoryFieldSchemaAsync(connection);
         await EnsurePublicationMediaSchemaAsync(connection);
         await EnsurePublicationExpirationSchemaAsync(connection);
@@ -409,6 +412,20 @@ static async Task EnsureDatabaseSchemaAsync(VentaMapDbContext db, IWebHostEnviro
             await connection.CloseAsync();
         }
     }
+}
+
+static async Task EnsureExchangeRateSchemaAsync(System.Data.Common.DbConnection connection)
+{
+    await ExecuteNonQueryAsync(connection, """
+        CREATE TABLE IF NOT EXISTS ExchangeRateQuotes (
+            Id bigint NOT NULL AUTO_INCREMENT,
+            Rate decimal(18,4) NOT NULL,
+            Source varchar(30) NOT NULL,
+            ObtainedAtUtc datetime(6) NOT NULL,
+            PRIMARY KEY (Id),
+            INDEX IX_ExchangeRateQuotes_ObtainedAtUtc (ObtainedAtUtc)
+        ) CHARACTER SET utf8mb4;
+        """);
 }
 
 static async Task<bool> HistoryHasRowsAsync(System.Data.Common.DbConnection connection)

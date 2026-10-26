@@ -16,6 +16,7 @@ namespace VentaMap.Controllers;
 [Route("api/content")]
 public partial class ContentController(
     PublicationService publicationService,
+    ExchangeRateService exchangeRateService,
     PublicationAnalyticsService publicationAnalyticsService,
     PublicationGroupTypeService publicationGroupTypeService,
     PublicationCategoryService publicationCategoryService,
@@ -60,7 +61,17 @@ public partial class ContentController(
         var favoritePublicationIds = new HashSet<int>();
         var favoriteLists = new List<FavoriteListSummaryViewModel>();
         var filters = BuildSearchFilters(priceFrom, priceTo, Request.Query);
-        var priceSliderMax = NormalizePriceSliderMax(await publicationService.GetActiveMaxPriceAsync(selectedGroup, includeDebug), filters);
+        if (filters.PriceCurrency != null && (filters.PriceFrom.HasValue || filters.PriceTo.HasValue)) { filters.ExchangeRate = await exchangeRateService.GetRateAsync(); ViewData["ExchangeRateUnavailable"] = filters.ExchangeRate == null; }
+        filters.ExchangeRate ??= await exchangeRateService.GetRateAsync();
+        var maxima = await publicationService.GetActiveMaxPricesAsync(selectedGroup, filters.Operation, includeDebug);
+        var selectedPriceCurrency = filters.PriceCurrency ?? (selectedGroup == PublicationGroup.Inmuebles && (string.IsNullOrWhiteSpace(filters.Operation) || string.Equals(filters.Operation, "Venta", StringComparison.OrdinalIgnoreCase)) ? "USD" : "ARS");
+        var arsMax = Math.Max(maxima.Ars, filters.ExchangeRate is decimal rate ? maxima.Usd * rate : 0m);
+        var usdMax = Math.Max(maxima.Usd, filters.ExchangeRate is decimal usdRate ? maxima.Ars / usdRate : 0m);
+        ViewData["PriceMaxArs"] = Math.Max(arsMax, 1m);
+        ViewData["PriceMaxUsd"] = Math.Max(usdMax, 1m);
+        ViewData["PriceExchangeRate"] = filters.ExchangeRate;
+        ViewData["ExchangeRateUnavailable"] = filters.ExchangeRate == null;
+        var priceSliderMax = NormalizePriceSliderMax(selectedPriceCurrency == "USD" ? usdMax : arsMax, filters);
         var requireLocalitySelection = effectiveLocality is null;
         var requiredFields = await GetRequiredFieldsForSearchGroupAsync(selectedGroup);
         var categoryOptions = selectedGroup is null
@@ -264,7 +275,17 @@ public partial class ContentController(
         var favoritePublicationIds = new HashSet<int>();
         var favoriteLists = new List<FavoriteListSummaryViewModel>();
         var filters = BuildSearchFilters(priceFrom, priceTo, Request.Query);
-        var priceSliderMax = NormalizePriceSliderMax(await publicationService.GetActiveMaxPriceAsync(selectedGroup, includeDebug), filters);
+        if (filters.PriceCurrency != null && (filters.PriceFrom.HasValue || filters.PriceTo.HasValue)) { filters.ExchangeRate = await exchangeRateService.GetRateAsync(); ViewData["ExchangeRateUnavailable"] = filters.ExchangeRate == null; }
+        filters.ExchangeRate ??= await exchangeRateService.GetRateAsync();
+        var maxima = await publicationService.GetActiveMaxPricesAsync(selectedGroup, filters.Operation, includeDebug);
+        var selectedPriceCurrency = filters.PriceCurrency ?? (selectedGroup == PublicationGroup.Inmuebles && (string.IsNullOrWhiteSpace(filters.Operation) || string.Equals(filters.Operation, "Venta", StringComparison.OrdinalIgnoreCase)) ? "USD" : "ARS");
+        var arsMax = Math.Max(maxima.Ars, filters.ExchangeRate is decimal rate ? maxima.Usd * rate : 0m);
+        var usdMax = Math.Max(maxima.Usd, filters.ExchangeRate is decimal usdRate ? maxima.Ars / usdRate : 0m);
+        ViewData["PriceMaxArs"] = Math.Max(arsMax, 1m);
+        ViewData["PriceMaxUsd"] = Math.Max(usdMax, 1m);
+        ViewData["PriceExchangeRate"] = filters.ExchangeRate;
+        ViewData["ExchangeRateUnavailable"] = filters.ExchangeRate == null;
+        var priceSliderMax = NormalizePriceSliderMax(selectedPriceCurrency == "USD" ? usdMax : arsMax, filters);
         var requireLocalitySelection = effectiveLocality is null;
         var requiredFields = await GetRequiredFieldsForSearchGroupAsync(selectedGroup);
         var categoryOptions = selectedGroup is null
@@ -448,6 +469,19 @@ public partial class ContentController(
         return PartialView("~/Views/Content/Browse.cshtml", model);
     }
 
+    [HttpGet("price-range")]
+    public async Task<IActionResult> PriceRange([FromQuery] string? group, [FromQuery] string? operation)
+    {
+        var includeDebug = await CanViewDebugPublicationsAsync();
+        var maxima = await publicationService.GetActiveMaxPricesAsync(ParseGroupFilter(group), operation, includeDebug);
+        var rate = await exchangeRateService.GetRateAsync();
+        return Ok(new {
+            ars = Math.Max(maxima.Ars, rate is decimal r ? maxima.Usd * r : 0m),
+            usd = Math.Max(maxima.Usd, rate is decimal usdRate ? maxima.Ars / usdRate : 0m),
+            rate
+        });
+    }
+
     [HttpGet("gallery-items")]
     public async Task<IActionResult> GalleryItems([FromQuery] string? group = "Inmuebles", [FromQuery] string? query = null, [FromQuery] int? categoryId = null, [FromQuery] decimal? priceFrom = null, [FromQuery] decimal? priceTo = null, [FromQuery] int offset = 0, [FromQuery] int limit = 20)
     {
@@ -457,6 +491,7 @@ public partial class ContentController(
         var safeOffset = Math.Max(0, offset);
         var safeLimit = Math.Clamp(limit, 1, 60);
         var filters = BuildSearchFilters(priceFrom, priceTo, Request.Query);
+        if (filters.PriceCurrency != null && (filters.PriceFrom.HasValue || filters.PriceTo.HasValue)) { filters.ExchangeRate = await exchangeRateService.GetRateAsync(); ViewData["ExchangeRateUnavailable"] = filters.ExchangeRate == null; }
         var items = await publicationService.SearchActivePublicationsPageAsync(
             selectedGroup,
             query,
@@ -521,6 +556,7 @@ public partial class ContentController(
         var effectiveLocality = await navigationLocalityService.GetEffectiveLocalityAsync(HttpContext);
         var selectedGroup = ParseGroupFilter(group);
         var filters = BuildSearchFilters(priceFrom, priceTo, Request.Query);
+        if (filters.PriceCurrency != null && (filters.PriceFrom.HasValue || filters.PriceTo.HasValue)) { filters.ExchangeRate = await exchangeRateService.GetRateAsync(); ViewData["ExchangeRateUnavailable"] = filters.ExchangeRate == null; }
         filters.North = north;
         filters.South = south;
         filters.East = east;
@@ -1725,6 +1761,7 @@ public partial class ContentController(
                 ? null
                 : query["operation"].ToString().Trim(),
             CategoryId = int.TryParse(query["categoryId"], out var categoryId) && categoryId > 0 ? categoryId : null,
+            PriceCurrency = query["priceCurrency"] == "ARS" ? "ARS" : query["priceCurrency"] == "USD" ? "USD" : null,
             PriceFrom = priceFrom is >= 0 ? priceFrom : null,
             PriceTo = priceTo is >= 0 ? priceTo : null,
             RadiusKm = NormalizeRadiusKm(query),
@@ -1786,6 +1823,8 @@ public partial class ContentController(
             CategoryId = filters.CategoryId,
             PriceFrom = filters.PriceFrom,
             PriceTo = filters.PriceTo,
+            PriceCurrency = filters.PriceCurrency,
+            ExchangeRate = filters.ExchangeRate,
             RadiusKm = radiusKm,
             North = filters.North,
             South = filters.South,
@@ -1917,6 +1956,7 @@ public partial class ContentController(
             parts.Add($"categoryId={categoryId.ToString(CultureInfo.InvariantCulture)}");
         }
 
+        if (filters.PriceCurrency != null) parts.Add($"priceCurrency={filters.PriceCurrency}");
         if (filters.PriceFrom is decimal priceFrom)
         {
             parts.Add($"priceFrom={Uri.EscapeDataString(priceFrom.ToString(CultureInfo.InvariantCulture))}");
