@@ -832,7 +832,8 @@ public class PublicationService(
                     + ((x.Longitude ?? 0d) - longitude) * ((x.Longitude ?? 0d) - longitude) * longitudeScale * longitudeScale
                 : double.MaxValue)
             .ThenByDescending(x => x.Featured)
-            .ThenByDescending(x => x.CreatedAtUtc);
+            .ThenByDescending(x => x.CreatedAtUtc)
+            .ThenByDescending(x => x.Id);
     }
 
     private static IQueryable<Publication> ApplyRadiusFilter(

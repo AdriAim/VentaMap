@@ -8179,6 +8179,7 @@
       hasMore: true,
       loading: false,
       observer: null,
+      mixSeed: Math.floor(Math.random() * 2147483647),
       usingExpandedRadius: false
     };
 
@@ -8221,6 +8222,7 @@
         const url = new URL(state.endpoint, window.location.origin);
         url.searchParams.set("offset", String(state.offset));
         url.searchParams.set("limit", String(limit));
+        url.searchParams.set("mixSeed", String(state.mixSeed));
 
         const response = await fetch(url.toString(), {
           headers: { "X-Requested-With": "fetch" }

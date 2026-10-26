@@ -483,7 +483,7 @@ public partial class ContentController(
     }
 
     [HttpGet("gallery-items")]
-    public async Task<IActionResult> GalleryItems([FromQuery] string? group = "Inmuebles", [FromQuery] string? query = null, [FromQuery] int? categoryId = null, [FromQuery] decimal? priceFrom = null, [FromQuery] decimal? priceTo = null, [FromQuery] int offset = 0, [FromQuery] int limit = 20)
+    public async Task<IActionResult> GalleryItems([FromQuery] string? group = "Inmuebles", [FromQuery] string? query = null, [FromQuery] int? categoryId = null, [FromQuery] decimal? priceFrom = null, [FromQuery] decimal? priceTo = null, [FromQuery] int offset = 0, [FromQuery] int limit = 20, [FromQuery] int mixSeed = 0)
     {
         var includeDebug = await CanViewDebugPublicationsAsync();
         var effectiveLocality = await navigationLocalityService.GetEffectiveLocalityAsync(HttpContext);
@@ -492,7 +492,10 @@ public partial class ContentController(
         var safeLimit = Math.Clamp(limit, 1, 60);
         var filters = BuildSearchFilters(priceFrom, priceTo, Request.Query);
         if (filters.PriceCurrency != null && (filters.PriceFrom.HasValue || filters.PriceTo.HasValue)) { filters.ExchangeRate = await exchangeRateService.GetRateAsync(); ViewData["ExchangeRateUnavailable"] = filters.ExchangeRate == null; }
-        var items = await publicationService.SearchActivePublicationsPageAsync(
+        var items = selectedGroup is null
+            ? await SearchMixedGalleryPageAsync(query, safeOffset, safeLimit + 1,
+                effectiveLocality?.Latitude, effectiveLocality?.Longitude, filters, includeDebug, mixSeed)
+            : await publicationService.SearchActivePublicationsPageAsync(
             selectedGroup,
             query,
             safeOffset,
@@ -507,7 +510,7 @@ public partial class ContentController(
         var expandedRadiusTotalResults = 0;
         var payloadItems = items.Take(safeLimit).ToList();
         var hasMore = items.Count > safeLimit;
-        if (selectedGroup == PublicationGroup.Inmuebles && insideCount < 50
+        if (insideCount < 100
             && effectiveLocality?.Latitude != null && effectiveLocality?.Longitude != null
             && filters.RadiusKm is > 0 and < ExpandedSearchRadiusKm
             && filters.North is null && filters.South is null && filters.East is null && filters.West is null)
@@ -557,6 +560,38 @@ public partial class ContentController(
             expandedRadiusKm = ExpandedSearchRadiusKm,
             expandedRadiusTotalResults
         });
+    }
+
+    private async Task<List<Publication>> SearchMixedGalleryPageAsync(
+        string? query, int offset, int take, double? latitude, double? longitude,
+        PublicationSearchFilters filters, bool includeDebug, int seed)
+    {
+        var queues = new List<Queue<Publication>>();
+        var requestedCount = (int)Math.Min((long)offset + take, int.MaxValue);
+        foreach (var group in Enum.GetValues<PublicationGroup>())
+        {
+            var publications = await publicationService.SearchActivePublicationsPageAsync(
+                group, query, 0, requestedCount, latitude, longitude, filters, includeDebug);
+            if (publications.Count > 0)
+                queues.Add(new Queue<Publication>(publications));
+        }
+
+        var random = new Random(seed);
+        var result = new List<Publication>(take);
+        var position = 0;
+        while (queues.Count > 0 && result.Count < take)
+        {
+            foreach (var queue in queues.OrderBy(_ => random.Next()).ToList())
+            {
+                var publication = queue.Dequeue();
+                if (position++ >= offset)
+                    result.Add(publication);
+                if (result.Count == take)
+                    break;
+            }
+            queues.RemoveAll(queue => queue.Count == 0);
+        }
+        return result;
     }
 
     [HttpGet("map-markers")]
