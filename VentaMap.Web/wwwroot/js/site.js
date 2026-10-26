@@ -3872,6 +3872,21 @@
     if (!action || !trigger || !mapElement._mapInstance) return;
 
     mapElement.dataset.browseFullscreenBound = "true";
+    let fullscreenTip = null;
+    if (isMobileMapInteractionContext()) {
+      const tipKey = "ventamap.map.fullscreenTipSeen";
+      let seen = false;
+      try { seen = localStorage.getItem(tipKey) === "1"; } catch { }
+      if (!seen) {
+        fullscreenTip = document.createElement("div");
+        fullscreenTip.className = "map-fullscreen-tip";
+        fullscreenTip.setAttribute("role", "note");
+        fullscreenTip.innerHTML = '<span>Para una mejor experiencia de búsqueda utiliza pantalla completa</span><button type="button" aria-label="Cerrar aviso">×</button>';
+        fullscreenTip.querySelector("button")?.addEventListener("click", () => fullscreenTip?.remove());
+        action.append(fullscreenTip);
+        try { localStorage.setItem(tipKey, "1"); } catch { }
+      }
+    }
     const sourceForm = document.querySelector("[data-browse-search-form], #search-panel form[data-group-aware-search-form='true']");
     const sourceQuery = sourceForm?.querySelector('input[name="query"]');
     const sourceGroup = sourceForm?.querySelector('select[name="group"]');
@@ -3925,6 +3940,9 @@
 
     const sync = () => {
       const isFullscreen = mapElement.classList.contains("is-map-fullscreen");
+      const cooperative = mapElement._mapInstance?.cooperativeGestures;
+      if (isFullscreen) { cooperative?.disable(); fullscreenTip?.remove(); }
+      else if (isMobileMapInteractionContext()) cooperative?.enable();
       trigger.textContent = isFullscreen ? "Salir de pantalla completa" : "Ver mapa en pantalla completa";
       action.classList.toggle("is-map-fullscreen-control", isFullscreen);
       document.body.classList.toggle("map-fullscreen-open", isFullscreen);
@@ -3992,6 +4010,9 @@
     const trigger = actions.querySelector("[data-map-fullscreen-trigger]");
     const syncTriggerLabel = () => {
       const isFullscreen = document.fullscreenElement === mapElement || mapElement.classList.contains("is-map-fullscreen");
+      const cooperative = mapElement._mapInstance?.cooperativeGestures;
+      if (isFullscreen) cooperative?.disable();
+      else if (isMobileMapInteractionContext()) cooperative?.enable();
       if (trigger) {
         trigger.textContent = isFullscreen ? "Salir de pantalla completa" : "Ver mapa a pantalla completa";
       }
