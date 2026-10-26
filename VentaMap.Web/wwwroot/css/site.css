@@ -8678,3 +8678,14 @@ textarea.input-validation-error,
   .map-fullscreen-tip::after { content: ""; position: absolute; top: 100%; right: 2rem; border: 7px solid transparent; border-top-color: #fff1b3; }
   .map-fullscreen-tip button { flex: none; border: 0; padding: 0; background: transparent; color: inherit; font-size: 1.2rem; line-height: 1; cursor: pointer; }
 }
+
+.map-mobile-marker-card { position: absolute; z-index: 8; left: 0.6rem; right: 0.6rem; bottom: 0.6rem; border-radius: 16px; background: #fff; box-shadow: 0 6px 24px rgba(18,22,31,.25); }
+.map-mobile-marker-card[hidden] { display: none; }
+.map-canvas.is-map-fullscreen .map-mobile-marker-card { bottom: calc(max(0.85rem, env(safe-area-inset-bottom)) + 3.2rem); }
+.map-mobile-marker-content { display: flex; align-items: flex-start; gap: 0.7rem; padding: 0.65rem; }
+.map-mobile-marker-content img { width: 76px; height: 90px; object-fit: cover; border-radius: 10px; flex: none; }
+.map-mobile-marker-copy { flex: 1; min-width: 0; display: grid; gap: 0.15rem; font-size: 0.82rem; line-height: 1.2; }
+.map-mobile-marker-copy span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.map-mobile-marker-copy small { color: var(--muted); }
+.map-mobile-marker-copy .primary-pill { justify-self: start; margin-top: 0.2rem; }
+.map-mobile-marker-close { flex: none; border: 0; background: transparent; color: var(--ink); font-size: 1.4rem; line-height: 1; padding: 0 0.2rem; }

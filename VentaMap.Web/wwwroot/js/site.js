@@ -3417,13 +3417,16 @@
       offset: 18,
       className: "map-hover-popup"
     });
-    const mobileTapPopup = new sdk.Popup({
-      closeButton: false,
-      closeOnClick: true,
-      offset: 20,
-      className: "map-tap-popup"
+    const mobileMarkerCard = document.createElement("div");
+    mobileMarkerCard.className = "map-mobile-marker-card";
+    mobileMarkerCard.hidden = true;
+    mapElement.append(mobileMarkerCard);
+    mobileMarkerCard.addEventListener("click", event => {
+      if (event.target.closest("[data-map-card-close]")) {
+        mobileMarkerCard.hidden = true;
+        mobileMarkerCard.replaceChildren();
+      }
     });
-    mobileTapPopup.on("close", () => mapElement.dispatchEvent(new CustomEvent("ventamap:map-popup-close")));
     let selectedMarker = null;
     let selectedMarkerView = selectionViewToggle?.dataset.currentView === "text" ? "text" : "gallery";
     let markerInstances = [];
@@ -3512,11 +3515,8 @@
     const handleMarkerSelection = marker => {
       if (isMobileMapInteractionContext()) {
         hoverPopup.remove();
-        mobileTapPopup
-          .setLngLat([marker.lng, marker.lat])
-          .setHTML(buildMapMarkerTapCard(marker))
-          .addTo(instance);
-        mapElement.dispatchEvent(new CustomEvent("ventamap:map-popup-open"));
+        mobileMarkerCard.innerHTML = buildMapMarkerTapCard(marker);
+        mobileMarkerCard.hidden = false;
         return;
       }
 
@@ -3541,7 +3541,8 @@
         return matchesQuery && matchesOperation;
       });
       hoverPopup.remove();
-      mobileTapPopup.remove();
+      mobileMarkerCard.hidden = true;
+      mobileMarkerCard.replaceChildren();
       markerInstances.forEach(markerInstance => markerInstance.remove());
       markerInstances = [];
 
@@ -3558,6 +3559,13 @@
           .addTo(instance);
         const markerElement = markerInstance.getElement();
         let lastTouchSelectionAt = 0;
+        // Do not let the map start a pan gesture when a finger begins on a pin.
+        markerElement.addEventListener("touchstart", event => {
+          if (isMobileMapInteractionContext()) event.stopPropagation();
+        }, { passive: true });
+        markerElement.addEventListener("pointerdown", event => {
+          if (event.pointerType === "touch") event.stopPropagation();
+        });
         markerElement.addEventListener("click", event => {
           if (Date.now() - lastTouchSelectionAt < 500) {
             event.preventDefault();
@@ -3583,6 +3591,7 @@
           handleMarkerSelection(marker);
         });
         markerElement.addEventListener("mouseenter", () => {
+          if (isMobileMapInteractionContext()) return;
           hoverPopup
             .setLngLat([marker.lng, marker.lat])
             .setHTML(buildMapMarkerHoverCard(marker))
@@ -4933,16 +4942,17 @@
 
   function buildMapMarkerTapCard(marker) {
     const title = escapeHtml(getGalleryDescription(marker));
-    const price = escapeHtml(marker?.price || "");
+    const price = escapeHtml(marker?.price || "Precio sin informar");
+    const locality = escapeHtml(marker?.locality || "");
+    const photo = escapeAttribute((Array.isArray(marker?.images) && marker.images[0]) || marker?.image || "/images/logo4.png");
     const detailsUrl = escapeAttribute(buildPublicationApiDetailsUrl(marker?.id || ""));
-
     return `
-      <div class="map-tap-card">
-        <strong>${title || "Publicacion"}</strong>
-        <span>${price || "Precio sin informar"}</span>
-        <button type="button" class="primary-pill compact" data-map-open-preview="true" data-details-url="${detailsUrl}">
-          Mostrar anuncio
-        </button>
+      <div class="map-mobile-marker-content">
+        <img src="${photo}" alt="" />
+        <div class="map-mobile-marker-copy"><strong>${price}</strong><span>${title || "Publicación"}</span><small>${locality}</small>
+          <button type="button" class="primary-pill compact" data-map-open-preview="true" data-details-url="${detailsUrl}">Mostrar anuncio</button>
+        </div>
+        <button type="button" class="map-mobile-marker-close" data-map-card-close aria-label="Cerrar anuncio">×</button>
       </div>
     `;
   }
