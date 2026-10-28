@@ -5079,18 +5079,31 @@
     try {
       return await new Promise((resolve, reject) => {
         const video = document.createElement("video");
+        const metadataTimeoutMs = 20_000;
+        let completed = false;
+        let timeoutId;
+
+        const finish = callback => value => {
+          if (completed) return;
+          completed = true;
+          window.clearTimeout(timeoutId);
+          callback(value);
+        };
+
         video.preload = "metadata";
         video.muted = true;
         video.playsInline = true;
-        video.onloadedmetadata = () => {
-          resolve({
-            width: Number(video.videoWidth || 0),
-            height: Number(video.videoHeight || 0),
-            duration: Number(video.duration || 0)
-          });
-        };
-        video.onerror = () => reject(new Error("No pudimos procesar ese archivo de video."));
+        video.onloadedmetadata = () => finish(resolve)({
+          width: Number(video.videoWidth || 0),
+          height: Number(video.videoHeight || 0),
+          duration: Number(video.duration || 0)
+        });
+        video.onerror = () => finish(reject)(new Error("No pudimos procesar ese archivo de video."));
+        timeoutId = window.setTimeout(() => {
+          finish(reject)(new Error("El teléfono demoró demasiado al preparar el video. Probá nuevamente o elegí el video desde Fotos cuando termine de descargarse."));
+        }, metadataTimeoutMs);
         video.src = objectUrl;
+        video.load();
       });
     } finally {
       URL.revokeObjectURL(objectUrl);
@@ -7298,7 +7311,12 @@
 
     const sync = () => {
       const selected = choices.find(choice => choice.checked)?.value;
-      hiddenInput.value = selected === "image" ? "image" : "video";
+      const nextValue = selected === "image" ? "image" : "video";
+      // Video state changes cause the preview to render. Avoid notifying the
+      // preview again when the selected primary media did not actually change,
+      // otherwise the two components call each other indefinitely.
+      if (hiddenInput.value === nextValue) return;
+      hiddenInput.value = nextValue;
       form.dispatchEvent(new CustomEvent("create:primary-media-changed", { bubbles: true }));
     };
 
@@ -7921,7 +7939,7 @@
 
       previews.innerHTML = `
         <article class="upload-preview upload-preview-video main">
-          <video src="${escapeAttribute(state.previewUrl)}" preload="metadata" muted playsinline controls></video>
+          <video src="${escapeAttribute(state.previewUrl)}" preload="metadata" playsinline controls></video>
           <span class="gallery-badge">${primaryMediaTypeInput?.value === "image" ? "Video" : "Video principal"}</span>
           <span class="upload-status">${escapeHtml(state.statusText || (state.uploadedUrl ? "Listo" : "Subiendo..."))}</span>
           <button type="button" class="gallery-nav gallery-nav-next upload-action" data-video-action="remove" aria-label="Quitar video">&times;</button>
@@ -7966,7 +7984,14 @@
         throw new Error("Selecciona un archivo de video valido.");
       }
 
-      const metadata = await readVideoMetadata(file);
+      let uploadStage = "metadata";
+      let metadata;
+      try {
+        metadata = await readVideoMetadata(file);
+      } catch (error) {
+        reportVideoUploadFailure(uploadStage, error, file, error?.statusCode);
+        throw error;
+      }
       if (!Number.isFinite(metadata.width) || !Number.isFinite(metadata.height) || metadata.width <= 0 || metadata.height <= 0) {
         throw new Error("No pudimos leer el tamaño del video.");
       }
@@ -8009,7 +8034,7 @@
 
       let fileToUpload = file;
       const processOnServer = !shouldOptimizeVideoForUpload(file);
-      let uploadStage = "optimization";
+      uploadStage = "optimization";
       const currentUpload = uploadChain.then(async () => {
         if (shouldOptimizeVideoForUpload(file)) {
           try {
@@ -8069,7 +8094,9 @@
         if (state?.id === currentState.id) {
           state.uploadedUrl = uploadedUrl;
           state.pendingProcessing = pendingProcessing;
-          state.statusText = state.pendingProcessing ? "Listo. Se optimizará en el servidor." : "Listo";
+          state.statusText = state.pendingProcessing
+            ? "Video cargado"
+            : "Listo";
         }
         if (currentState.removed && currentState.deleteOnRemove) {
           try {

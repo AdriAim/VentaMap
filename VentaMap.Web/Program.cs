@@ -182,6 +182,7 @@ builder.Services.AddSingleton<McpDailyQueryLimitService>();
 builder.Services.AddScoped<BillingService>();
 builder.Services.AddScoped<PricingService>();
 builder.Services.AddHttpClient<MercadoPagoService>();
+builder.Services.AddHttpClient<MetaConversionsService>();
 builder.Services.AddScoped<PublicationAnalyticsService>();
 builder.Services.AddScoped<SiteAnalyticsService>();
 builder.Services.AddSingleton<SiteVisitQueue>();

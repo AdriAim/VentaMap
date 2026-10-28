@@ -92,6 +92,10 @@ services:
       Cloudflare__R2__MaxVideoBytes: ${R2_MAX_VIDEO_BYTES:-157286400}
       MercadoPago__AccessToken: ${MERCADOPAGO_ACCESS_TOKEN}
       MercadoPago__WebhookSecret: ${MERCADOPAGO_WEBHOOK_SECRET}
+      Meta__Enabled: ${META_ENABLED:-false}
+      Meta__PixelId: ${META_PIXEL_ID}
+      Meta__ConversionsApiAccessToken: ${META_CONVERSIONS_API_ACCESS_TOKEN}
+      Meta__ConversionsApiVersion: ${META_CONVERSIONS_API_VERSION:-v23.0}
       Database__ApplyMigrationsOnStartup: ${DATABASE_APPLY_MIGRATIONS_ON_STARTUP:-false}
       Database__RunSeedDataOnStartup: ${DATABASE_RUN_SEED_DATA_ON_STARTUP:-false}
       Logging__File__Path: /var/log/ventamap/web-.log

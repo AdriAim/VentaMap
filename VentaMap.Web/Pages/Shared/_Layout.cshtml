@@ -19,7 +19,7 @@
     var canonicalPath = ViewData["CanonicalPath"]?.ToString() ?? Context.Request.Path.Value;
     var canonicalUrl = $"{canonicalHost}{Context.Request.PathBase}{canonicalPath}";
     var siteUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/";
-    var siteOgImageUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/images/ventamap-social-transparent-lighter.png?v=20261011d";
+    var siteOgImageUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/images/ventamap-social-topographic.png?v=20261028a";
     var requestedOgImageUrl = ViewData["OgImageUrl"]?.ToString()?.Trim();
     var hasAbsoluteCustomOgImage = Uri.TryCreate(requestedOgImageUrl, UriKind.Absolute, out var customOgImageUri)
         && (customOgImageUri.Scheme == Uri.UriSchemeHttp || customOgImageUri.Scheme == Uri.UriSchemeHttps);
@@ -38,6 +38,10 @@
     var isHomePage = string.Equals(Context.Request.Path, "/", StringComparison.OrdinalIgnoreCase)
         || string.Equals(Context.Request.Path, "/Index", StringComparison.OrdinalIgnoreCase);
     var isPublicationDetailsPage = Context.Request.Path.StartsWithSegments("/Publications/Details", StringComparison.OrdinalIgnoreCase);
+    var metaTrackingEnabled = Configuration.GetValue<bool>("Meta:Enabled")
+        && !string.IsNullOrWhiteSpace(Configuration["Meta:PixelId"]);
+    var metaPixelId = Configuration["Meta:PixelId"]?.Trim();
+    var completedRegistrationEventId = Context.Request.Cookies[MetaConversionsService.RegistrationEventCookieName];
 }
 <!DOCTYPE html>
 <html lang="es">
@@ -86,6 +90,20 @@
     <link rel="stylesheet" href="~/lib/fontawesome/css/all.min.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    @if (metaTrackingEnabled)
+    {
+        <script>
+            !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window, document,'script','https://connect.facebook.net/en_US/fbevents.js');
+            fbq('init', @Html.Raw(System.Text.Json.JsonSerializer.Serialize(metaPixelId)));
+            fbq('track', 'PageView');
+            @if (!string.IsNullOrWhiteSpace(completedRegistrationEventId))
+            {
+                <text>fbq('track', 'CompleteRegistration', {}, { eventID: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(completedRegistrationEventId)) });
+                document.cookie = '@MetaConversionsService.RegistrationEventCookieName=; Path=/; Max-Age=0; SameSite=Lax';</text>
+            }
+        </script>
+        <noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=@metaPixelId&amp;ev=PageView&amp;noscript=1" alt="" /></noscript>
+    }
 </head>
 @{
     var isAuthenticated = User.Identity?.IsAuthenticated ?? false;

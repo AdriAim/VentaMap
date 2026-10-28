@@ -23,6 +23,7 @@ public class RegisterModel(
     PublicationGroupTypeService publicationGroupTypeService,
     VentaMapParameterService parameters,
     PricingService pricingService,
+    MetaConversionsService metaConversionsService,
     ILogger<RegisterModel> logger) : PageModel
 {
     private const string EmailField = $"{nameof(Input)}.{nameof(InputModel.Email)}";
@@ -283,6 +284,25 @@ public class RegisterModel(
         }
 
         await authService.SignInAsync(result.User);
+        var metaTrackingEnabled = configuration.GetValue<bool>("Meta:Enabled")
+            && !string.IsNullOrWhiteSpace(configuration["Meta:PixelId"]);
+        if (metaTrackingEnabled)
+        {
+            var metaEventId = Guid.NewGuid().ToString("N");
+            Response.Cookies.Append(
+                MetaConversionsService.RegistrationEventCookieName,
+                metaEventId,
+                new CookieOptions
+                {
+                    HttpOnly = false,
+                    IsEssential = false,
+                    SameSite = SameSiteMode.Lax,
+                    Secure = Request.IsHttps,
+                    Path = "/",
+                    MaxAge = TimeSpan.FromMinutes(10)
+                });
+            await metaConversionsService.TrackCompletedRegistrationAsync(result.User, HttpContext, metaEventId, HttpContext.RequestAborted);
+        }
         TempData["AccountCreatedMessage"] = "El usuario se creó correctamente.";
         return RedirectToPage("/Index");
 

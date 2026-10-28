@@ -1502,13 +1502,14 @@ public partial class ContentController(
         }
 
         videoUploadLogger.LogWarning(
-            "Browser video upload failed for user {UserId}. Stage {Stage}, status {StatusCode}, file {FileName}, content type {ContentType}, {Length} bytes. Message: {Message}",
+            "Browser video upload failed for user {UserId}. Stage {Stage}, status {StatusCode}, file {FileName}, content type {ContentType}, {Length} bytes, browser {UserAgent}. Message: {Message}",
             currentUserAccessor.UserId,
             NormalizeVideoUploadLogValue(request.Stage, 32),
             request.StatusCode,
             NormalizeVideoUploadLogValue(request.FileName, 255),
             NormalizeVideoUploadLogValue(request.ContentType, 100),
             request.ContentLength,
+            NormalizeVideoUploadLogValue(Request.Headers.UserAgent.ToString(), 500),
             NormalizeVideoUploadLogValue(request.Message, 500));
 
         return NoContent();
