@@ -299,7 +299,7 @@ else
                        data-details-url="/api/content/details/@publication.Id@debugSuffix">
                         @if (!string.IsNullOrWhiteSpace(imageUrl))
                         {
-                            <img src="@imageUrl" alt="@publication.Title" />
+                            <img src="@imageUrl" alt="@publication.Title" loading="lazy" decoding="async" />
                         }
                         else
                         {
@@ -509,9 +509,9 @@ else
                 let refreshButton = null;
                 let isInitializingMap = false;
                 let fullscreenOperationSelect = null;
-                const companyCatalogMapPadding = 60;
-                const companyCatalogMapSingleZoom = 12.8;
-                const companyCatalogMapMaxZoom = 12.8;
+                const companyCatalogMapPadding = 32;
+                const companyCatalogMapSingleZoom = 15;
+                const companyCatalogMapMaxZoom = 15;
 
                 const normalized = value => String(value || "").toLowerCase().trim();
                 const escapeHtml = value => String(value ?? "")
@@ -666,7 +666,9 @@ else
                         renderGallery();
                     }
                     if (currentView === "map") {
-                        syncMapMarkers({ preserveSelection: true });
+                        // A filter changes the catalog's visible collection, so its map
+                        // viewport must be recalculated from those same markers.
+                        renderAndFitCompanyMap({ preserveSelection: true });
                     }
                 }
 

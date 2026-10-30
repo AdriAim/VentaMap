@@ -1,0 +1,17 @@
+@page
+@model VentaMap.Pages.Account.AccessDeniedModel
+@{
+    ViewData["Title"] = "Acceso no autorizado";
+}
+
+<section class="form-shell narrow">
+    <div class="section-heading">
+        <span class="eyebrow">Acceso</span>
+        <h1>No tenés acceso a esta sección</h1>
+        <p>Esta herramienta está disponible únicamente para cuentas de empresa.</p>
+    </div>
+    <div class="hero-actions">
+        <a class="primary-pill" asp-page="/Browse">Explorar anuncios</a>
+        <a class="ghost-pill" asp-page="/Account/Settings">Ver mi cuenta</a>
+    </div>
+</section>

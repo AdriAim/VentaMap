@@ -199,7 +199,7 @@ else
                    data-details-url="@ownerPreviewApiUrl">
                     @if (!string.IsNullOrWhiteSpace(ownerImageUrl))
                     {
-                        <img src="@ownerImageUrl" alt="@publication.Title" />
+                        <img src="@ownerImageUrl" alt="@publication.Title" loading="lazy" decoding="async" />
                     }
                     else
                     {

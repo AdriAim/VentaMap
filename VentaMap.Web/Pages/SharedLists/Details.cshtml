@@ -178,7 +178,7 @@ else
                         <a class="publication-admin-media" href="/Publications/Details/@publication.Id">
                             @if (!string.IsNullOrWhiteSpace(imageUrl))
                             {
-                                <img src="@imageUrl" alt="@publication.Title" />
+                                <img src="@imageUrl" alt="@publication.Title" loading="lazy" decoding="async" />
                             }
                             else
                             {

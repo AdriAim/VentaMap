@@ -128,7 +128,7 @@
                             <a class="company-share-selected-media" href="/Publications/Details/@publication.Id" target="_blank" rel="noopener noreferrer">
                                 @if (!string.IsNullOrWhiteSpace(imageUrl))
                                 {
-                                    <img src="@imageUrl" alt="@publication.Title" />
+                                    <img src="@imageUrl" alt="@publication.Title" loading="lazy" decoding="async" />
                                 }
                                 else
                                 {
@@ -220,7 +220,7 @@
                         <div class="publication-admin-media">
                             @if (!string.IsNullOrWhiteSpace(imageUrl))
                             {
-                                <img src="@imageUrl" alt="@publication.Title" />
+                                <img src="@imageUrl" alt="@publication.Title" loading="lazy" decoding="async" />
                             }
                             else
                             {
@@ -261,7 +261,7 @@
                             <div class="card-image-wrap">
                                 @if (!string.IsNullOrWhiteSpace(imageUrl))
                                 {
-                                    <img src="@imageUrl" alt="@publication.Title" />
+                                    <img src="@imageUrl" alt="@publication.Title" loading="lazy" decoding="async" />
                                 }
                                 else
                                 {

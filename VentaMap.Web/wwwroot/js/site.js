@@ -14,13 +14,18 @@
   const favoriteLastListStorageKey = "ventamap:last-favorite-list-id";
   const likedPublicationsStorageKey = "ventamap:liked-publications";
   const publicationOpenModeStorageKey = "ventamap:publication-open-mode";
+  // The gallery's audio choice belongs to the browsing session, rather than
+  // to an individual video element. Gallery cards are rendered and replaced
+  // as the user scrolls or changes media, so each new element must inherit it.
+  let galleryAudioEnabled = false;
   const NAVIGATION_LOCALITY_COOKIE = "ventamap_nav_locality_id";
   const HEADER_PUBLICATION_GROUPS_COOKIE = "ventamap_header_groups";
   const MEDIA_PRELOAD_CONFIG = {
     mobilePreloadAds: 10,
-    desktopPreloadRows: 5,
+    desktopPreloadRows: 2,
     galleryInitialItems: 2,
-    maxConcurrentVideoPreloads: 3
+    maxConcurrentVideoPreloads: 3,
+    galleryVideoWarmupSeconds: 2
   };
   const chatConfig = window.__VENTAMAP_CHAT_CONFIG || {};
   const supportedMapBounds = [[-73.6, -56.5], [-52.0, -19.0]];
@@ -146,7 +151,7 @@
 
       const videoUrl = String(card.dataset.videoUrl || "").trim();
       if (videoUrl) {
-        this.prepareVideo(videoUrl, { preload: "auto" });
+        preloadGalleryVideoStart(videoUrl);
         return;
       }
 
@@ -215,7 +220,8 @@
       this.videoQueue.push({
         src: normalizedSrc,
         preload: options.preload || "auto",
-        poster: String(options.poster || "").trim()
+        poster: String(options.poster || "").trim(),
+        warmupSeconds: Math.max(0, Number(options.warmupSeconds || 0))
       });
       this.flushVideoQueue();
     }
@@ -238,7 +244,12 @@
           video.poster = next.poster;
         }
 
+        let completed = false;
+        let warmupTimer = null;
         const finish = succeeded => {
+          if (completed) return;
+          completed = true;
+          window.clearTimeout(warmupTimer);
           video.removeAttribute("src");
           video.load?.();
           if (succeeded) {
@@ -249,11 +260,30 @@
           this.flushVideoQueue();
         };
 
-        video.addEventListener("loadedmetadata", () => finish(true), { once: true });
-        video.addEventListener("canplay", () => finish(true), { once: true });
+        video.addEventListener("loadedmetadata", () => {
+          if (!next.warmupSeconds || !Number.isFinite(video.duration)) {
+            finish(true);
+            return;
+          }
+
+          // Seeking to this point makes the browser fetch the initial media
+          // segment and the segment around the requested gallery warmup point.
+          // With byte-range capable CDNs this keeps the opening seconds ready.
+          const target = Math.min(next.warmupSeconds, Math.max(0, video.duration - 0.05));
+          if (target <= 0) {
+            finish(true);
+            return;
+          }
+          video.currentTime = target;
+        }, { once: true });
+        video.addEventListener("seeked", () => finish(true), { once: true });
+        video.addEventListener("canplay", () => {
+          if (!next.warmupSeconds) finish(true);
+        }, { once: true });
         video.addEventListener("error", () => finish(false), { once: true });
         video.src = next.src;
         video.load?.();
+        warmupTimer = window.setTimeout(() => finish(false), 10_000);
       }
     }
 
@@ -339,6 +369,16 @@
   }
 
   const mediaPreloadService = new MediaPreloadService(MEDIA_PRELOAD_CONFIG);
+
+  // Isolated gallery-only warmup. Remove this function call from
+  // preloadCardPrimaryMedia to roll the behavior back without changing the
+  // general media preloader.
+  function preloadGalleryVideoStart(videoUrl) {
+    mediaPreloadService.prepareVideo(videoUrl, {
+      preload: "auto",
+      warmupSeconds: MEDIA_PRELOAD_CONFIG.galleryVideoWarmupSeconds
+    });
+  }
 
   function zoomOutLevel(zoom) {
     return Number((Number(zoom || 0) * MAP_ZOOM_OUT_FACTOR).toFixed(2));
@@ -4912,7 +4952,7 @@
       <article class="map-popup-card listing-card listing-card-compact">
         <a href="${detailsUrl}" class="card-image-wrap map-popup-image-wrap publication-preview-trigger" data-publication-id="${publicationId}" data-details-url="${buildPublicationApiDetailsUrl(publicationId)}" data-images="${escapedImages.join("|||")}" data-video-url="${videoUrl}" data-video-primary="${isVideoPrimary}" data-media-index="0">
           ${videoUrl && isVideoPrimary
-            ? `<video src="${videoUrl}" class="gallery-carousel-video" preload="metadata" muted playsinline></video><button type="button" class="gallery-play-toggle gallery-tooltip-trigger gallery-tooltip-top" data-gallery-play-toggle="true" aria-label="Reproducir video" data-tooltip-label="Reproducir video"></button><button type="button" class="gallery-audio-toggle gallery-tooltip-trigger gallery-tooltip-side" data-gallery-audio-toggle="true" aria-label="Activar audio" data-tooltip-label="Activar audio"><i class="fa-solid fa-volume-xmark" aria-hidden="true"></i></button>`
+            ? `<video src="${videoUrl}" poster="${firstImage}" class="gallery-carousel-video" preload="metadata" muted playsinline></video><button type="button" class="gallery-play-toggle gallery-tooltip-trigger gallery-tooltip-top" data-gallery-play-toggle="true" aria-label="Reproducir video" data-tooltip-label="Reproducir video"></button><button type="button" class="gallery-audio-toggle gallery-tooltip-trigger gallery-tooltip-side" data-gallery-audio-toggle="true" aria-label="Activar audio" data-tooltip-label="Activar audio"><i class="fa-solid fa-volume-xmark" aria-hidden="true"></i></button>`
             : `<img src="${firstImage}" alt="${title}" class="gallery-carousel-image" />`}
           ${priceCluster}
           ${navButtons}
@@ -8264,7 +8304,10 @@
         const expandedStartIndex = Number(payload?.expandedStartIndex ?? -1);
         const expandedRadiusKm = Number(payload?.expandedRadiusKm || 0);
         const expandedRadiusTotalResults = Number(payload?.expandedRadiusTotalResults || 0);
-        const imageLoading = state.offset === 0 ? "eager" : "lazy";
+        // Only the leading card is part of the critical render path.  Marking
+        // the whole first page as eager makes the browser start every image at
+        // once, which competes with the content that is actually on screen.
+        const imageLoading = "lazy";
         items.forEach((item, index) => {
         if (index === expandedStartIndex && !state.usingExpandedRadius) {
           rail.insertAdjacentHTML("beforeend", `
@@ -8275,7 +8318,10 @@
           `);
           state.usingExpandedRadius = true;
         }
-        rail.insertAdjacentHTML("beforeend", buildGalleryCard(item, state.offset + index === 0, { imageLoading }));
+        rail.insertAdjacentHTML("beforeend", buildGalleryCard(item, state.offset + index === 0, {
+          imageLoading,
+          videoPreload: state.offset + index === 0 ? "metadata" : "none"
+        }));
         });
         state.offset = Number(payload?.nextOffset ?? (state.offset + items.length));
         state.hasMore = Boolean(payload?.hasMore);
@@ -8493,7 +8539,8 @@
     const showReportButton = options.showReportButton !== false;
     const showFavoriteButton = options.showFavoriteButton !== false;
     const extraActionHtml = options.extraActionHtml || "";
-    const imageLoading = options.imageLoading === "eager" ? "eager" : "lazy";
+    const imageLoading = options.imageLoading === "eager" || isFirstCard ? "eager" : "lazy";
+    const videoPreload = options.videoPreload || (isFirstCard ? "metadata" : "none");
     const images = Array.isArray(item?.images) && item.images.length
       ? item.images
       : ["/images/logo4.png"];
@@ -8516,7 +8563,7 @@
     const cardContent = `
       <a href="${detailsUrl}" class="card-image-wrap gallery-card-with-caption publication-preview-trigger" data-publication-id="${publicationId}" data-details-url="${buildPublicationApiDetailsUrl(publicationId)}" data-images="${escapedImages.join("|||")}" data-video-url="${videoUrl}" data-video-primary="${isVideoPrimary}" data-media-index="0">
         ${videoUrl && isVideoPrimary
-          ? `<video src="${videoUrl}" class="gallery-carousel-video" preload="metadata" muted playsinline></video><button type="button" class="gallery-play-toggle gallery-tooltip-trigger gallery-tooltip-top" data-gallery-play-toggle="true" aria-label="Reproducir video" data-tooltip-label="Reproducir video"></button><button type="button" class="gallery-audio-toggle gallery-tooltip-trigger gallery-tooltip-side" data-gallery-audio-toggle="true" aria-label="Activar audio" data-tooltip-label="Activar audio"><i class="fa-solid fa-volume-xmark" aria-hidden="true"></i></button>`
+          ? `<video src="${videoUrl}" poster="${firstImage}" class="gallery-carousel-video" preload="${videoPreload}" muted playsinline></video><button type="button" class="gallery-play-toggle gallery-tooltip-trigger gallery-tooltip-top" data-gallery-play-toggle="true" aria-label="Reproducir video" data-tooltip-label="Reproducir video"></button><button type="button" class="gallery-audio-toggle gallery-tooltip-trigger gallery-tooltip-side" data-gallery-audio-toggle="true" aria-label="Activar audio" data-tooltip-label="Activar audio"><i class="fa-solid fa-volume-xmark" aria-hidden="true"></i></button>`
           : `<img src="${firstImage}" alt="${title}" class="gallery-carousel-image" loading="${imageLoading}" decoding="async" />`}
         ${priceCluster}
         ${showReportButton ? `<button type="button" class="gallery-action-button gallery-report-overlay gallery-tooltip-trigger gallery-tooltip-side report-trigger" data-publication-id="${publicationId}" data-publication-code="${publicationCode}" data-publication-title="${title}" data-tooltip-label="Denunciar" aria-label="Denunciar ${title}"><span class="gallery-report-letter" aria-hidden="true">D</span></button>` : ""}
@@ -8870,6 +8917,7 @@
         card.insertBefore(video, anchor);
       }
 
+      video.poster = images[0] || "/images/logo4.png";
       video.src = videoUrl;
       mediaPreloadService.prepareVideo(videoUrl, { preload: "auto" });
       tryAutoplayGalleryVideo(video);
@@ -8940,7 +8988,7 @@
       return;
     }
 
-    video.muted = true;
+    video.muted = !galleryAudioEnabled;
     video.playsInline = true;
     video.autoplay = true;
     video.play?.().catch(() => {});
@@ -8983,7 +9031,11 @@
     const button = card?.querySelector("[data-gallery-audio-toggle='true']");
     if (!video || !button) return;
 
-    video.muted = !video.muted;
+    galleryAudioEnabled = video.muted;
+    document.querySelectorAll(".card-image-wrap .gallery-carousel-video").forEach(galleryVideo => {
+      galleryVideo.muted = !galleryAudioEnabled;
+      syncGalleryVideoAudioButton(galleryVideo.closest(".card-image-wrap"));
+    });
     if (!video.paused) {
       video.play?.().catch(() => {});
     } else {
@@ -9027,7 +9079,10 @@
   }
 
   function bindGalleryVideoState(video) {
-    if (!video || video.dataset.galleryStateBound === "true") return;
+    if (!video) return;
+
+    video.muted = !galleryAudioEnabled;
+    if (video.dataset.galleryStateBound === "true") return;
 
     video.dataset.galleryStateBound = "true";
     const sync = () => syncGalleryVideoVisualState(video.closest(".card-image-wrap"));
