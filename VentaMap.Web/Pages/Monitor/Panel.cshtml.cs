@@ -12,6 +12,7 @@ namespace VentaMap.Pages.Monitor;
 public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAccessor) : PageModel
 {
     public List<DailyMetric> Metrics { get; private set; } = [];
+    public FirstVisitExperienceMetric FirstVisitExperience { get; private set; } = new([], 0, 0, 0, 0);
     public List<SiteSuggestion> RecentSuggestions { get; private set; } = [];
     public int LatestSuggestionId { get; private set; }
 
@@ -52,6 +53,21 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
             .Where(x => x.VisitedOn >= from && x.VisitedOn < until)
             .Select(x => new VisitAttributionMetric(x.VisitedOn, x.AcquisitionChannel, x.CampaignSource, x.CampaignName))
             .ToListAsync();
+        var experienceEvents = await db.SiteExperienceEvents.AsNoTracking()
+            .Where(x => x.OccurredAtUtc >= utcFrom && x.OccurredAtUtc < utcUntil)
+            .Select(x => new { x.EventName, x.Button })
+            .ToListAsync();
+        FirstVisitExperience = new FirstVisitExperienceMetric(
+            experienceEvents.Where(x => x.EventName == "entry_button_clicked")
+                .GroupBy(x => x.Button)
+                .Select(x => new EntryButtonMetric(x.Key, x.Count()))
+                .OrderByDescending(x => x.Count)
+                .ThenBy(x => x.Button)
+                .ToList(),
+            experienceEvents.Count(x => x.EventName == "locality_modal_shown"),
+            experienceEvents.Count(x => x.EventName == "locality_completed"),
+            experienceEvents.Count(x => x.EventName == "locality_closed"),
+            experienceEvents.Count(x => x.EventName == "locality_abandoned"));
         var visitors = visits.GroupBy(x => x.Day).ToDictionary(x => x.Key, x => x.Count());
         var socialCampaigns = visits.Where(x => x.Channel == "social_campaign").ToList();
         var instagramCampaigns = GetCampaignBreakdown(socialCampaigns, "instagram");
@@ -155,6 +171,26 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
     public sealed record MonitorPublication(int Id, string UserName, string ShortDescription, string Locality, decimal Price, string Currency, DateTime CreatedAtUtc);
     public sealed record VisitAttributionMetric(DateTime Day, string Channel, string? Source, string? CampaignName);
     public sealed record CampaignMetric(string Name, int Visitors);
+    public sealed record EntryButtonMetric(string Button, int Count)
+    {
+        public string Label => Button switch
+        {
+            "explore_properties" => "Explorar Inmuebles",
+            "properties_map" => "Mapa de Inmuebles",
+            "explore_vehicles" => "Explorar Rodados",
+            "explore_all" => "Explorar Todo",
+            "publish_now" => "Publicar ahora",
+            "view_listings" => "Ver anuncios",
+            "catalog_more_info" => "Quiero más información",
+            _ => Button
+        };
+    }
+    public sealed record FirstVisitExperienceMetric(
+        IReadOnlyList<EntryButtonMetric> EntryButtons,
+        int LocalityShown,
+        int LocalityCompleted,
+        int LocalityClosed,
+        int LocalityAbandoned);
     public sealed record DailyMetric(
         DateTime Day,
         IReadOnlyList<MonitorUser> NewUsers,

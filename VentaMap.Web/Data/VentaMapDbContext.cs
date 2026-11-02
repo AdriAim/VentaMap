@@ -24,6 +24,7 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
     public DbSet<PublicationFavorite> PublicationFavorites => Set<PublicationFavorite>();
     public DbSet<PublicationView> PublicationViews => Set<PublicationView>();
     public DbSet<SiteVisit> SiteVisits => Set<SiteVisit>();
+    public DbSet<SiteExperienceEvent> SiteExperienceEvents => Set<SiteExperienceEvent>();
     public DbSet<SiteSuggestion> SiteSuggestions => Set<SiteSuggestion>();
     public DbSet<ExchangeRateQuote> ExchangeRateQuotes => Set<ExchangeRateQuote>();
     public DbSet<VentaMapParameter> VentaMapParameters => Set<VentaMapParameter>();
@@ -71,6 +72,13 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
 
         modelBuilder.Entity<SiteVisit>()
             .HasIndex(x => new { x.VisitedOn, x.AcquisitionChannel });
+
+        modelBuilder.Entity<SiteExperienceEvent>()
+            .HasIndex(x => new { x.VisitorHash, x.SessionHash, x.EventName, x.Button, x.Route })
+            .IsUnique();
+
+        modelBuilder.Entity<SiteExperienceEvent>()
+            .HasIndex(x => x.OccurredAtUtc);
 
         modelBuilder.Entity<ApplicationUser>()
             .Property(x => x.CanPublish)

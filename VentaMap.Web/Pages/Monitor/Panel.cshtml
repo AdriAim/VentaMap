@@ -41,6 +41,37 @@
         </div>
     </section>
     <section class="detail-panel">
+        <div class="section-heading">
+            <span class="eyebrow">Primera visita</span>
+            <h2>Entradas y localidad</h2>
+            <p>Eventos anonimizados de los últimos 30 días. Cada acción se cuenta una vez por visitante, sesión, ruta y botón.</p>
+        </div>
+        <div class="monitor-experience-metrics">
+            <div><strong>@Model.FirstVisitExperience.LocalityShown</strong><span>pasos de localidad mostrados</span></div>
+            <div><strong>@Model.FirstVisitExperience.LocalityCompleted</strong><span>localidades completadas</span></div>
+            <div><strong>@Model.FirstVisitExperience.LocalityClosed</strong><span>cierres</span></div>
+            <div><strong>@Model.FirstVisitExperience.LocalityAbandoned</strong><span>abandonos</span></div>
+        </div>
+        @if (Model.FirstVisitExperience.EntryButtons.Count == 0)
+        {
+            <p class="field-hint">Aún no hay clics de primera visita registrados.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table">
+                    <thead><tr><th>Botón de entrada</th><th>Clics</th></tr></thead>
+                    <tbody>
+                    @foreach (var item in Model.FirstVisitExperience.EntryButtons)
+                    {
+                        <tr><td>@item.Label</td><td>@item.Count</td></tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+    <section class="detail-panel">
         <div class="table-responsive">
             <table class="table">
                 <thead>

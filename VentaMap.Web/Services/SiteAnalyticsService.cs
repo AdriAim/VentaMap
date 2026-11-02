@@ -5,8 +5,10 @@ namespace VentaMap.Services;
 
 public class SiteAnalyticsService(SiteVisitQueue queue, CurrentUserAccessor currentUserAccessor)
 {
-    private const string VisitorCookieName = "ventamap.site-visitor";
+    internal const string VisitorCookieName = "ventamap.site-visitor";
     private const string VisitDayCookieName = "ventamap.site-visit-day";
+    internal const string SessionCookieName = "ventamap.site-session";
+    internal const string FirstSessionCookieName = "ventamap.site-first-session";
 
     public void TrackVisit(HttpContext context)
     {
@@ -16,10 +18,22 @@ public class SiteAnalyticsService(SiteVisitQueue queue, CurrentUserAccessor curr
         }
 
         var visitorId = context.Request.Cookies[VisitorCookieName];
-        if (string.IsNullOrWhiteSpace(visitorId))
+        var isNewVisitor = string.IsNullOrWhiteSpace(visitorId);
+        if (isNewVisitor)
         {
             visitorId = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
             context.Response.Cookies.Append(VisitorCookieName, visitorId, CookieOptions(context));
+        }
+
+        if (string.IsNullOrWhiteSpace(context.Request.Cookies[SessionCookieName]))
+        {
+            context.Response.Cookies.Append(SessionCookieName, Convert.ToHexString(RandomNumberGenerator.GetBytes(32)), SessionCookieOptions(context));
+        }
+
+        if (isNewVisitor)
+        {
+            // Sin vencimiento: el navegador elimina esta marca al terminar la primera sesión.
+            context.Response.Cookies.Append(FirstSessionCookieName, "1", SessionCookieOptions(context));
         }
 
         var argentinaDay = DateTime.UtcNow.AddHours(-3).Date;
@@ -30,7 +44,7 @@ public class SiteAnalyticsService(SiteVisitQueue queue, CurrentUserAccessor curr
         }
 
         context.Response.Cookies.Append(VisitDayCookieName, dayText, CookieOptions(context));
-        var visitorHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(visitorId)));
+        var visitorHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(visitorId!)));
         var attribution = GetAttribution(context.Request);
         queue.TryEnqueue(new SiteVisitEvent(
             visitorHash,
@@ -83,6 +97,15 @@ public class SiteAnalyticsService(SiteVisitQueue queue, CurrentUserAccessor curr
         SameSite = SameSiteMode.Lax,
         Secure = context.Request.IsHttps,
         Expires = DateTimeOffset.UtcNow.AddYears(1),
+        Path = "/"
+    };
+
+    private static CookieOptions SessionCookieOptions(HttpContext context) => new()
+    {
+        HttpOnly = true,
+        IsEssential = true,
+        SameSite = SameSiteMode.Lax,
+        Secure = context.Request.IsHttps,
         Path = "/"
     };
 

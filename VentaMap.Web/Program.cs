@@ -185,6 +185,7 @@ builder.Services.AddHttpClient<MercadoPagoService>();
 builder.Services.AddHttpClient<MetaConversionsService>();
 builder.Services.AddScoped<PublicationAnalyticsService>();
 builder.Services.AddScoped<SiteAnalyticsService>();
+builder.Services.AddScoped<SiteExperienceAnalyticsService>();
 builder.Services.AddSingleton<SiteVisitQueue>();
 builder.Services.AddHostedService<SiteVisitBackgroundService>();
 builder.Services.AddScoped<PublicationGroupTypeService>();
@@ -1115,6 +1116,22 @@ static async Task EnsureSiteAnalyticsSchemaAsync(System.Data.Common.DbConnection
     await EnsureIndexAsync(connection, "SiteVisits", "IX_SiteVisits_VisitorHash_VisitedOn", "CREATE UNIQUE INDEX `IX_SiteVisits_VisitorHash_VisitedOn` ON `SiteVisits` (`VisitorHash`, `VisitedOn`)");
     await EnsureIndexAsync(connection, "SiteVisits", "IX_SiteVisits_VisitedOn", "CREATE INDEX `IX_SiteVisits_VisitedOn` ON `SiteVisits` (`VisitedOn`)");
     await EnsureIndexAsync(connection, "SiteVisits", "IX_SiteVisits_VisitedOn_AcquisitionChannel", "CREATE INDEX `IX_SiteVisits_VisitedOn_AcquisitionChannel` ON `SiteVisits` (`VisitedOn`, `AcquisitionChannel`)");
+
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `SiteExperienceEvents` (
+            `Id` bigint NOT NULL AUTO_INCREMENT,
+            `VisitorHash` varchar(64) CHARACTER SET utf8mb4 NOT NULL,
+            `SessionHash` varchar(64) CHARACTER SET utf8mb4 NOT NULL,
+            `EventName` varchar(64) CHARACTER SET utf8mb4 NOT NULL,
+            `Button` varchar(64) CHARACTER SET utf8mb4 NOT NULL DEFAULT '',
+            `Route` varchar(512) CHARACTER SET utf8mb4 NOT NULL,
+            `OccurredAtUtc` datetime(6) NOT NULL,
+            CONSTRAINT `PK_SiteExperienceEvents` PRIMARY KEY (`Id`)
+        ) CHARACTER SET=utf8mb4;
+        """);
+    await EnsureIndexAsync(connection, "SiteExperienceEvents", "IX_SiteExperienceEvents_Visitor_Session_Event_Button_Route", "CREATE UNIQUE INDEX `IX_SiteExperienceEvents_Visitor_Session_Event_Button_Route` ON `SiteExperienceEvents` (`VisitorHash`, `SessionHash`, `EventName`, `Button`, `Route`)");
+    await EnsureIndexAsync(connection, "SiteExperienceEvents", "IX_SiteExperienceEvents_OccurredAtUtc", "CREATE INDEX `IX_SiteExperienceEvents_OccurredAtUtc` ON `SiteExperienceEvents` (`OccurredAtUtc`)");
 }
 
 static async Task EnsureColumnAsync(System.Data.Common.DbConnection connection, string tableName, string columnName, string definition)

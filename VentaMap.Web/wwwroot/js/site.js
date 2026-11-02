@@ -20,6 +20,24 @@
   let galleryAudioEnabled = false;
   const NAVIGATION_LOCALITY_COOKIE = "ventamap_nav_locality_id";
   const HEADER_PUBLICATION_GROUPS_COOKIE = "ventamap_header_groups";
+  function trackInitialExperience(eventName, button = "") {
+    const payload = JSON.stringify({ eventName, button, route: window.location.pathname });
+    try {
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon("/api/content/visitor-events", new Blob([payload], { type: "application/json" }));
+        return;
+      }
+    } catch (_) {
+      // El fetch de respaldo cubre navegadores que rechazan sendBeacon.
+    }
+
+    fetch("/api/content/visitor-events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+      keepalive: true
+    }).catch(() => { });
+  }
   const MEDIA_PRELOAD_CONFIG = {
     mobilePreloadAds: 10,
     desktopPreloadRows: 2,
@@ -538,6 +556,10 @@
   }
 
   document.addEventListener("DOMContentLoaded", async () => {
+    document.addEventListener("click", event => {
+      const button = event.target.closest("[data-initial-entry-button]");
+      if (button) trackInitialExperience("entry_button_clicked", button.dataset.initialEntryButton || "");
+    });
     wireSystemNavigationLoading();
     wireMobileWhatsAppLinks();
     wirePublicationWhatsAppStatusLinks();
@@ -1754,6 +1776,7 @@
 
     modal.dataset.bound = "true";
     let pendingNavigationUrl = "";
+    let localityOutcomeRecorded = false;
     let shouldPersistHeaderGroups = modal.dataset.guestLocalityRequired === "true";
     let searchTimer = 0;
     let requestVersion = 0;
@@ -1773,13 +1796,16 @@
     };
 
     const close = () => {
-      if (modal.dataset.guestLocalityRequired === "true") return;
+      localityOutcomeRecorded = true;
+      trackInitialExperience("locality_closed");
       modal.hidden = true;
       modal.classList.remove("is-open");
       syncPreviewOpenState();
     };
 
     const open = (sourceLabel, navigationUrl = "", persistHeaderGroups = false) => {
+      localityOutcomeRecorded = false;
+      trackInitialExperience("locality_modal_shown");
       pendingNavigationUrl = String(navigationUrl || "").trim();
       shouldPersistHeaderGroups = persistHeaderGroups || modal.dataset.guestLocalityRequired === "true";
       input.value = String(sourceLabel || modal.dataset.currentLocalityLabel || "").trim();
@@ -1940,6 +1966,8 @@
     };
 
     const applyLocality = locality => {
+      localityOutcomeRecorded = true;
+      trackInitialExperience("locality_completed");
       writeCookie(NAVIGATION_LOCALITY_COOKIE, String(locality.localId), 365);
       if (shouldPersistHeaderGroups) {
         const selectedHeaderGroups = Array.from(modal.querySelectorAll("[data-guest-header-group-option]:checked"))
@@ -2092,6 +2120,12 @@
         event.preventDefault();
         close();
       });
+    });
+
+    window.addEventListener("pagehide", () => {
+      if (modal.classList.contains("is-open") && !localityOutcomeRecorded) {
+        trackInitialExperience("locality_abandoned");
+      }
     });
 
     document.addEventListener("click", event => {

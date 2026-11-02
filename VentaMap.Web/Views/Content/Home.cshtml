@@ -14,22 +14,22 @@
         <h2 id="explore-launcher-title">Comenzá a explorar</h2>
     </div>
     <div class="explore-launcher-actions">
-        <a class="explore-launcher-button explore-launcher-button-property" href="/Buscar?group=Inmuebles#search-panel">
+        <a class="explore-launcher-button explore-launcher-button-property" href="/Buscar?group=Inmuebles#search-panel" data-initial-entry-button="explore_properties">
             <span class="explore-launcher-icon" aria-hidden="true"><i class="fa-solid fa-house"></i></span>
             <span>Explorar Inmuebles</span>
             <i class="fa-solid fa-arrow-right explore-launcher-arrow" aria-hidden="true"></i>
         </a>
-        <a class="explore-launcher-button explore-launcher-button-map" href="/Buscar?group=Inmuebles&amp;mode=Mapa#browse-results">
+        <a class="explore-launcher-button explore-launcher-button-map" href="/Buscar?group=Inmuebles&amp;mode=Mapa#browse-results" data-initial-entry-button="properties_map">
             <span class="explore-launcher-icon" aria-hidden="true"><i class="fa-solid fa-map-location-dot"></i></span>
             <span>Mapa de Inmuebles</span>
             <i class="fa-solid fa-arrow-right explore-launcher-arrow" aria-hidden="true"></i>
         </a>
-        <a class="explore-launcher-button explore-launcher-button-vehicle" href="/Buscar?group=Rodados#search-panel">
+        <a class="explore-launcher-button explore-launcher-button-vehicle" href="/Buscar?group=Rodados#search-panel" data-initial-entry-button="explore_vehicles">
             <span class="explore-launcher-icon" aria-hidden="true"><i class="fa-solid fa-car-side"></i></span>
             <span>Explorar Rodados</span>
             <i class="fa-solid fa-arrow-right explore-launcher-arrow" aria-hidden="true"></i>
         </a>
-        <a class="explore-launcher-button explore-launcher-button-all" href="/Buscar?group=Todos#search-panel">
+        <a class="explore-launcher-button explore-launcher-button-all" href="/Buscar?group=Todos#search-panel" data-initial-entry-button="explore_all">
             <span class="explore-launcher-icon" aria-hidden="true"><i class="fa-solid fa-compass"></i></span>
             <span>Explorar Todo</span>
             <i class="fa-solid fa-arrow-right explore-launcher-arrow" aria-hidden="true"></i>
@@ -43,8 +43,8 @@
         <h1>Basta de <span>anuncios sin precios</span>.</h1>
         <p>VentaMap es una plataforma de <strong>compra venta Argentina</strong> para publicar <strong>anuncios clasificados</strong> con precios visibles. Vender y explorar inmuebles, rodados y otros anuncios es simple, rapido y ordenado. Si algun dato no corresponde, la comunidad puede denunciarlo para mantener el espacio ordenado. Estas denuncias ubican los anuncios en <strong>la papelera</strong>.</p>
         <div class="hero-actions">
-            <a class="primary-pill" href="/Publications/Create">Publicar ahora</a>
-            <a class="ghost-pill" href="/Buscar">Ver anuncios</a>
+            <a class="primary-pill" href="/Publications/Create" data-initial-entry-button="publish_now">Publicar ahora</a>
+            <a class="ghost-pill" href="/Buscar" data-initial-entry-button="view_listings">Ver anuncios</a>
             <a class="site-rules-pill" href="/Reglas">Reglas del sitio</a>
         </div>
     </div>
@@ -76,7 +76,8 @@
                     data-suggestion-label="Teléfono o email"
                     data-suggestion-placeholder="Ej. 341 555 1234 o nombre@empresa.com"
                     data-suggestion-prefix="CATALOGO DIGITAL - Contacto: "
-                    data-suggestion-submit-label="Enviar consulta">
+                    data-suggestion-submit-label="Enviar consulta"
+                    data-initial-entry-button="catalog_more_info">
                 Quiero más información
             </button>
         </div>

@@ -31,6 +31,7 @@ public partial class ContentController(
     VentaMapParameterService parameters,
     BillingService billingService,
     PricingService pricingService,
+    SiteExperienceAnalyticsService siteExperienceAnalyticsService,
     VentaMapDbContext db,
     ILogger<ContentController> logger,
     ILogger<VideoUploadLog> videoUploadLogger,
@@ -764,6 +765,13 @@ public partial class ContentController(
         }
 
         return Ok(new { message = result.Message });
+    }
+
+    [HttpPost("visitor-events")]
+    public async Task<IActionResult> TrackVisitorEvent([FromBody] VisitorExperienceEventRequest request)
+    {
+        await siteExperienceAnalyticsService.TrackAsync(HttpContext, request.EventName, request.Button, request.Route);
+        return NoContent();
     }
 
     [HttpGet("trash")]
@@ -2189,6 +2197,7 @@ public partial class ContentController(
 
 public sealed record DirectVideoUploadRequest(string? FileName, string? ContentType, long ContentLength, bool ProcessOnServer);
 public sealed record ConfirmDirectVideoUploadRequest(string PublicUrl, string ContentType, long ContentLength);
+public sealed record VisitorExperienceEventRequest(string? EventName, string? Button, string? Route);
 public sealed record VideoUploadFailureReport(
     string? Stage,
     string? Message,
