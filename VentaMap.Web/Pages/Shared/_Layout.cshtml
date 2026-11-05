@@ -197,11 +197,13 @@
         };
         var navigationLocality = await NavigationLocalityService.GetEffectiveLocalityAsync(Context);
         var availableHeaderLocalities = await NavigationLocalityService.GetAvailableLocalitiesAsync();
-        var guestHeaderGroupOptions = await Db.PublicationGroupTypes.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.SortOrder).ThenBy(x => x.Name).ToListAsync();
+        var guestHeaderGroupOptions = PublicationGroupPreferenceService.OrderHeaderGroups(
+            await Db.PublicationGroupTypes.AsNoTracking().Where(x => x.IsActive).ToListAsync());
         var selectedHeaderGroupNames = await PublicationGroupPreferenceService.GetPreferredGroupNamesAsync(Context);
         var headerGroups = await PublicationGroupPreferenceService.GetHeaderGroupsAsync(Context);
         var currentHeaderLocality = navigationLocality?.DisplayLabel ?? string.Empty;
-        var shouldPromptGuestLocality = navigationLocality is null;
+        var shouldPromptGuestLocality = !isAuthenticated
+            && await NavigationLocalityService.GetCookieLocalityAsync(Context) is null;
         var chatBaseUrl = (Configuration["Chat:BaseUrl"] ?? string.Empty).Trim().TrimEnd('/');
         if (chatBaseUrl.Contains(".example.com", StringComparison.OrdinalIgnoreCase))
         {

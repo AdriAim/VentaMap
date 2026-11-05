@@ -54,10 +54,10 @@ public class NavigationLocalityService(VentaMapDbContext db)
         var userIdClaim = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (!int.TryParse(userIdClaim, out var userId) || userId <= 0)
         {
-            return null;
+            return await GetDefaultLocalityAsync();
         }
 
-        return await db.Users
+        var userLocality = await db.Users
             .AsNoTracking()
             .Where(x => x.Id == userId && x.ArgentineLocalityId != null)
             .Select(x => new NavigationLocalitySelection(
@@ -68,7 +68,22 @@ public class NavigationLocalityService(VentaMapDbContext db)
                 x.ArgentineLocality.Longitude,
                 false))
             .FirstOrDefaultAsync();
+
+        return userLocality ?? await GetDefaultLocalityAsync();
     }
+
+    private Task<NavigationLocalitySelection?> GetDefaultLocalityAsync() => db.ArgentineLocalities
+        .AsNoTracking()
+        .Where(x => x.IsActive && x.Locality == "Santa Fe" && x.Province == "Santa Fe")
+        .OrderBy(x => x.SortOrder)
+        .Select(x => new NavigationLocalitySelection(
+            x.Id,
+            x.Locality,
+            x.Province,
+            x.Latitude,
+            x.Longitude,
+            false))
+        .FirstOrDefaultAsync();
 }
 
 public sealed record NavigationLocalitySelection(

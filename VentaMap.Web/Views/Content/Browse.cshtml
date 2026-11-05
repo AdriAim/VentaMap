@@ -152,8 +152,11 @@
         CanGoNextPage = resultsLayoutModel.CanGoNextPage,
         ShowMapSelectionDescription = false
     };
+    var isSocialLanding = string.Equals(Context.Request.Query["landing"], "social", StringComparison.OrdinalIgnoreCase);
 }
 
+@if (!isSocialLanding)
+{
 <section class="search-panel" id="search-panel" data-browse-search-panel>
     <form method="get" action="@searchPath" class="search-grid search-grid-minimal" data-browse-search-form data-group-aware-search-form="true" data-required-filter-form="true" data-required-filter-fields-endpoint="/api/content/required-filter-fields">
         <label class="search-control search-query-control">
@@ -303,13 +306,14 @@
     </form>
 </section>
 <hr class="search-panel-divider" />
+}
 
 @if (!string.IsNullOrWhiteSpace(Model.FlashMessage))
 {
     <div class="status-banner">@Model.FlashMessage</div>
 }
 
-@if (Model.RequireLocalitySelection)
+@if (Model.RequireLocalitySelection && !isSocialLanding)
 {
     <div data-browse-locality-required="true" hidden></div>
     <section class="empty-state" data-browse-scroll-target>

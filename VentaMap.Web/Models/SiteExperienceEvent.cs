@@ -18,6 +18,9 @@ public class SiteExperienceEvent
     [StringLength(64)]
     public string Button { get; set; } = string.Empty;
 
+    [StringLength(32)]
+    public string AcquisitionChannel { get; set; } = "other";
+
     // Sólo se almacena el path sin query string para evitar capturar búsquedas.
     [StringLength(512)]
     public string Route { get; set; } = "/";

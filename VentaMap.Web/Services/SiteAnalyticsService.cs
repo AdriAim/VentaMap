@@ -8,7 +8,7 @@ public class SiteAnalyticsService(SiteVisitQueue queue, CurrentUserAccessor curr
     internal const string VisitorCookieName = "ventamap.site-visitor";
     private const string VisitDayCookieName = "ventamap.site-visit-day";
     internal const string SessionCookieName = "ventamap.site-session";
-    internal const string FirstSessionCookieName = "ventamap.site-first-session";
+    internal const string AcquisitionChannelCookieName = "ventamap.site-acquisition-channel";
 
     public void TrackVisit(HttpContext context)
     {
@@ -25,15 +25,16 @@ public class SiteAnalyticsService(SiteVisitQueue queue, CurrentUserAccessor curr
             context.Response.Cookies.Append(VisitorCookieName, visitorId, CookieOptions(context));
         }
 
-        if (string.IsNullOrWhiteSpace(context.Request.Cookies[SessionCookieName]))
+        var isNewSession = string.IsNullOrWhiteSpace(context.Request.Cookies[SessionCookieName]);
+        if (isNewSession)
         {
             context.Response.Cookies.Append(SessionCookieName, Convert.ToHexString(RandomNumberGenerator.GetBytes(32)), SessionCookieOptions(context));
         }
 
-        if (isNewVisitor)
+        var attribution = GetAttribution(context.Request);
+        if (isNewSession || string.IsNullOrWhiteSpace(context.Request.Cookies[AcquisitionChannelCookieName]))
         {
-            // Sin vencimiento: el navegador elimina esta marca al terminar la primera sesión.
-            context.Response.Cookies.Append(FirstSessionCookieName, "1", SessionCookieOptions(context));
+            context.Response.Cookies.Append(AcquisitionChannelCookieName, attribution.Channel, SessionCookieOptions(context));
         }
 
         var argentinaDay = DateTime.UtcNow.AddHours(-3).Date;
@@ -45,7 +46,6 @@ public class SiteAnalyticsService(SiteVisitQueue queue, CurrentUserAccessor curr
 
         context.Response.Cookies.Append(VisitDayCookieName, dayText, CookieOptions(context));
         var visitorHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(visitorId!)));
-        var attribution = GetAttribution(context.Request);
         queue.TryEnqueue(new SiteVisitEvent(
             visitorHash,
             argentinaDay,

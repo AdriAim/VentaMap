@@ -80,6 +80,9 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
         modelBuilder.Entity<SiteExperienceEvent>()
             .HasIndex(x => x.OccurredAtUtc);
 
+        modelBuilder.Entity<SiteExperienceEvent>()
+            .HasIndex(x => new { x.OccurredAtUtc, x.AcquisitionChannel });
+
         modelBuilder.Entity<ApplicationUser>()
             .Property(x => x.CanPublish)
             .HasDefaultValue(true);

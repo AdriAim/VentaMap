@@ -1,0 +1,37 @@
+@page "/MapaR"
+@model BrowseModel
+@{
+    ViewData["Title"] = "Mapa de inmuebles";
+    ViewData["MetaDescription"] = "Explorá inmuebles en el mapa y publicá gratis en VentaMap.";
+}
+
+<div id="api-page"
+     data-page-kind="social-map"
+     data-api-endpoint="/api/content/browse?group=Inmuebles&amp;mode=Mapa&amp;landing=social">
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const host = document.getElementById("api-page");
+        if (!host) return;
+
+        const scrollToMap = () => {
+            const map = host.querySelector("[data-map-layout]");
+            if (!map) return false;
+            map.scrollIntoView({ block: "start", behavior: "auto" });
+            return true;
+        };
+
+        if (scrollToMap()) return;
+
+        const observer = new MutationObserver(() => {
+            if (scrollToMap()) observer.disconnect();
+        });
+        observer.observe(host, { childList: true, subtree: true });
+    });
+</script>
+
+<partial name="_GlobalModals" model="Model" />
+
+<link rel="stylesheet" href="~/css/browse.css" asp-append-version="true" />
+<script src="~/js/browse-ajax.js" asp-append-version="true"></script>

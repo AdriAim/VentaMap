@@ -11,10 +11,11 @@ public class PublicationGroupPreferenceService(
 {
     public const string CookieName = "ventamap_header_groups";
     public const int MaxHeaderGroups = 5;
+    private static readonly string[] HeaderGroupOrder = ["Inmuebles", "Rodados", "Embarcaciones", "Moda", "Electronica", "Generales"];
 
     public async Task<List<PublicationGroupType>> GetHeaderGroupsAsync(HttpContext httpContext)
     {
-        var activeGroups = await publicationGroupTypeService.GetActiveAsync();
+        var activeGroups = OrderHeaderGroups(await publicationGroupTypeService.GetActiveAsync());
         var activeByName = activeGroups.ToDictionary(x => x.Name, StringComparer.OrdinalIgnoreCase);
         var preferredNames = await GetPreferredGroupNamesAsync(httpContext);
         var completedPreferredNames = AddFallbackGroupsWhenUnderFour(preferredNames, activeByName);
@@ -50,7 +51,7 @@ public class PublicationGroupPreferenceService(
 
     public async Task<string> NormalizeGroupNamesCsvAsync(IEnumerable<string?> rawNames)
     {
-        var activeGroups = await publicationGroupTypeService.GetActiveAsync();
+        var activeGroups = OrderHeaderGroups(await publicationGroupTypeService.GetActiveAsync());
         var activeByName = activeGroups.ToDictionary(x => x.Name, StringComparer.OrdinalIgnoreCase);
 
         var names = rawNames
@@ -104,6 +105,12 @@ public class PublicationGroupPreferenceService(
             .Take(MaxHeaderGroups)
             .Select(x => x.Name));
     }
+
+    public static List<PublicationGroupType> OrderHeaderGroups(IEnumerable<PublicationGroupType> groups) => groups
+        .Where(group => HeaderGroupOrder.Contains(group.Name, StringComparer.OrdinalIgnoreCase))
+        .OrderBy(group => Array.FindIndex(HeaderGroupOrder,
+            name => string.Equals(name, group.Name, StringComparison.OrdinalIgnoreCase)))
+        .ToList();
 
     private static IEnumerable<string> SplitGroupNames(string? value)
     {

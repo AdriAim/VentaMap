@@ -10,13 +10,13 @@ public class SiteExperienceAnalyticsService(VentaMapDbContext db, CurrentUserAcc
 {
     private static readonly HashSet<string> AllowedEvents = new(StringComparer.Ordinal)
     {
-        "entry_button_clicked", "locality_modal_shown", "locality_completed", "locality_closed", "locality_abandoned"
+        "entry_button_clicked", "map_pin_selected", "locality_modal_shown", "locality_completed", "locality_closed", "locality_abandoned"
     };
 
     private static readonly HashSet<string> AllowedButtons = new(StringComparer.Ordinal)
     {
         "explore_properties", "properties_map", "explore_vehicles", "explore_all",
-        "publish_now", "view_listings", "catalog_more_info"
+        "publish_now", "view_listings", "catalog_more_info", "catalog_promo", "map_pin_selected"
     };
 
     public async Task<bool> TrackAsync(HttpContext context, string? eventName, string? button, string? route)
@@ -25,12 +25,11 @@ public class SiteExperienceAnalyticsService(VentaMapDbContext db, CurrentUserAcc
 
         var visitorId = context.Request.Cookies[SiteAnalyticsService.VisitorCookieName];
         var sessionId = context.Request.Cookies[SiteAnalyticsService.SessionCookieName];
-        if (context.Request.Cookies[SiteAnalyticsService.FirstSessionCookieName] != "1"
-            || string.IsNullOrWhiteSpace(visitorId) || string.IsNullOrWhiteSpace(sessionId)) return false;
+        if (string.IsNullOrWhiteSpace(visitorId) || string.IsNullOrWhiteSpace(sessionId)) return false;
 
         var normalizedButton = string.IsNullOrWhiteSpace(button) ? string.Empty : button.Trim();
-        if (eventName == "entry_button_clicked" && !AllowedButtons.Contains(normalizedButton)) return false;
-        if (eventName != "entry_button_clicked") normalizedButton = string.Empty;
+        if ((eventName == "entry_button_clicked" || eventName == "map_pin_selected") && !AllowedButtons.Contains(normalizedButton)) return false;
+        if (eventName != "entry_button_clicked" && eventName != "map_pin_selected") normalizedButton = string.Empty;
 
         var item = new SiteExperienceEvent
         {
@@ -38,6 +37,7 @@ public class SiteExperienceAnalyticsService(VentaMapDbContext db, CurrentUserAcc
             SessionHash = Hash(sessionId!),
             EventName = eventName!,
             Button = normalizedButton,
+            AcquisitionChannel = NormalizeChannel(context.Request.Cookies[SiteAnalyticsService.AcquisitionChannelCookieName]),
             Route = NormalizeRoute(route),
             OccurredAtUtc = DateTime.UtcNow
         };
@@ -55,6 +55,8 @@ public class SiteExperienceAnalyticsService(VentaMapDbContext db, CurrentUserAcc
     }
 
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+
+    private static string NormalizeChannel(string? channel) => channel is "social_campaign" or "shared_link" ? channel : "other";
 
     private static string NormalizeRoute(string? value)
     {

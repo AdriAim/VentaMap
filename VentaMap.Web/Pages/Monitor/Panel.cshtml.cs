@@ -12,7 +12,8 @@ namespace VentaMap.Pages.Monitor;
 public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAccessor) : PageModel
 {
     public List<DailyMetric> Metrics { get; private set; } = [];
-    public FirstVisitExperienceMetric FirstVisitExperience { get; private set; } = new([], 0, 0, 0, 0);
+    public FirstVisitExperienceMetric FirstVisitExperience { get; private set; } = new(0, [], 0, 0, 0, 0);
+    public MapRExperienceMetric MapRExperience { get; private set; } = new([]);
     public List<SiteSuggestion> RecentSuggestions { get; private set; } = [];
     public int LatestSuggestionId { get; private set; }
 
@@ -53,11 +54,15 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
             .Where(x => x.VisitedOn >= from && x.VisitedOn < until)
             .Select(x => new VisitAttributionMetric(x.VisitedOn, x.AcquisitionChannel, x.CampaignSource, x.CampaignName))
             .ToListAsync();
+        var socialCampaigns = visits.Where(x => x.Channel == "social_campaign").ToList();
+        var attributedVisits = visits.Where(x => x.Channel is "social_campaign" or "shared_link").ToList();
         var experienceEvents = await db.SiteExperienceEvents.AsNoTracking()
-            .Where(x => x.OccurredAtUtc >= utcFrom && x.OccurredAtUtc < utcUntil)
-            .Select(x => new { x.EventName, x.Button })
+            .Where(x => x.OccurredAtUtc >= utcFrom && x.OccurredAtUtc < utcUntil
+                && (x.AcquisitionChannel == "social_campaign" || x.AcquisitionChannel == "shared_link"))
+            .Select(x => new { x.EventName, x.Button, x.Route })
             .ToListAsync();
         FirstVisitExperience = new FirstVisitExperienceMetric(
+            attributedVisits.Count,
             experienceEvents.Where(x => x.EventName == "entry_button_clicked")
                 .GroupBy(x => x.Button)
                 .Select(x => new EntryButtonMetric(x.Key, x.Count()))
@@ -68,8 +73,15 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
             experienceEvents.Count(x => x.EventName == "locality_completed"),
             experienceEvents.Count(x => x.EventName == "locality_closed"),
             experienceEvents.Count(x => x.EventName == "locality_abandoned"));
+        MapRExperience = new MapRExperienceMetric(
+            experienceEvents.Where(x => string.Equals(x.Route, "/MapaR", StringComparison.OrdinalIgnoreCase)
+                    && (x.EventName == "entry_button_clicked" || x.EventName == "map_pin_selected"))
+                .GroupBy(x => x.Button)
+                .Select(x => new EntryButtonMetric(x.Key, x.Count()))
+                .OrderByDescending(x => x.Count)
+                .ThenBy(x => x.Button)
+                .ToList());
         var visitors = visits.GroupBy(x => x.Day).ToDictionary(x => x.Key, x => x.Count());
-        var socialCampaigns = visits.Where(x => x.Channel == "social_campaign").ToList();
         var instagramCampaigns = GetCampaignBreakdown(socialCampaigns, "instagram");
         var facebookCampaigns = GetCampaignBreakdown(socialCampaigns, "facebook");
         var tiktokCampaignVisits = CountCampaignsByPlatform(socialCampaigns, "tiktok");
@@ -182,15 +194,19 @@ public class PanelModel(VentaMapDbContext db, CurrentUserAccessor currentUserAcc
             "publish_now" => "Publicar ahora",
             "view_listings" => "Ver anuncios",
             "catalog_more_info" => "Quiero más información",
+            "catalog_promo" => "Publicar gratis (ver catálogo digital)",
+            "map_pin_selected" => "Pin seleccionado en el mapa",
             _ => Button
         };
     }
     public sealed record FirstVisitExperienceMetric(
+        int AcquisitionVisitors,
         IReadOnlyList<EntryButtonMetric> EntryButtons,
         int LocalityShown,
         int LocalityCompleted,
         int LocalityClosed,
         int LocalityAbandoned);
+    public sealed record MapRExperienceMetric(IReadOnlyList<EntryButtonMetric> Actions);
     public sealed record DailyMetric(
         DateTime Day,
         IReadOnlyList<MonitorUser> NewUsers,

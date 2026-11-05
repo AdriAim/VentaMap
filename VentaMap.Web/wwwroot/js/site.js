@@ -24,8 +24,9 @@
     const payload = JSON.stringify({ eventName, button, route: window.location.pathname });
     try {
       if (navigator.sendBeacon) {
-        navigator.sendBeacon("/api/content/visitor-events", new Blob([payload], { type: "application/json" }));
-        return;
+        if (navigator.sendBeacon("/api/content/visitor-events", new Blob([payload], { type: "application/json" }))) {
+          return;
+        }
       }
     } catch (_) {
       // El fetch de respaldo cubre navegadores que rechazan sendBeacon.
@@ -1795,9 +1796,11 @@
       suggestionsList.innerHTML = "";
     };
 
-    const close = () => {
+    const close = (trackClose = true) => {
       localityOutcomeRecorded = true;
-      trackInitialExperience("locality_closed");
+      if (trackClose) {
+        trackInitialExperience("locality_closed");
+      }
       modal.hidden = true;
       modal.classList.remove("is-open");
       syncPreviewOpenState();
@@ -2175,7 +2178,8 @@
     });
 
     if (modal.dataset.guestLocalityRequired !== "true") {
-      close();
+      // El modal no fue abierto: solo debe quedar oculto, sin registrarlo como cierre.
+      close(false);
     }
 
     syncBrowseLocalityPrompt();
@@ -3487,6 +3491,7 @@
       window.setTimeout(() => instance.resize?.(), 60);
     };
     const mapLayout = mapElement.closest("[data-map-layout]");
+    const isSocialMapLanding = mapLayout?.classList.contains("social-map-landing");
     const selectionPanel = mapLayout?.querySelector("[data-map-selection-card]");
     const markersEndpoint = String(mapElement.dataset.mapMarkersEndpoint || "").trim();
     const mapSelectionAction = mapElement.dataset.mapSelectionAction || "";
@@ -3593,6 +3598,9 @@
 
     syncSelectionViewButtons();
     const handleMarkerSelection = marker => {
+      if (isSocialMapLanding) {
+        trackInitialExperience("map_pin_selected", "map_pin_selected");
+      }
       if (isMobileMapInteractionContext()) {
         blurFullscreenMapFilter();
         hoverPopup.remove();
@@ -6178,6 +6186,7 @@
 
       const phone = String(link.dataset.whatsappNumber || "").replace(/\D/g, "");
       if (!phone) return;
+      const message = String(link.dataset.whatsappMessage || "").trim();
 
       event.preventDefault();
       let appOpened = document.visibilityState === "hidden";
@@ -6186,7 +6195,8 @@
       };
       document.addEventListener("visibilitychange", markAppOpened, { once: true });
 
-      window.location.href = `whatsapp://send?phone=${encodeURIComponent(phone)}`;
+      const messageParameter = message ? `&text=${encodeURIComponent(message)}` : "";
+      window.location.href = `whatsapp://send?phone=${encodeURIComponent(phone)}${messageParameter}`;
       window.setTimeout(() => {
         if (!appOpened) window.location.assign(link.href);
       }, 1200);

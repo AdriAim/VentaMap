@@ -407,6 +407,7 @@ static async Task EnsureDatabaseSchemaAsync(VentaMapDbContext db, IWebHostEnviro
         await EnsurePublicationFavoritesSchemaAsync(connection);
         await EnsurePublicationAnalyticsSchemaAsync(connection);
         await EnsureSiteAnalyticsSchemaAsync(connection);
+        await EnsurePublicationGroupTypesAsync(connection);
         await EnsurePublicationCountersSchemaAsync(connection);
         await EnsureCompanyAndSuggestionsSchemaAsync(connection);
         await EnsureReviewSchemaAsync(connection);
@@ -1125,13 +1126,31 @@ static async Task EnsureSiteAnalyticsSchemaAsync(System.Data.Common.DbConnection
             `SessionHash` varchar(64) CHARACTER SET utf8mb4 NOT NULL,
             `EventName` varchar(64) CHARACTER SET utf8mb4 NOT NULL,
             `Button` varchar(64) CHARACTER SET utf8mb4 NOT NULL DEFAULT '',
+            `AcquisitionChannel` varchar(32) CHARACTER SET utf8mb4 NOT NULL DEFAULT 'other',
             `Route` varchar(512) CHARACTER SET utf8mb4 NOT NULL,
             `OccurredAtUtc` datetime(6) NOT NULL,
             CONSTRAINT `PK_SiteExperienceEvents` PRIMARY KEY (`Id`)
         ) CHARACTER SET=utf8mb4;
         """);
+    await EnsureColumnAsync(connection, "SiteExperienceEvents", "AcquisitionChannel", "varchar(32) CHARACTER SET utf8mb4 NOT NULL DEFAULT 'other'");
     await EnsureIndexAsync(connection, "SiteExperienceEvents", "IX_SiteExperienceEvents_Visitor_Session_Event_Button_Route", "CREATE UNIQUE INDEX `IX_SiteExperienceEvents_Visitor_Session_Event_Button_Route` ON `SiteExperienceEvents` (`VisitorHash`, `SessionHash`, `EventName`, `Button`, `Route`)");
     await EnsureIndexAsync(connection, "SiteExperienceEvents", "IX_SiteExperienceEvents_OccurredAtUtc", "CREATE INDEX `IX_SiteExperienceEvents_OccurredAtUtc` ON `SiteExperienceEvents` (`OccurredAtUtc`)");
+    await EnsureIndexAsync(connection, "SiteExperienceEvents", "IX_SiteExperienceEvents_OccurredAtUtc_AcquisitionChannel", "CREATE INDEX `IX_SiteExperienceEvents_OccurredAtUtc_AcquisitionChannel` ON `SiteExperienceEvents` (`OccurredAtUtc`, `AcquisitionChannel`)");
+}
+
+static async Task EnsurePublicationGroupTypesAsync(System.Data.Common.DbConnection connection)
+{
+    await ExecuteNonQueryAsync(connection,
+        """
+        INSERT INTO `PublicationGroupTypes` (`Id`, `Name`, `SortOrder`, `IsActive`)
+        VALUES
+            (6, 'Generales', 6, TRUE),
+            (7, 'Moda', 7, TRUE)
+        ON DUPLICATE KEY UPDATE
+            `Name` = VALUES(`Name`),
+            `SortOrder` = VALUES(`SortOrder`),
+            `IsActive` = TRUE;
+        """);
 }
 
 static async Task EnsureColumnAsync(System.Data.Common.DbConnection connection, string tableName, string columnName, string definition)

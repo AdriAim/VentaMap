@@ -42,11 +42,37 @@
     </section>
     <section class="detail-panel">
         <div class="section-heading">
-            <span class="eyebrow">Primera visita</span>
-            <h2>Entradas y localidad</h2>
-            <p>Eventos anonimizados de los últimos 30 días. Cada acción se cuenta una vez por visitante, sesión, ruta y botón.</p>
+            <span class="eyebrow">MapaR</span>
+            <h2>Clics en la portada de mapa</h2>
+            <p>Acciones registradas en <strong>/MapaR</strong> durante los últimos 30 días, para visitas desde redes o enlaces compartidos.</p>
+        </div>
+        @if (Model.MapRExperience.Actions.Count == 0)
+        {
+            <p class="field-hint">Aún no hay clics registrados en MapaR.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table">
+                    <thead><tr><th>Acción</th><th>Clics</th></tr></thead>
+                    <tbody>
+                    @foreach (var item in Model.MapRExperience.Actions)
+                    {
+                        <tr><td>@item.Label</td><td>@item.Count</td></tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+    <section class="detail-panel">
+        <div class="section-heading">
+            <span class="eyebrow">Redes y enlaces compartidos</span>
+            <h2>Qué hacen al entrar</h2>
+            <p>Eventos anonimizados de los últimos 30 días de quienes llegaron desde una campaña de redes o un enlace compartido. Cada acción se cuenta una vez por visitante, sesión, ruta y botón.</p>
         </div>
         <div class="monitor-experience-metrics">
+            <div><strong>@Model.FirstVisitExperience.AcquisitionVisitors</strong><span>visitas desde redes o enlaces</span></div>
             <div><strong>@Model.FirstVisitExperience.LocalityShown</strong><span>pasos de localidad mostrados</span></div>
             <div><strong>@Model.FirstVisitExperience.LocalityCompleted</strong><span>localidades completadas</span></div>
             <div><strong>@Model.FirstVisitExperience.LocalityClosed</strong><span>cierres</span></div>
@@ -54,7 +80,7 @@
         </div>
         @if (Model.FirstVisitExperience.EntryButtons.Count == 0)
         {
-            <p class="field-hint">Aún no hay clics de primera visita registrados.</p>
+            <p class="field-hint">Aún no hay clics registrados de visitas desde redes o enlaces.</p>
         }
         else
         {

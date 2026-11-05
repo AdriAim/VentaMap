@@ -783,6 +783,37 @@ body.publication-details-page .brand-mark {
   border: 0;
 }
 
+.catalog-promo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.catalog-promo-publish-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+}
+
+.catalog-promo-publish-button:hover,
+.catalog-promo-publish-button:focus-visible {
+  background: var(--accent-deep);
+  color: #fff;
+}
+
+.catalog-promo-info-button {
+  background: var(--accent-navy);
+}
+
+.catalog-promo-info-button:hover,
+.catalog-promo-info-button:focus-visible {
+  background: #465b80;
+}
+
 .catalog-promo-preview {
   position: relative;
   max-height: 34rem;
@@ -1649,6 +1680,26 @@ textarea:focus {
 .ghost-pill:hover,
 .site-rules-pill:hover {
   transform: translateY(-1px);
+}
+
+/* Acciones del catálogo: declarar después de la regla base de .primary-pill. */
+.catalog-promo-actions .catalog-promo-info-button.primary-pill {
+  background: linear-gradient(135deg, var(--accent-navy), #465b80) !important;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  box-shadow: 0 14px 30px rgba(49, 70, 101, 0.24);
+}
+
+.catalog-promo-actions .catalog-promo-info-button.primary-pill:hover,
+.catalog-promo-actions .catalog-promo-info-button.primary-pill:focus-visible {
+  background: linear-gradient(135deg, #263a59, var(--accent-navy)) !important;
+}
+
+.catalog-promo-actions .catalog-promo-publish-button.primary-pill {
+  background: linear-gradient(135deg, var(--accent), #ff6d58) !important;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  box-shadow: 0 14px 30px rgba(255, 75, 95, 0.24);
 }
 
 .group-strip,
@@ -6321,6 +6372,11 @@ a.map-advertiser-card:focus-visible {
 
 .header-group-options .compact-check {
   border-radius: 8px;
+}
+
+#guestLocalityModal .header-group-options {
+  row-gap: 0;
+  align-content: flex-start;
 }
 
 .detail-panel > label.checkline.compact-check {

@@ -1,8 +1,59 @@
 @model ResultsLayoutViewModel
 @{
     var results = Model.Results;
+    var isSocialLanding = string.Equals(Context.Request.Query["landing"], "social", StringComparison.OrdinalIgnoreCase);
 }
 
+@if (isSocialLanding)
+{
+<section class="social-map-landing" data-browse-scroll-target data-map-layout>
+    <nav class="social-map-landing-nav" aria-label="Explorar VentaMap">
+        <div class="social-map-landing-heading">
+            <span>Encontrá lo que buscás</span>
+            <strong>Comenzá a explorar</strong>
+        </div>
+        <a href="/Buscar?group=Inmuebles#search-panel" data-initial-entry-button="explore_properties">
+            <i class="fa-solid fa-house" aria-hidden="true"></i><span>Explorar Inmuebles</span>
+        </a>
+        <a class="is-active" href="/Buscar?group=Inmuebles&amp;mode=Mapa#browse-results" data-initial-entry-button="properties_map">
+            <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i><span>Mapa de Inmuebles</span>
+        </a>
+        <a href="/Buscar?group=Rodados#search-panel" data-initial-entry-button="explore_vehicles">
+            <i class="fa-solid fa-car-side" aria-hidden="true"></i><span>Explorar Rodados</span>
+        </a>
+        <a href="/Buscar?group=Todos#search-panel" data-initial-entry-button="explore_all">
+            <i class="fa-solid fa-compass" aria-hidden="true"></i><span>Explorar Todo</span>
+        </a>
+        <a class="social-map-publish" href="/CatalogoDigital" data-initial-entry-button="catalog_promo">
+            <i class="fa-solid fa-plus" aria-hidden="true"></i><span>Publicar gratis</span>
+        </a>
+    </nav>
+    <div class="social-map-canvas-shell">
+        <div class="map-canvas" id="map"
+             data-map-style-url="@results.MapStyleUrl"
+             data-map-tiles-url="@results.MapTilesUrlTemplate"
+             data-map-attribution="@results.MapAttributionHtml"
+             data-map-initial-lat="@results.UserLocalityLatitude"
+             data-map-initial-lng="@results.UserLocalityLongitude"
+             data-map-markers-endpoint="@results.MapMarkersApiEndpoint"
+             data-markers='@results.MarkersJson'>
+            @if (string.IsNullOrWhiteSpace(results.MapStyleUrl) && string.IsNullOrWhiteSpace(results.MapTilesUrlTemplate))
+            {
+                <div class="map-placeholder"><h2>Mapa listo para MapLibre</h2></div>
+            }
+        </div>
+    </div>
+    <aside class="social-map-selection-panel" data-map-selection-panel aria-live="polite">
+        <div class="social-map-selection-heading">
+            <span>Pin seleccionado</span>
+            <strong>Elegí un anuncio en el mapa</strong>
+        </div>
+        <div class="map-selection-card" data-map-selection-card></div>
+    </aside>
+</section>
+}
+else
+{
 <partial name="~/Views/Content/Results/_ResultsLayoutHeader.cshtml" model="Model" />
 
 @if (!results.Publications.Any())
@@ -64,4 +115,5 @@ else
         </div>
     </div>
 </section>
+}
 }
