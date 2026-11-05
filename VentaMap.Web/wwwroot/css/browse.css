@@ -94,6 +94,10 @@
     max-height: none;
 }
 
+.social-map-mobile-publish {
+    display: none;
+}
+
 .social-map-selection-panel {
     width: 100%;
     height: auto;
@@ -158,6 +162,29 @@
         height: calc(100dvh - 5.5rem);
         min-height: 360px;
         border-radius: 0;
+    }
+
+    .social-map-canvas-shell {
+        position: relative;
+    }
+
+    .social-map-mobile-publish {
+        position: absolute;
+        z-index: 6;
+        top: max(.85rem, env(safe-area-inset-top));
+        left: max(.85rem, env(safe-area-inset-left));
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
+        min-height: 2.8rem;
+        padding: .65rem .9rem;
+        border-radius: 999px;
+        background: linear-gradient(135deg, var(--accent), #ff6d58);
+        box-shadow: 0 12px 26px rgba(255, 75, 95, .3);
+        color: #fff;
+        font-size: .85rem;
+        font-weight: 800;
+        text-decoration: none;
     }
 
     .page-shell:has(#api-page[data-page-kind="social-map"]) {
