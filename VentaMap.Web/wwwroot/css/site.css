@@ -8642,7 +8642,29 @@ textarea.input-validation-error,
   }
 
   .map-fullscreen-search.company-catalog-fullscreen-search:not([hidden]) {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .map-fullscreen-brand {
+    width: 2.65rem;
+    height: 2.65rem;
+    display: grid;
+    place-items: center;
+    object-fit: contain;
+    border-radius: 12px;
+    background: rgba(245, 241, 236, 0.92);
+  }
+
+  .map-fullscreen-brand img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .map-fullscreen-search.company-catalog-fullscreen-search .map-fullscreen-operation,
+  .map-fullscreen-search.company-catalog-fullscreen-search .price-range-filter {
+    grid-column: 1 / -1;
   }
 
   .map-view-row {
