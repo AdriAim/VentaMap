@@ -643,6 +643,11 @@ else
                 } else {
                     url.searchParams.delete("view");
                 }
+                if (selectedView === "map") {
+                    url.searchParams.set("fullscreen", "1");
+                } else {
+                    url.searchParams.delete("fullscreen");
+                }
 
                 const absoluteUrl = url.toString();
                 const originalLabel = button.getAttribute("data-copy-label") || "Copiar link para compartir";
