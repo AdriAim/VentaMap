@@ -498,6 +498,12 @@ else
                 const mapStyleUrl = mapCanvas?.dataset.mapStyleUrl || "";
                 const mapTilesUrl = mapCanvas?.dataset.mapTilesUrl || "";
                 const mapAttribution = mapCanvas?.dataset.mapAttribution || "";
+                const fullscreenBrand = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    logoUrl = string.IsNullOrWhiteSpace(company.CompanyLogoUrl) ? "/images/logo5.png" : company.CompanyLogoUrl,
+                    name = string.IsNullOrWhiteSpace(company.CompanyLogoUrl) ? "VentaMap" : company.CompanyName,
+                    returnUrl = "/Buscar?group=Inmuebles"
+                }));
                 const queryParameters = new URLSearchParams(window.location.search);
                 // Es un enlace de presentación, no el Fullscreen API del navegador:
                 // funciona igual en escritorio y móvil, sin requerir un gesto previo.
@@ -1049,9 +1055,12 @@ else
                     }
 
                     const fullscreenSearch = document.createElement("div");
-                    fullscreenSearch.className = "map-fullscreen-search";
+                    fullscreenSearch.className = "map-fullscreen-search company-catalog-fullscreen-search";
                     fullscreenSearch.setAttribute("role", "search");
-                    fullscreenSearch.innerHTML = '<input type="search" aria-label="Buscar en el catálogo" placeholder="Buscar por título, categoría o localidad" autocomplete="off" />';
+                    fullscreenSearch.innerHTML = `<a class="map-fullscreen-brand" href="${escapeHtml(fullscreenBrand.returnUrl)}" aria-label="Volver a Inmuebles">
+                            <img src="${escapeHtml(fullscreenBrand.logoUrl)}" alt="${escapeHtml(fullscreenBrand.name)}">
+                        </a>
+                        <input type="search" aria-label="Buscar en el catálogo" placeholder="Buscar por título, categoría o localidad" autocomplete="off" />`;
                     const fullscreenSearchInput = fullscreenSearch.querySelector("input");
                     let isMarkerPopupOpen = false;
                     const isPropertyCatalog = markerData.length > 0
