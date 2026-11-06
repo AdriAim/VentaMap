@@ -4114,7 +4114,9 @@
       isMarkerPopupOpen = false;
       sync();
     });
-    sync();
+    const shouldOpenFullscreen = new URLSearchParams(window.location.search).get("fullscreen") === "1";
+    if (shouldOpenFullscreen && isMobileMapInteractionContext()) toggle();
+    else sync();
   }
 
   function wireDetailMapFullscreen(mapElement, sdk) {

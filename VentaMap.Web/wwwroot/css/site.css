@@ -1437,6 +1437,11 @@ h3,
   appearance: none;
 }
 
+.price-range-slider input[type="range"]::-webkit-slider-runnable-track {
+  border: 0;
+  background: transparent;
+}
+
 .price-range-slider input[type="range"]::-moz-range-thumb {
   width: 22px;
   height: 22px;
@@ -1446,6 +1451,11 @@ h3,
   box-shadow: 0 8px 18px rgba(49, 70, 101, 0.22);
   cursor: grab;
   pointer-events: auto;
+}
+
+.price-range-slider input[type="range"]::-moz-range-track {
+  border: 0;
+  background: transparent;
 }
 
 .required-filter-panel {
