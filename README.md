@@ -1,6 +1,6 @@
 # VentaMap
 
-VentaMap es un portal de clasificados hecho en ASP.NET Core 8 con Razor Pages, MySQL y Entity Framework Core.
+VentaMap es un portal de clasificados hecho en ASP.NET Core 8 con Razor Pages, MySQL y Entity Framework Core. No utiliza Flutter.
 
 El producto quedó orientado a tres grandes rubros:
 
@@ -150,6 +150,15 @@ La vista de mapa usa MapTiler si se configura:
 - `MapTiler:ApiKey`
 
 Si no hay clave, se muestra placeholder.
+
+### Enlace compartible a pantalla completa
+
+Un catálogo de empresa puede compartirse directamente en el mapa de pantalla completa:
+
+`/catalogo/{empresa}?view=map&fullscreen=1`
+
+Por ejemplo: `https://www.ventamap.com.ar/catalogo/jc-brokers?view=map&fullscreen=1`.
+El modo conserva los pines, filtros y la apertura de anuncios, tanto en escritorio como en móvil.
 
 ## Estructura relevante
 

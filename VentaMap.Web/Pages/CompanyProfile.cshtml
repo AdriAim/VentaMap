@@ -498,6 +498,11 @@ else
                 const mapStyleUrl = mapCanvas?.dataset.mapStyleUrl || "";
                 const mapTilesUrl = mapCanvas?.dataset.mapTilesUrl || "";
                 const mapAttribution = mapCanvas?.dataset.mapAttribution || "";
+                const queryParameters = new URLSearchParams(window.location.search);
+                // Es un enlace de presentación, no el Fullscreen API del navegador:
+                // funciona igual en escritorio y móvil, sin requerir un gesto previo.
+                const shouldOpenSharedFullscreenMap = queryParameters.get("view")?.trim().toLowerCase() === "map"
+                    && queryParameters.get("fullscreen") === "1";
 
                 let currentView = "list";
                 let map = null;
@@ -1143,6 +1148,11 @@ else
                     ? requestedView
                     : window.matchMedia("(max-width: 780px)").matches ? "gallery" : "list";
                 setView(initialView);
+                if (shouldOpenSharedFullscreenMap && fullscreenTrigger) {
+                    // Reutiliza el flujo normal de pantalla completa para conservar
+                    // filtros, pines, tarjetas y la interacción de los anuncios.
+                    fullscreenTrigger.click();
+                }
             })();
         </script>
     }
