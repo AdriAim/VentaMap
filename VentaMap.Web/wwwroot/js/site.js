@@ -1801,6 +1801,13 @@
       if (trackClose) {
         trackInitialExperience("locality_closed");
       }
+
+      // El listener global de navegacion muestra su indicador durante la fase
+      // de captura. Cuando el selector intercepta una busqueda para pedir la
+      // localidad, esa navegacion finalmente no ocurre. Si la persona cierra
+      // el selector, hay que cancelar tambien aquel indicador pendiente.
+      clearPersistedSystemLoading();
+      forceHideSystemLoading();
       modal.hidden = true;
       modal.classList.remove("is-open");
       syncPreviewOpenState();
@@ -1811,7 +1818,9 @@
       trackInitialExperience("locality_modal_shown");
       pendingNavigationUrl = String(navigationUrl || "").trim();
       shouldPersistHeaderGroups = persistHeaderGroups || modal.dataset.guestLocalityRequired === "true";
-      input.value = String(sourceLabel || modal.dataset.currentLocalityLabel || "").trim();
+      // La localidad predeterminada se aplica solo al cerrar este paso. No la
+      // proponemos como si fuera una elección hecha por la persona.
+      input.value = String(sourceLabel || "").trim();
       const existing = options.find(option =>
         normalizeLocalityText(option.label) === normalizeLocalityText(input.value)
         || normalizeLocalityText(option.locality) === normalizeLocalityText(input.value));
@@ -2121,6 +2130,20 @@
     closeButtons.forEach(button => {
       button.addEventListener("click", event => {
         event.preventDefault();
+
+        // Para visitantes nuevos, cerrar equivale a aceptar la localidad
+        // predeterminada. Así queda guardada en la cookie y este paso no
+        // vuelve a interrumpir la navegación en cada visita.
+        if (modal.dataset.guestLocalityRequired === "true") {
+          const defaultLocality = options.find(option =>
+            normalizeLocalityText(option.locality) === "santa fe"
+            && normalizeLocalityText(option.province) === "santa fe");
+          if (defaultLocality) {
+            applyLocality(defaultLocality);
+            return;
+          }
+        }
+
         close();
       });
     });
