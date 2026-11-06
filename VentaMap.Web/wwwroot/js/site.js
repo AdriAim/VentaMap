@@ -4030,9 +4030,12 @@
 
     if (sourceForm && sourceQuery) {
       fullscreenSearch = document.createElement("div");
-      fullscreenSearch.className = "map-fullscreen-search";
+      fullscreenSearch.className = "map-fullscreen-search general-map-fullscreen-search";
       fullscreenSearch.setAttribute("role", "search");
       fullscreenSearch.innerHTML = `
+        <a class="map-fullscreen-brand" href="/Buscar?group=Inmuebles" aria-label="Volver a Inmuebles">
+          <img src="/images/logo5.png" alt="VentaMap" />
+        </a>
         <label class="map-fullscreen-query">
           <input name="query" aria-label="Buscar anuncios" placeholder="${escapeAttribute(sourceQuery.placeholder || "Buscar anuncios")}" value="${escapeAttribute(sourceQuery.value || "")}" />
         </label>
