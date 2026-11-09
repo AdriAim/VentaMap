@@ -6166,13 +6166,69 @@
     dropzone.addEventListener("dragleave", () => dropzone.classList.remove("is-dragging"));
     dropzone.addEventListener("drop", event => { event.preventDefault(); dropzone.classList.remove("is-dragging"); void addFiles(event.dataTransfer.files); });
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (Recognition) {
+    if (Recognition && voice) {
       voice.hidden = false;
+      let recognition = null;
+      let isListening = false;
+      let receivedResult = false;
+      let recognitionError = false;
+      const resetVoiceButton = () => {
+        isListening = false;
+        voice.disabled = false;
+        voice.innerHTML = '<i class="fa-solid fa-microphone" aria-hidden="true"></i> Dictar descripción';
+      };
+      const voiceErrorMessage = error => ({
+        "not-allowed": "No se habilitó el micrófono. Permití su uso en el navegador y volvé a intentar.",
+        "service-not-allowed": "El navegador bloqueó el servicio de dictado. Revisá los permisos del micrófono.",
+        "audio-capture": "No encontramos un micrófono disponible. Conectá o habilitá uno y probá de nuevo.",
+        "network": "El servicio de dictado no pudo conectarse. Revisá tu conexión e intentá nuevamente.",
+        "no-speech": "No detectamos voz. Acercate al micrófono y probá nuevamente.",
+        "aborted": "El dictado se canceló.",
+        "language-not-supported": "Tu navegador no admite el dictado en español argentino."
+      }[error] || "No pudimos iniciar el dictado. Intentá nuevamente.");
       voice.addEventListener("click", () => {
-        const recognition = new Recognition(); recognition.lang = "es-AR"; recognition.interimResults = false;
-        recognition.onresult = event => { description.value = `${description.value} ${event.results[0][0].transcript}`.trim(); };
-        recognition.onerror = () => setFeedback("No pudimos usar el dictado en este momento.", true);
-        recognition.start();
+        if (isListening && recognition) {
+          recognition.stop();
+          return;
+        }
+        receivedResult = false;
+        recognitionError = false;
+        voice.disabled = true;
+        try {
+          recognition = new Recognition();
+          recognition.lang = "es-AR";
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.maxAlternatives = 1;
+          recognition.onstart = () => {
+            isListening = true;
+            voice.disabled = false;
+            voice.innerHTML = '<i class="fa-solid fa-stop" aria-hidden="true"></i> Finalizar dictado';
+            setFeedback("Escuchando… hablá y tocá “Finalizar dictado” cuando termines.");
+          };
+          recognition.onresult = event => {
+            let transcript = "";
+            for (let index = event.resultIndex; index < event.results.length; index += 1) {
+              if (event.results[index].isFinal) transcript += ` ${event.results[index][0].transcript}`;
+            }
+            if (!transcript.trim()) return;
+            receivedResult = true;
+            description.value = `${description.value} ${transcript}`.trim().slice(0, maxDescriptionLength);
+            description.dispatchEvent(new Event("input", { bubbles: true }));
+          };
+          recognition.onerror = event => {
+            recognitionError = true;
+            setFeedback(voiceErrorMessage(event.error), true);
+          };
+          recognition.onend = () => {
+            resetVoiceButton();
+            if (!receivedResult && !recognitionError) setFeedback("No detectamos voz. Acercate al micrófono y probá nuevamente.", true);
+          };
+          recognition.start();
+        } catch {
+          resetVoiceButton();
+          setFeedback("No pudimos iniciar el dictado. Revisá el permiso del micrófono e intentá nuevamente.", true);
+        }
       });
     }
     form.addEventListener("submit", async event => {
