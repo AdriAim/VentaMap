@@ -60,6 +60,7 @@ services:
       Authentication__SharedApplicationName: VentaMap
       Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID}
       Authentication__Google__ClientSecret: ${GOOGLE_CLIENT_SECRET}
+      Gemini__ApiKey: ${GEMINI_API_KEY}
       # Use the current browser origin; Traefik routes /api/chat and /hubs/chat.
       Chat__BaseUrl: ""
       Uploads__MaxRequestBodyBytes: ${UPLOADS_MAX_REQUEST_BODY_BYTES:-167772160}
