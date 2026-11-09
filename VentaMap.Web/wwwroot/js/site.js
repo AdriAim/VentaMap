@@ -6165,72 +6165,87 @@
     dropzone.addEventListener("dragover", event => { event.preventDefault(); dropzone.classList.add("is-dragging"); });
     dropzone.addEventListener("dragleave", () => dropzone.classList.remove("is-dragging"));
     dropzone.addEventListener("drop", event => { event.preventDefault(); dropzone.classList.remove("is-dragging"); void addFiles(event.dataTransfer.files); });
-    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (Recognition && voice) {
+    if (voice && navigator.mediaDevices?.getUserMedia && window.MediaRecorder) {
       voice.hidden = false;
-      let recognition = null;
-      let isListening = false;
-      let receivedResult = false;
-      let recognitionError = false;
-      let descriptionBeforeDictation = "";
+      const maxVoiceBytes = 5 * 1024 * 1024;
+      const maxVoiceDurationMs = 60 * 1000;
+      let recorder = null;
+      let recorderStream = null;
+      let voiceTimeout = null;
       const resetVoiceButton = () => {
-        isListening = false;
         voice.disabled = false;
         voice.innerHTML = '<i class="fa-solid fa-microphone" aria-hidden="true"></i> Dictar descripción';
       };
-      const voiceErrorMessage = error => ({
-        "not-allowed": "No se habilitó el micrófono. Permití su uso en el navegador y volvé a intentar.",
-        "service-not-allowed": "El navegador bloqueó el servicio de dictado. Revisá los permisos del micrófono.",
-        "audio-capture": "No encontramos un micrófono disponible. Conectá o habilitá uno y probá de nuevo.",
-        "network": "El servicio de dictado no pudo conectarse. Revisá tu conexión e intentá nuevamente.",
-        "no-speech": "No detectamos voz. Acercate al micrófono y probá nuevamente.",
-        "aborted": "El dictado se canceló.",
-        "language-not-supported": "Tu navegador no admite el dictado en español argentino."
-      }[error] || "No pudimos iniciar el dictado. Intentá nuevamente.");
-      voice.addEventListener("click", () => {
-        if (isListening && recognition) {
-          recognition.stop();
+      const stopRecorderStream = () => {
+        recorderStream?.getTracks().forEach(track => track.stop());
+        recorderStream = null;
+      };
+      const appendTranscript = transcript => {
+        const separator = description.value.trim() ? " " : "";
+        const remaining = maxDescriptionLength - description.value.trim().length - separator.length;
+        if (remaining <= 0) {
+          setFeedback(`La descripción ya alcanzó el límite de ${maxDescriptionLength.toLocaleString("es-AR")} caracteres.`, true);
           return;
         }
-        receivedResult = false;
-        recognitionError = false;
-        descriptionBeforeDictation = description.value.trim();
+        description.value = `${description.value.trim()}${separator}${transcript.trim().slice(0, remaining)}`;
+        description.dispatchEvent(new Event("input", { bubbles: true }));
+      };
+      const transcribeAudio = async blob => {
+        if (!blob.size) throw new Error("No detectamos audio. Acercate al micrófono y probá nuevamente.");
+        if (blob.size > maxVoiceBytes) throw new Error("El dictado supera el límite de un minuto. Probá con un audio más corto.");
+        voice.disabled = true;
+        voice.innerHTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Procesando dictado…';
+        setFeedback("Procesando el audio completo…");
+        const data = new FormData();
+        data.append("audio", blob, "dictado.webm");
+        const token = form.querySelector('input[name="__RequestVerificationToken"]')?.value;
+        const response = await fetch("/api/content/express/transcribe", {
+          method: "POST",
+          headers: { "RequestVerificationToken": token || "" },
+          body: data
+        });
+        const result = await readJsonResponse(response, "No se pudo transcribir el audio");
+        if (!response.ok || !result.text) throw new Error(result.message || "No se pudo transcribir el audio.");
+        appendTranscript(result.text);
+        setFeedback("Dictado transcripto. Revisalo antes de generar la publicación.");
+      };
+      voice.addEventListener("click", async () => {
+        if (recorder?.state === "recording") {
+          recorder.stop();
+          return;
+        }
         voice.disabled = true;
         try {
-          recognition = new Recognition();
-          recognition.lang = "es-AR";
-          recognition.continuous = true;
-          recognition.interimResults = true;
-          recognition.maxAlternatives = 1;
-          recognition.onstart = () => {
-            isListening = true;
+          recorderStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const preferredType = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"]
+            .find(type => MediaRecorder.isTypeSupported?.(type));
+          recorder = preferredType ? new MediaRecorder(recorderStream, { mimeType: preferredType }) : new MediaRecorder(recorderStream);
+          const chunks = [];
+          recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+          recorder.onstart = () => {
             voice.disabled = false;
             voice.innerHTML = '<i class="fa-solid fa-stop" aria-hidden="true"></i> Finalizar dictado';
-            setFeedback("Escuchando… hablá y tocá “Finalizar dictado” cuando termines.");
+            setFeedback("Grabando… hablá y tocá “Finalizar dictado” cuando termines.");
+            voiceTimeout = window.setTimeout(() => { if (recorder?.state === "recording") recorder.stop(); }, maxVoiceDurationMs);
           };
-          recognition.onresult = event => {
-            const transcript = Array.from(event.results)
-              .filter(result => result.isFinal)
-              .map(result => result[0].transcript)
-              .join(" ")
-              .trim();
-            if (!transcript.trim()) return;
-            receivedResult = true;
-            description.value = `${descriptionBeforeDictation} ${transcript}`.trim().slice(0, maxDescriptionLength);
-            description.dispatchEvent(new Event("input", { bubbles: true }));
+          recorder.onerror = () => setFeedback("No pudimos grabar el audio. Revisá el permiso del micrófono e intentá nuevamente.", true);
+          recorder.onstop = async () => {
+            if (voiceTimeout) window.clearTimeout(voiceTimeout);
+            stopRecorderStream();
+            try {
+              await transcribeAudio(new Blob(chunks, { type: recorder.mimeType || "audio/webm" }));
+            } catch (error) {
+              setFeedback(error.message || "No se pudo transcribir el audio. Intentá nuevamente.", true);
+            } finally {
+              recorder = null;
+              resetVoiceButton();
+            }
           };
-          recognition.onerror = event => {
-            recognitionError = true;
-            setFeedback(voiceErrorMessage(event.error), true);
-          };
-          recognition.onend = () => {
-            resetVoiceButton();
-            if (!receivedResult && !recognitionError) setFeedback("No detectamos voz. Acercate al micrófono y probá nuevamente.", true);
-          };
-          recognition.start();
+          recorder.start();
         } catch {
+          stopRecorderStream();
           resetVoiceButton();
-          setFeedback("No pudimos iniciar el dictado. Revisá el permiso del micrófono e intentá nuevamente.", true);
+          setFeedback("No se habilitó el micrófono. Permití su uso en el navegador y volvé a intentar.", true);
         }
       });
     }

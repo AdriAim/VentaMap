@@ -937,6 +937,29 @@ public partial class ContentController(
         }
     }
 
+    [HttpPost("express/transcribe")]
+    [ValidateAntiForgeryToken]
+    [RequestFormLimits(MultipartBodyLengthLimit = 6 * 1024 * 1024)]
+    [RequestSizeLimit(6 * 1024 * 1024)]
+    public async Task<IActionResult> TranscribeExpress([FromForm] IFormFile? audio, [FromServices] GeminiExpressPublicationService expressAi, CancellationToken cancellationToken)
+    {
+        if (!currentUserAccessor.IsAuthenticated)
+            return Unauthorized(new { message = "Tenés que iniciar sesión para usar el dictado." });
+        if (audio is null)
+            return BadRequest(new { message = "No recibimos el audio a transcribir." });
+
+        try
+        {
+            await using var stream = audio.OpenReadStream();
+            var transcript = await expressAi.TranscribeAsync(stream, audio.ContentType, audio.Length, cancellationToken);
+            return Ok(new { text = transcript });
+        }
+        catch (ExpressAiException ex)
+        {
+            return StatusCode(ex.StatusCode, new { message = ex.Message });
+        }
+    }
+
     [HttpGet("edit/{id:int}")]
     public async Task<IActionResult> Edit(int id)
     {

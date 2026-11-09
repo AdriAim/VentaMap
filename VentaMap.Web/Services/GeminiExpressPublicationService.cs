@@ -15,8 +15,10 @@ public sealed class GeminiExpressPublicationService(
     ILogger<GeminiExpressPublicationService> logger)
 {
     private const string Model = "gemini-3.1-flash-lite";
+    private const string TranscriptionModel = "gemini-3.5-transcribe";
     private const int MaxImages = 10;
     private const long MaxImageBytes = 6 * 1024 * 1024;
+    private const long MaxAudioBytes = 5 * 1024 * 1024;
     private const int MaxDescriptionLength = 12_000;
 
     public async Task<ExpressAiResult> AnalyzeAsync(int userId, string? description, IReadOnlyCollection<string>? imageUrls, string? videoUrl, CancellationToken cancellationToken)
@@ -90,6 +92,69 @@ public sealed class GeminiExpressPublicationService(
         {
             logger.LogError(ex, "Gemini Express analysis failed for user {UserId}.", userId);
             throw new ExpressAiException(502, "No se pudo analizar el aviso con IA. Intentá nuevamente.");
+        }
+    }
+
+    public async Task<string> TranscribeAsync(Stream audio, string? contentType, long contentLength, CancellationToken cancellationToken)
+    {
+        if (!await parameters.GetBoolAsync(VentaMapParameterService.ExpressAiEnabled, true))
+            throw new ExpressAiException(403, "La Publicación Express con IA está desactivada temporalmente.");
+
+        var apiKey = configuration["Gemini:ApiKey"];
+        if (string.IsNullOrWhiteSpace(apiKey))
+            throw new ExpressAiException(503, "La IA todavía no está configurada. Probá nuevamente más tarde.");
+
+        var mimeType = (contentType ?? string.Empty).Split(';', 2)[0].Trim().ToLowerInvariant();
+        if (contentLength <= 0 || contentLength > MaxAudioBytes || mimeType is not ("audio/webm" or "audio/ogg" or "audio/mp4" or "audio/mpeg" or "audio/wav"))
+            throw new ExpressAiException(400, "El audio debe ser válido y pesar hasta 5 MB.");
+
+        using var buffer = new MemoryStream();
+        await audio.CopyToAsync(buffer, cancellationToken);
+        var bytes = buffer.ToArray();
+        if (bytes.Length == 0 || bytes.Length > MaxAudioBytes)
+            throw new ExpressAiException(400, "El audio debe ser válido y pesar hasta 5 MB.");
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post,
+                $"https://generativelanguage.googleapis.com/v1beta/models/{TranscriptionModel}:generateContent?key={Uri.EscapeDataString(apiKey)}")
+            {
+                Content = JsonContent.Create(new
+                {
+                    contents = new[]
+                    {
+                        new
+                        {
+                            role = "user",
+                            parts = new object[]
+                            {
+                                new { text = "Transcribí este audio en español argentino. Respondé únicamente el texto dictado, sin comentarios, títulos ni interpretaciones." },
+                                new { inlineData = new { mimeType, data = Convert.ToBase64String(bytes) } }
+                            }
+                        }
+                    },
+                    generationConfig = new { temperature = 0 }
+                })
+            };
+            using var response = await httpClientFactory.CreateClient("gemini-express").SendAsync(request, cancellationToken);
+            var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Gemini transcription request failed with {Status}.", (int)response.StatusCode);
+                throw new ExpressAiException(502, "No se pudo transcribir el audio. Intentá nuevamente.");
+            }
+
+            using var envelope = JsonDocument.Parse(responseText);
+            var transcript = envelope.RootElement.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString()?.Trim();
+            if (string.IsNullOrWhiteSpace(transcript))
+                throw new ExpressAiException(422, "No pudimos detectar texto en el audio.");
+            return transcript.Length > MaxDescriptionLength ? transcript[..MaxDescriptionLength] : transcript;
+        }
+        catch (ExpressAiException) { throw; }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Gemini Express transcription failed.");
+            throw new ExpressAiException(502, "No se pudo transcribir el audio. Intentá nuevamente.");
         }
     }
 
