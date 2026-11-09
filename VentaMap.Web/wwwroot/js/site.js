@@ -6088,6 +6088,20 @@
     const files = [];
     let videoFile = null;
     const setFeedback = (message, warning = false) => { feedback.innerHTML = `<div class="status-banner ${warning ? "warning" : ""}">${escapeHtml(message)}</div>`; };
+    const readJsonResponse = async (response, fallbackMessage) => {
+      const body = await response.text();
+      if (!body.trim()) {
+        if (response.status === 401 || response.status === 403) throw new Error("Tu sesión venció. Volvé a iniciar sesión para continuar.");
+        throw new Error(`${fallbackMessage} (respuesta vacía del servidor: ${response.status}).`);
+      }
+      try {
+        return JSON.parse(body);
+      } catch {
+        if (response.status === 401 || response.status === 403) throw new Error("Tu sesión venció. Volvé a iniciar sesión para continuar.");
+        if (response.status === 413) throw new Error("El archivo supera el tamaño permitido por el servidor.");
+        throw new Error(`${fallbackMessage} (el servidor respondió ${response.status}).`);
+      }
+    };
     const render = () => { previews.innerHTML = files.map(file => `<div class="upload-preview"><img src="${URL.createObjectURL(file)}" alt="Vista previa" /><span>${escapeHtml(file.name)}</span></div>`).join(""); };
     const addFiles = async incoming => {
       const incomingFiles = [...incoming];
@@ -6148,7 +6162,7 @@
         for (const file of files) {
           const data = new FormData(); data.append("files", file);
           const upload = await fetch("/api/content/upload-images", { method: "POST", body: data });
-          const uploaded = await upload.json();
+          const uploaded = await readJsonResponse(upload, "No se pudo subir una de las fotos");
           if (!upload.ok || !uploaded.urls?.[0]) throw new Error(uploaded.message || "No se pudo subir una de las fotos.");
           urls.push(uploaded.urls[0]);
         }
@@ -6157,7 +6171,7 @@
           method: "POST", headers: { "Content-Type": "application/json", "RequestVerificationToken": token || "" },
           body: JSON.stringify({ description: description.value, imageUrls: urls, videoUrl })
         });
-        const result = await response.json();
+        const result = await readJsonResponse(response, "No se pudo generar la publicación con IA");
         if (!response.ok) throw new Error(result.message || "No se pudo generar la publicación.");
         if (result.proposal?.requiresCleanCoverPhoto) {
           window.alert("Para publicar debés subir al menos una foto limpia del inmueble que sirva como imagen principal.");
