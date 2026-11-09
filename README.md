@@ -129,6 +129,17 @@ Entorno de prueba definido:
 - usuario: `root`
 - base: `ventamap`
 
+## Despliegue VPS
+
+La clave SSH de este equipo para el VPS de VentaMap es `~/.ssh/ventamap_hostinger_ed25519`.
+Usarla siempre de forma explícita para evitar que SSH intente una identidad incorrecta:
+
+```bash
+ssh -i ~/.ssh/ventamap_hostinger_ed25519 -o IdentitiesOnly=yes root@76.13.173.140
+```
+
+La instalación activa utiliza `/root/ventamap-local` y Docker Compose.
+
 ## Autenticación
 
 Soporta:
