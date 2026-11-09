@@ -6172,6 +6172,7 @@
       let isListening = false;
       let receivedResult = false;
       let recognitionError = false;
+      let descriptionBeforeDictation = "";
       const resetVoiceButton = () => {
         isListening = false;
         voice.disabled = false;
@@ -6193,6 +6194,7 @@
         }
         receivedResult = false;
         recognitionError = false;
+        descriptionBeforeDictation = description.value.trim();
         voice.disabled = true;
         try {
           recognition = new Recognition();
@@ -6207,13 +6209,14 @@
             setFeedback("Escuchando… hablá y tocá “Finalizar dictado” cuando termines.");
           };
           recognition.onresult = event => {
-            let transcript = "";
-            for (let index = event.resultIndex; index < event.results.length; index += 1) {
-              if (event.results[index].isFinal) transcript += ` ${event.results[index][0].transcript}`;
-            }
+            const transcript = Array.from(event.results)
+              .filter(result => result.isFinal)
+              .map(result => result[0].transcript)
+              .join(" ")
+              .trim();
             if (!transcript.trim()) return;
             receivedResult = true;
-            description.value = `${description.value} ${transcript}`.trim().slice(0, maxDescriptionLength);
+            description.value = `${descriptionBeforeDictation} ${transcript}`.trim().slice(0, maxDescriptionLength);
             description.dispatchEvent(new Event("input", { bubbles: true }));
           };
           recognition.onerror = event => {
