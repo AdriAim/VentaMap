@@ -100,6 +100,7 @@
       this.videoQueue = [];
       this.activeVideoPreloads = 0;
       this.galleryDeferredWarmups = new WeakSet();
+      this.cardGalleryDeferredWarmups = new WeakSet();
       this.feedStates = new WeakMap();
       this.refreshFeedPreloads = this.throttle(this.refreshFeedPreloads.bind(this), 140);
     }
@@ -161,8 +162,38 @@
       if (!cards.length) return;
 
       const firstVisibleIndex = this.findFirstVisibleIndex(cards);
+      const columns = Math.max(1, getGalleryColumnCount(rail));
+      const visibleCards = cards.slice(firstVisibleIndex, firstVisibleIndex + columns);
       const upcomingCards = this.selectUpcomingCards(cards, firstVisibleIndex, rail);
+
+      // The arrows operate on the cards already on screen.  Keep their next
+      // two photos ready for an immediate first interaction, without eagerly
+      // downloading every gallery in the visible row.
+      visibleCards.forEach(card => this.preloadCardNavigation(card));
       upcomingCards.forEach(card => this.preloadCardPrimaryMedia(card));
+    }
+
+    preloadCardNavigation(card) {
+      if (!card) return;
+
+      this.parseCardImages(card).slice(1, 3).forEach(src => this.preloadImage(src));
+
+      const videoUrl = String(card.dataset.videoUrl || "").trim();
+      if (videoUrl && card.dataset.videoPrimary === "true") {
+        preloadGalleryVideoStart(videoUrl);
+      }
+    }
+
+    warmRemainingCardGallery(card) {
+      if (!card || this.cardGalleryDeferredWarmups.has(card)) return;
+
+      this.cardGalleryDeferredWarmups.add(card);
+      this.parseCardImages(card).forEach(src => this.preloadImage(src));
+
+      const videoUrl = String(card.dataset.videoUrl || "").trim();
+      if (videoUrl) {
+        preloadGalleryVideoStart(videoUrl);
+      }
     }
 
     preloadCardPrimaryMedia(card) {
@@ -9371,6 +9402,7 @@
       video.poster = images[0] || "/images/logo4.png";
       video.src = videoUrl;
       mediaPreloadService.prepareVideo(videoUrl, { preload: "auto" });
+      mediaPreloadService.warmRemainingCardGallery(card);
       tryAutoplayGalleryVideo(video);
       card.dataset.mediaIndex = String(nextIndex);
       syncGalleryVideoAudioButton(card);
@@ -9400,6 +9432,7 @@
       // Change immediately.  Navigation must not wait for an Image promise;
       // the images were already warmed when the card was rendered.
       image.src = nextImageUrl;
+      mediaPreloadService.warmRemainingCardGallery(card);
       card.dataset.mediaIndex = String(nextIndex);
       syncGalleryVideoAudioButton(card);
       syncGalleryVideoVisualState(card);
