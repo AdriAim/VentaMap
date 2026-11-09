@@ -6087,6 +6087,8 @@
     const videoStatus = form.querySelector("[data-express-video-status]");
     const files = [];
     let videoFile = null;
+    const maxTextFileBytes = 256 * 1024;
+    const maxDescriptionLength = 12000;
     const setFeedback = (message, warning = false) => { feedback.innerHTML = `<div class="status-banner ${warning ? "warning" : ""}">${escapeHtml(message)}</div>`; };
     const readJsonResponse = async (response, fallbackMessage) => {
       const body = await response.text();
@@ -6116,9 +6118,38 @@
       }
       const textFiles = incomingFiles.filter(file => file.type === "text/plain" || /\.txt$/i.test(file.name || ""));
       for (const textFile of textFiles) {
-        const text = (await textFile.text()).trim();
+        if (textFile.size > maxTextFileBytes) {
+          setFeedback(`${textFile.name} supera el límite de 256 KB para archivos de texto.`, true);
+          continue;
+        }
+        let text;
+        try {
+          text = (await textFile.text())
+            .replace(/\u0000/g, "")
+            .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+            .trim();
+        } catch {
+          setFeedback(`No se pudo leer ${textFile.name}.`, true);
+          continue;
+        }
         if (!text) continue;
-        description.value = [description.value.trim(), text].filter(Boolean).join("\n\n");
+        const remaining = maxDescriptionLength - description.value.trim().length;
+        if (remaining <= 0) {
+          setFeedback(`La descripción ya alcanzó el límite de ${maxDescriptionLength.toLocaleString("es-AR")} caracteres.`, true);
+          continue;
+        }
+        const separator = description.value.trim() ? "\n\n" : "";
+        const availableTextLength = remaining - separator.length;
+        if (availableTextLength <= 0) {
+          setFeedback(`No queda espacio suficiente para agregar ${textFile.name}.`, true);
+          continue;
+        }
+        const allowedText = text.slice(0, availableTextLength);
+        description.value = `${description.value.trim()}${separator}${allowedText}`;
+        if (allowedText.length < text.length) {
+          setFeedback(`Leí ${textFile.name}, pero se recortó al límite de ${maxDescriptionLength.toLocaleString("es-AR")} caracteres.`, true);
+          continue;
+        }
         setFeedback(`Leí ${textFile.name}. Sus datos se usarán para generar la propuesta y el archivo no se publicará.`);
       }
       render();
