@@ -917,6 +917,26 @@ public partial class ContentController(
         return PartialView("~/Views/Content/Create.cshtml", model);
     }
 
+    [HttpGet("express")]
+    public IActionResult Express() => PartialView("~/Views/Content/Express.cshtml");
+
+    [HttpPost("express/analyze")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AnalyzeExpress([FromBody] ExpressAnalyzeRequest request, [FromServices] GeminiExpressPublicationService expressAi, CancellationToken cancellationToken)
+    {
+        if (!currentUserAccessor.IsAuthenticated || currentUserAccessor.UserId is not int userId)
+            return Unauthorized(new { message = "Tenés que iniciar sesión para usar Publicación Express." });
+        try
+        {
+            var result = await expressAi.AnalyzeAsync(userId, request.Description, request.ImageUrls, request.VideoUrl, cancellationToken);
+            return Ok(new { proposal = result.Proposal });
+        }
+        catch (ExpressAiException ex)
+        {
+            return StatusCode(ex.StatusCode, new { message = ex.Message });
+        }
+    }
+
     [HttpGet("edit/{id:int}")]
     public async Task<IActionResult> Edit(int id)
     {
@@ -2196,6 +2216,7 @@ public partial class ContentController(
 }
 
 public sealed record DirectVideoUploadRequest(string? FileName, string? ContentType, long ContentLength, bool ProcessOnServer);
+public sealed record ExpressAnalyzeRequest(string? Description, List<string>? ImageUrls, string? VideoUrl);
 public sealed record ConfirmDirectVideoUploadRequest(string PublicUrl, string ContentType, long ContentLength);
 public sealed record VisitorExperienceEventRequest(string? EventName, string? Button, string? Route);
 public sealed record VideoUploadFailureReport(

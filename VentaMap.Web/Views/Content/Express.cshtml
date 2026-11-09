@@ -1,0 +1,29 @@
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+<section class="form-shell create-shell" data-express-publication>
+    <div class="section-heading">
+        <span class="eyebrow">Publicación Express</span>
+        <h1>Creá tu anuncio con IA</h1>
+        <p>Subí fotos y pegá la información como la tengas. La IA detecta el rubro, la categoría y los datos disponibles. Después revisás todo antes de publicar.</p>
+    </div>
+    <div id="express-feedback"></div>
+    <form class="stack-form" data-express-form>
+        @Html.AntiForgeryToken()
+        <div class="express-photo-zone" data-express-dropzone tabindex="0" role="button" aria-label="Agregar fotos, video o texto del anuncio">
+            <input type="file" accept="image/jpeg,image/png,image/webp,video/*,text/plain,.txt" multiple hidden data-express-images />
+            <div class="express-dropzone">
+                <span class="express-dropzone-icon"><i class="fa-solid fa-images" aria-hidden="true"></i></span>
+                <strong>Arrastrá fotos, video o un archivo .txt acá</strong>
+                <span>o tocá este recuadro para seleccionarlos desde tu teléfono o PC.</span>
+                <small>Las fotos y capturas se usan para extraer datos. El video se adjunta al anuncio sin análisis de IA; el .txt se usa como descripción y no se publica.</small>
+            </div>
+            <div class="upload-previews express-image-previews" data-express-previews></div>
+            <small class="field-hint" data-express-video-status hidden></small>
+        </div>
+        <label>
+            <span>Descripción</span>
+            <textarea rows="9" maxlength="12000" placeholder="Puedes agregar información adicional en este cuadro, será analizada en conjunto con lo anexado anteriormente." data-express-description></textarea>
+        </label>
+        <button type="button" class="ghost-pill" data-express-voice hidden><i class="fa-solid fa-microphone"></i> Dictar descripción</button>
+        <button type="submit" class="primary-pill large" data-express-submit><i class="fa-solid fa-wand-magic-sparkles"></i> Generar publicación con IA</button>
+    </form>
+</section>

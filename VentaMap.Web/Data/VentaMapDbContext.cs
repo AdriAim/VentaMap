@@ -33,6 +33,7 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
     public DbSet<BillingCharge> BillingCharges => Set<BillingCharge>();
     public DbSet<BillingRate> BillingRates => Set<BillingRate>();
     public DbSet<CompanyIndustry> CompanyIndustries => Set<CompanyIndustry>();
+    public DbSet<ExpressAiAnalysisUsage> ExpressAiAnalysisUsages => Set<ExpressAiAnalysisUsage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -476,6 +477,11 @@ public class VentaMapDbContext(DbContextOptions<VentaMapDbContext> options) : Db
 
         modelBuilder.Entity<OperationReview>()
             .HasIndex(x => new { x.ReviewedUserId, x.ReviewedRole, x.SubmittedAtUtc });
+
+        modelBuilder.Entity<ExpressAiAnalysisUsage>()
+            .HasIndex(x => new { x.UserId, x.CreatedAtUtc });
+        modelBuilder.Entity<ExpressAiAnalysisUsage>()
+            .HasIndex(x => x.CreatedAtUtc);
 
     }
 }

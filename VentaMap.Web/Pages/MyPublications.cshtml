@@ -21,7 +21,14 @@
         }
     </div>
     <div class="favorites-strip-actions">
-        <a class="primary-pill" asp-page="/Publications/Create">Crear anuncio</a>
+        <a class="primary-pill" asp-page="/Publications/Create">
+            <i class="fa-solid fa-circle-plus" aria-hidden="true"></i>
+            <span>Crear anuncio</span>
+        </a>
+        <a class="primary-pill" asp-page="/Publications/Express">
+            <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+            <span>Crear anuncio con IA</span>
+        </a>
         @if (Model.IsCompany && !string.IsNullOrWhiteSpace(Model.CompanyPublicUrl))
         {
             <label class="company-catalog-share-mode">

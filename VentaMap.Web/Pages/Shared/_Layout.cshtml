@@ -38,6 +38,9 @@
     var isHomePage = string.Equals(Context.Request.Path, "/", StringComparison.OrdinalIgnoreCase)
         || string.Equals(Context.Request.Path, "/Index", StringComparison.OrdinalIgnoreCase);
     var isPublicationDetailsPage = Context.Request.Path.StartsWithSegments("/Publications/Details", StringComparison.OrdinalIgnoreCase);
+    var isNonIndexablePage = Context.Request.Path.StartsWithSegments("/Buscar", StringComparison.OrdinalIgnoreCase)
+        || Context.Request.Path.StartsWithSegments("/Account", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Context.Request.Query["debug"], "1", StringComparison.Ordinal);
     var metaTrackingEnabled = Configuration.GetValue<bool>("Meta:Enabled")
         && !string.IsNullOrWhiteSpace(Configuration["Meta:PixelId"]);
     var metaPixelId = Configuration["Meta:PixelId"]?.Trim();
@@ -55,6 +58,10 @@
     <meta name="theme-color" content="#f9f8f7" media="(prefers-color-scheme: dark)" />
     <title>@pageTitle - VentaMap</title>
     <meta name="description" content="@metaDescription" />
+    @if (isNonIndexablePage)
+    {
+        <meta name="robots" content="noindex,follow" />
+    }
     <link rel="canonical" href="@canonicalUrl" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="VentaMap" />
@@ -270,6 +277,13 @@
                         <i class="fa-solid fa-circle-plus fa-fw" aria-hidden="true"></i>
                         <span>Publicar</span>
                     </a>
+                    @if (isAuthenticated)
+                    {
+                        <a class="nav-main-link" asp-page="/Publications/Express">
+                            <i class="fa-solid fa-wand-magic-sparkles fa-fw" aria-hidden="true"></i>
+                            <span>Publicar con IA</span>
+                        </a>
+                    }
                     @if (isAuthenticated)
                     {
                         <a class="nav-main-link" asp-page="/MyPublications">

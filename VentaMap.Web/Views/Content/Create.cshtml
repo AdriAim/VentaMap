@@ -60,6 +60,7 @@
             <input type="hidden" name="videoUrl" value="@Model.Input.VideoUrl" />
             <input type="hidden" name="videoPendingProcessing" value="@(Model.Input.VideoUrl?.Contains("/pending/", StringComparison.OrdinalIgnoreCase) == true ? "true" : "false")" data-video-pending-processing />
             <input type="hidden" name="primaryMediaType" value="@Model.Input.PrimaryMediaType" data-primary-media-type />
+            <input type="hidden" name="createdWithAi" value="@(Model.Input.CreatedWithAi ? "true" : "false")" />
             <input name="noLocation"
                    type="checkbox"
                    value="true"

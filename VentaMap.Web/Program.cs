@@ -196,6 +196,8 @@ builder.Services.AddScoped<FavoriteService>();
 builder.Services.AddScoped<SharedPublicationListService>();
 builder.Services.AddScoped<SuggestionService>();
 builder.Services.AddScoped<VentaMapParameterService>();
+builder.Services.AddScoped<GeminiExpressPublicationService>();
+builder.Services.AddHttpClient("gemini-express", client => client.Timeout = TimeSpan.FromSeconds(45));
 builder.Services.AddScoped<ReviewService>();
 builder.Services.AddScoped<CurrentUserAccessor>();
 builder.Services.AddScoped<NavigationLocalityService>();
@@ -236,11 +238,18 @@ if (hasHttpsUrlConfigured)
 }
 app.Use(async (context, next) =>
 {
+    // Las vistas de búsqueda y de cuenta son transaccionales o dependen de
+    // filtros/sesión. No son páginas de destino y sus combinaciones de URL
+    // pueden estar vacías (por ejemplo, /Buscar?group=Agro). Impedir su
+    // indexación evita que Google las clasifique como Soft 404.
+    var isNonIndexablePath = context.Request.Path.StartsWithSegments("/Buscar", StringComparison.OrdinalIgnoreCase)
+        || context.Request.Path.StartsWithSegments("/Account", StringComparison.OrdinalIgnoreCase);
+
     // Las URLs de depuración se usan manualmente para revisar anuncios, pero no
     // representan una URL pública alternativa que deba aparecer en buscadores.
-    if (string.Equals(context.Request.Query["debug"], "1", StringComparison.Ordinal))
+    if (isNonIndexablePath || string.Equals(context.Request.Query["debug"], "1", StringComparison.Ordinal))
     {
-        context.Response.Headers.Append("X-Robots-Tag", "noindex, follow");
+        context.Response.Headers["X-Robots-Tag"] = "noindex, follow";
     }
 
     await next();
@@ -406,6 +415,7 @@ static async Task EnsureDatabaseSchemaAsync(VentaMapDbContext db, IWebHostEnviro
         await EnsureBillingSchemaAsync(connection);
         await EnsurePublicationFavoritesSchemaAsync(connection);
         await EnsurePublicationAnalyticsSchemaAsync(connection);
+        await EnsureExpressAiSchemaAsync(connection);
         await EnsureSiteAnalyticsSchemaAsync(connection);
         await EnsurePublicationGroupTypesAsync(connection);
         await EnsurePublicationCountersSchemaAsync(connection);
@@ -988,8 +998,29 @@ static async Task EnsureReviewSchemaAsync(System.Data.Common.DbConnection connec
             ('Reviews.PublicationDelayDays', '7', 'Integer', 'Dias de espera antes de publicar las respuestas.', UTC_TIMESTAMP(6), NULL),
             ('Reviews.ResponseDeadlineDays', '14', 'Integer', 'Dias maximos para esperar la respuesta de la otra persona.', UTC_TIMESTAMP(6), NULL),
             ('Publications.Personal.DurationDays', '60', 'Integer', 'Dias de vigencia de los anuncios publicados por personas.', UTC_TIMESTAMP(6), NULL),
+            ('ExpressAi.Enabled', 'true', 'Boolean', 'Activa Publicacion Express con IA.', UTC_TIMESTAMP(6), NULL),
+            ('ExpressAi.PerUserDailyLimit', '15', 'Integer', 'Maximo de analisis Express con IA por usuario y por dia UTC.', UTC_TIMESTAMP(6), NULL),
+            ('ExpressAi.GlobalDailyLimit', '300', 'Integer', 'Maximo global de analisis Express con IA por dia UTC.', UTC_TIMESTAMP(6), NULL),
             ('PaidSite.Enabled', 'false', 'Boolean', 'Activa las leyendas, los cargos y los bloqueos de facturación del sitio.', UTC_TIMESTAMP(6), NULL);
         """);
+}
+
+static async Task EnsureExpressAiSchemaAsync(System.Data.Common.DbConnection connection)
+{
+    await EnsureColumnAsync(connection, "Publications", "CreatedWithAi", "tinyint(1) NOT NULL DEFAULT 0");
+    await ExecuteNonQueryAsync(connection,
+        """
+        CREATE TABLE IF NOT EXISTS `ExpressAiAnalysisUsages` (
+            `Id` bigint NOT NULL AUTO_INCREMENT,
+            `UserId` int NOT NULL,
+            `CreatedAtUtc` datetime(6) NOT NULL,
+            CONSTRAINT `PK_ExpressAiAnalysisUsages` PRIMARY KEY (`Id`),
+            CONSTRAINT `FK_ExpressAiAnalysisUsages_Users_UserId`
+                FOREIGN KEY (`UserId`) REFERENCES `Users` (`Id`) ON DELETE CASCADE
+        ) CHARACTER SET=utf8mb4;
+        """);
+    await EnsureIndexAsync(connection, "ExpressAiAnalysisUsages", "IX_ExpressAiAnalysisUsages_UserId_CreatedAtUtc", "CREATE INDEX `IX_ExpressAiAnalysisUsages_UserId_CreatedAtUtc` ON `ExpressAiAnalysisUsages` (`UserId`, `CreatedAtUtc`)");
+    await EnsureIndexAsync(connection, "ExpressAiAnalysisUsages", "IX_ExpressAiAnalysisUsages_CreatedAtUtc", "CREATE INDEX `IX_ExpressAiAnalysisUsages_CreatedAtUtc` ON `ExpressAiAnalysisUsages` (`CreatedAtUtc`)");
 }
 
 static async Task EnsurePublicationCountersSchemaAsync(System.Data.Common.DbConnection connection)

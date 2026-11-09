@@ -18,6 +18,7 @@ public class PublicationCreateRequest
     public string? ContactPhone { get; set; }
     public string? ContactEmail { get; set; }
     public bool Featured { get; set; }
+    public bool CreatedWithAi { get; set; }
     public string? VideoUrl { get; set; }
     public bool VideoPendingProcessing { get; set; }
     /// <summary>Tipo de contenido que debe abrir el anuncio. Video es la opción inicial.</summary>

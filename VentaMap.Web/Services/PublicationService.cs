@@ -280,6 +280,7 @@ public class PublicationService(
             ContactEmail = input.ContactEmail,
             Status = status,
             Featured = input.Featured,
+            CreatedWithAi = input.CreatedWithAi,
             InternalNotes = input.InternalNotes,
             Latitude = input.Latitude,
             Longitude = input.Longitude,
@@ -699,6 +700,7 @@ public class PublicationService(
         publication.ShortDescription = input.ShortDescription.Trim();
         publication.LongDescription = input.LongDescription?.Trim();
         publication.Featured = input.Featured;
+        publication.CreatedWithAi |= input.CreatedWithAi;
         publication.InternalNotes = input.InternalNotes;
 
         if (!input.NoLocation && input.Latitude.HasValue && input.Longitude.HasValue)

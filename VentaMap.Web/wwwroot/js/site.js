@@ -864,6 +864,7 @@
       wireReportForm();
       wireDetailShareModal();
       wireCreateForm();
+      wireExpressPublication(host);
       wireBrowseSearchFilters(host);
       wireChatExperience(host);
       restoreCreatePublicationCompletion(host);
@@ -4362,9 +4363,20 @@
       if (!query) return;
 
       const results = await geocodeCreateLocation(geocodingSearchUrlTemplate, query);
-      const feature = results?.[0];
+      // Nominatim can return a municipality as its first result even when it
+      // did not find the requested street. Never place a pin for that fallback.
+      const exactFeature = results?.find(candidate => isExactStreetAndNumberMatch(query, candidate));
+      const feature = exactFeature || results?.find(candidate => isStreetNameMatch(query, candidate));
       if (!feature) {
-        if (summary) summary.textContent = "No encontramos esa dirección. Podés ubicarla manualmente haciendo clic en el mapa o arrastrando el pin.";
+        if (summary) summary.textContent = "No encontramos una coincidencia exacta de calle y altura. Podés ubicarla manualmente haciendo clic en el mapa o arrastrando el pin.";
+        if (searchInput?.dataset.expressAutoSearch === "true") {
+          const locationToggle = form.querySelector('[data-section-toggle="location"]');
+          if (locationToggle) {
+            locationToggle.checked = false;
+            locationToggle.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          delete searchInput.dataset.expressAutoSearch;
+        }
         return;
       }
 
@@ -4377,9 +4389,15 @@
         lat: Number(feature.lat),
         lng: Number(feature.lng),
         locality: extractLocalityFromFeature(feature),
-        address: feature.address,
-        searchValue: feature.address
+        // If the provider knows the street but not its height, retain the
+        // address extracted by IA and mark the street position as approximate.
+        address: exactFeature ? feature.address : query,
+        searchValue: exactFeature ? feature.address : query
       });
+      if (!exactFeature && summary) {
+        summary.textContent = `Ubicación aproximada sobre la calle indicada: ${query}. Revisala antes de publicar.`;
+      }
+      if (searchInput) delete searchInput.dataset.expressAutoSearch;
     };
 
     noLocationInput?.addEventListener("change", () => {
@@ -4494,10 +4512,46 @@
       return Array.isArray(payload) ? payload.map(normalizeNominatimFeature) : [];
     };
 
-    const results = await search(query);
-    if (results.length || !/\bprimero\s+de\b/i.test(query)) return results;
+    const variants = [query];
+    if (/\bprimero\s+de\b/i.test(query)) variants.push(query.replace(/\bprimero\s+de\b/i, "1 de"));
+    // Address databases often contain the street but not every street number.
+    const withoutStreetNumber = query.replace(/\b(?:al\s+)?\d{1,6}\b/i, "").replace(/\s+,/g, ",").trim();
+    if (withoutStreetNumber && withoutStreetNumber !== query) variants.push(withoutStreetNumber);
 
-    return search(query.replace(/\bprimero\s+de\b/i, "1 de"));
+    const results = [];
+    for (const variant of [...new Set(variants)]) {
+      const matches = await search(variant);
+      matches.forEach(match => {
+        if (match && !results.some(item => item.lat === match.lat && item.lng === match.lng)) results.push(match);
+      });
+    }
+    return results;
+  }
+
+  function isExactStreetAndNumberMatch(query, feature) {
+    if (!isStreetNameMatch(query, feature)) return false;
+    const normalize = value => String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+    const requested = normalize(query);
+    const returned = normalize([feature?.address, feature?.displayName, feature?.rawAddress?.road].filter(Boolean).join(" "));
+    const numbers = requested.match(/\b\d{1,6}\b/g) || [];
+    return numbers.length > 0 && numbers.some(number => returned.includes(number));
+  }
+
+  function isStreetNameMatch(query, feature) {
+    const normalize = value => String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+    const requested = normalize(query);
+    const returned = normalize([feature?.address, feature?.displayName, feature?.rawAddress?.road].filter(Boolean).join(" "));
+    const ignoredWords = new Set(["calle", "avenida", "av", "pasaje", "ruta", "camino", "al", "la", "el", "de", "del", "santa", "fe", "argentina"]);
+    const words = requested.match(/[a-z]{3,}/g) || [];
+    const distinctiveWords = [...new Set(words.filter(word => !ignoredWords.has(word)))];
+    return distinctiveWords.length > 0
+      && distinctiveWords.every(word => returned.includes(word));
   }
 
   async function reverseGeocodeCreateLocation(reverseGeocodingUrlTemplate, lng, lat) {
@@ -6019,6 +6073,195 @@
     });
   }
 
+  function wireExpressPublication(host) {
+    const form = host?.querySelector("[data-express-form]");
+    if (!form || form.dataset.bound === "true") return;
+    form.dataset.bound = "true";
+    const input = form.querySelector("[data-express-images]");
+    const dropzone = form.querySelector("[data-express-dropzone]");
+    const previews = form.querySelector("[data-express-previews]");
+    const description = form.querySelector("[data-express-description]");
+    const submit = form.querySelector("[data-express-submit]");
+    const feedback = host.querySelector("#express-feedback");
+    const voice = form.querySelector("[data-express-voice]");
+    const videoStatus = form.querySelector("[data-express-video-status]");
+    const files = [];
+    let videoFile = null;
+    const setFeedback = (message, warning = false) => { feedback.innerHTML = `<div class="status-banner ${warning ? "warning" : ""}">${escapeHtml(message)}</div>`; };
+    const render = () => { previews.innerHTML = files.map(file => `<div class="upload-preview"><img src="${URL.createObjectURL(file)}" alt="Vista previa" /><span>${escapeHtml(file.name)}</span></div>`).join(""); };
+    const addFiles = async incoming => {
+      const incomingFiles = [...incoming];
+      incomingFiles.filter(file => /^image\/(jpeg|png|webp)$/i.test(file.type)).slice(0, 10 - files.length).forEach(file => files.push(file));
+      const incomingVideo = incomingFiles.find(file => /^video\//i.test(file.type));
+      if (incomingVideo) {
+        videoFile = incomingVideo;
+        if (videoStatus) {
+          videoStatus.hidden = false;
+          videoStatus.textContent = `${videoFile.name}: se adjuntará como video, sin análisis de IA.`;
+        }
+      }
+      const textFiles = incomingFiles.filter(file => file.type === "text/plain" || /\.txt$/i.test(file.name || ""));
+      for (const textFile of textFiles) {
+        const text = (await textFile.text()).trim();
+        if (!text) continue;
+        description.value = [description.value.trim(), text].filter(Boolean).join("\n\n");
+        setFeedback(`Leí ${textFile.name}. Sus datos se usarán para generar la propuesta y el archivo no se publicará.`);
+      }
+      render();
+    };
+    input.addEventListener("change", () => { void addFiles(input.files); });
+    dropzone.addEventListener("click", event => {
+      if (event.target.closest("[data-express-previews]")) return;
+      input.click();
+    });
+    dropzone.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); input.click(); }
+    });
+    dropzone.addEventListener("dragover", event => { event.preventDefault(); dropzone.classList.add("is-dragging"); });
+    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("is-dragging"));
+    dropzone.addEventListener("drop", event => { event.preventDefault(); dropzone.classList.remove("is-dragging"); void addFiles(event.dataTransfer.files); });
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (Recognition) {
+      voice.hidden = false;
+      voice.addEventListener("click", () => {
+        const recognition = new Recognition(); recognition.lang = "es-AR"; recognition.interimResults = false;
+        recognition.onresult = event => { description.value = `${description.value} ${event.results[0][0].transcript}`.trim(); };
+        recognition.onerror = () => setFeedback("No pudimos usar el dictado en este momento.", true);
+        recognition.start();
+      });
+    }
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!description.value.trim() && files.length === 0) { setFeedback("Agregá una descripción o al menos una foto.", true); return; }
+      submit.disabled = true; submit.textContent = "Subiendo y analizando…";
+      try {
+        let videoUrl = "";
+        if (videoFile) {
+          if (videoStatus) { videoStatus.hidden = false; videoStatus.textContent = "Subiendo video…"; }
+          const uploadedVideo = await uploadVideoViaVentaMap(videoFile, progress => {
+            if (videoStatus) videoStatus.textContent = `Subiendo video… ${Math.round(progress * 100)}%`;
+          });
+          videoUrl = uploadedVideo.url;
+          if (videoStatus) videoStatus.textContent = "Video listo. La IA no lo analizó.";
+        }
+        const urls = [];
+        for (const file of files) {
+          const data = new FormData(); data.append("files", file);
+          const upload = await fetch("/api/content/upload-images", { method: "POST", body: data });
+          const uploaded = await upload.json();
+          if (!upload.ok || !uploaded.urls?.[0]) throw new Error(uploaded.message || "No se pudo subir una de las fotos.");
+          urls.push(uploaded.urls[0]);
+        }
+        const token = form.querySelector('input[name="__RequestVerificationToken"]')?.value;
+        const response = await fetch("/api/content/express/analyze", {
+          method: "POST", headers: { "Content-Type": "application/json", "RequestVerificationToken": token || "" },
+          body: JSON.stringify({ description: description.value, imageUrls: urls, videoUrl })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || "No se pudo generar la publicación.");
+        if (result.proposal?.requiresCleanCoverPhoto) {
+          window.alert("Para publicar debés subir al menos una foto limpia del inmueble que sirva como imagen principal.");
+          setFeedback("La captura se usará sólo para extraer datos. Agregá una foto limpia del inmueble y volvé a generar.", true);
+          submit.disabled = false;
+          submit.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Generar publicación con IA';
+          return;
+        }
+        sessionStorage.setItem("ventamap.expressDraft", JSON.stringify(result.proposal));
+        window.location.assign("/Publications/Create?express=1");
+      } catch (error) {
+        setFeedback(error.message || "No se pudo generar la publicación.", true);
+        submit.disabled = false; submit.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Generar publicación con IA';
+      }
+    });
+  }
+
+  async function applyExpressDraft(form) {
+    if (new URLSearchParams(window.location.search).get("express") !== "1") return;
+    let draft;
+    try { draft = JSON.parse(sessionStorage.getItem("ventamap.expressDraft") || "null"); } catch { return; }
+    if (!draft) return;
+    sessionStorage.removeItem("ventamap.expressDraft");
+    const set = (name, value) => { const field = form.querySelector(`[name="${name}"]`); if (field && value !== undefined && value !== null && value !== "") field.value = value; };
+    const address = String(draft.address || "").trim();
+    const hasReliableAddress = draft.hasReliableAddress === true && address.length > 0;
+    set("imagesCsv", draft.imagesCsv); set("videoUrl", draft.videoUrl); set("price", draft.price); set("locality", draft.locality); set("address", draft.address); set("shortDescription", draft.shortDescription); set("longDescription", draft.longDescription);
+    const createdWithAi = form.querySelector('[name="createdWithAi"]');
+    if (createdWithAi) createdWithAi.value = draft.createdWithAi === true ? "true" : "false";
+    const currency = form.querySelector('[name="currency"]');
+    if (currency && draft.currency) {
+      currency.value = String(draft.currency).toUpperCase() === "USD" ? "U$D" : "AR$";
+      currency.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    set("locationSearch", hasReliableAddress ? [address, String(draft.locality || "").trim()].filter(Boolean).join(", ") : "");
+    const group = form.querySelector('[name="group"]');
+    const category = form.querySelector("[data-category-select]");
+    if (group && draft.groupId) group.value = String(draft.groupId);
+    if (category && draft.categoryId) category.dataset.selectedCategoryId = String(draft.categoryId);
+    if (group && category && draft.categoryId) {
+      await reloadCategoryOptions(form, true);
+      category.value = String(draft.categoryId);
+      category.dataset.selectedCategoryId = category.value;
+      await reloadDynamicCategoryFields(form);
+      syncCreateTitle(form);
+    }
+    const operation = form.querySelector("[data-create-operation-select]");
+    if (operation && draft.operation) {
+      operation.value = draft.operation;
+      operation.dataset.selectedOperation = operation.value;
+      operation.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    let appliedTechnicalFields = 0;
+    Object.entries(draft.dynamicFields || {}).forEach(([key, value]) => {
+      const field = [...form.querySelectorAll("[data-dynamic-input]")]
+        .find(input => String(input.dataset.internalName || "").toLowerCase() === String(key).toLowerCase());
+      if (!field) return;
+      const desired = String(value ?? "");
+      if (!desired.trim()) return;
+      if (field.tagName === "SELECT") {
+        const option = [...field.options].find(option => String(option.value).toLowerCase() === desired.toLowerCase());
+        if (!option) return;
+        field.value = option.value;
+      } else {
+        field.value = desired;
+      }
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+      if (field.closest("[data-dynamic-optional-fields-container]")) {
+        appliedTechnicalFields += 1;
+      }
+    });
+    const technicalToggle = form.querySelector('[data-section-toggle="technical"]');
+    if (technicalToggle) {
+      const shouldShowTechnical = appliedTechnicalFields > 0;
+      if (technicalToggle.checked !== shouldShowTechnical) {
+        technicalToggle.checked = shouldShowTechnical;
+        technicalToggle.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    }
+    form.dispatchEvent(new Event("expressdraft"));
+
+    // La ubicación precisa sólo corresponde a inmuebles. Si la IA encontró una
+    // dirección, abrimos esa sección, habilitamos el mapa y ejecutamos la búsqueda.
+    const isProperty = String(form.querySelector('[name="group"]')?.value || "") === "1";
+    if (isProperty && hasReliableAddress) {
+      const locationToggle = form.querySelector('[data-section-toggle="location"]');
+      const noLocation = form.querySelector("[data-create-no-location]");
+      if (locationToggle && !locationToggle.checked) {
+        locationToggle.checked = true;
+        locationToggle.dispatchEvent(new Event("change", { bubbles: true }));
+      } else if (noLocation?.checked) {
+        noLocation.checked = false;
+        noLocation.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      window.setTimeout(() => {
+        const search = form.querySelector('input[name="locationSearch"]');
+        if (search) search.dataset.expressAutoSearch = "true";
+        form.querySelector("[data-create-address-search]")?.click();
+      }, 350);
+    }
+    const feedback = document.getElementById("create-feedback");
+    if (feedback) feedback.innerHTML = '<div class="status-banner">La IA completó una propuesta. Revisá los datos antes de publicar.</div>';
+  }
+
   function wireCreateForm() {
     const form = document.getElementById("createPublicationForm");
     if (!form || form.dataset.bound === "true") return;
@@ -6201,6 +6444,7 @@
       .then(() => {
         enhanceSearchableSelects(form);
         syncCreateDescriptionExamples(form);
+        return applyExpressDraft(form);
       });
   }
 
@@ -7865,6 +8109,14 @@
     });
 
     form.addEventListener("create:video-state-changed", render);
+    form.addEventListener("expressdraft", () => {
+      // Express writes the already-uploaded URLs after this uploader was
+      // initialized. Rehydrate its internal state so the same preview/removal
+      // controls are shown as for a normally uploaded image.
+      state.splice(0, state.length);
+      seedExistingImages();
+      render();
+    });
     window.addEventListener("pagehide", queueTemporaryCleanup);
 
     seedExistingImages();
@@ -8282,6 +8534,14 @@
     });
 
     form.addEventListener("create:primary-media-changed", render);
+    form.addEventListener("expressdraft", () => {
+      // The video may come from the Express screen, after this component's
+      // initial seed. Recreate its normal preview and media-choice controls.
+      state = null;
+      seedExistingVideo();
+      render();
+      form.dispatchEvent(new CustomEvent("create:video-state-changed", { bubbles: true }));
+    });
 
     seedExistingVideo();
     render();
@@ -9394,6 +9654,7 @@
       contactName: null,
       contactPhone: null,
       featured: checked("featured"),
+      createdWithAi: value("createdWithAi") === "true",
       latitude: noLocation ? null : numberOrNull(value("latitude")),
       longitude: noLocation ? null : numberOrNull(value("longitude")),
       address: noLocation ? null : value("address") || null,

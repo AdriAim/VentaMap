@@ -14,6 +14,9 @@ public class VentaMapParameterService(VentaMapDbContext db)
     public const string ReviewResponseDeadlineDays = "Reviews.ResponseDeadlineDays";
     public const string PaidSiteEnabled = "PaidSite.Enabled";
     public const string PersonalPublicationDurationDays = "Publications.Personal.DurationDays";
+    public const string ExpressAiEnabled = "ExpressAi.Enabled";
+    public const string ExpressAiPerUserDailyLimit = "ExpressAi.PerUserDailyLimit";
+    public const string ExpressAiGlobalDailyLimit = "ExpressAi.GlobalDailyLimit";
 
     private Dictionary<string, string>? values;
 

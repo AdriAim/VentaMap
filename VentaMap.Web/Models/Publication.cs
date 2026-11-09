@@ -46,6 +46,7 @@ public class Publication
     public string ModerationStatus { get; set; } = "None";
 
     public bool Featured { get; set; }
+    public bool CreatedWithAi { get; set; }
 
     public string? InternalNotes { get; set; }
     public bool IsAnonymous { get; set; }
