@@ -8415,11 +8415,15 @@ textarea.input-validation-error,
   .nav-links a {
     justify-content: center;
     min-height: 2.75rem;
-    padding: 0.72rem 0.65rem;
+    /* The two primary publishing actions share the first row on phones.
+       Keep their labels together instead of leaving "IA" orphaned below. */
+    padding: 0.72rem 0.25rem;
     border: 0;
     background: transparent;
     color: #172033;
     font-weight: 800;
+    font-size: clamp(0.86rem, 3.7vw, 1rem);
+    white-space: nowrap;
     box-shadow: none;
   }
 
