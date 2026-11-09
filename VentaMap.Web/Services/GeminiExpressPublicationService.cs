@@ -56,7 +56,7 @@ public sealed class GeminiExpressPublicationService(
             var images = await DownloadImagesAsync(urls, cancellationToken);
             var prompt = BuildPrompt(cleanDescription, JsonSerializer.Serialize(categories), JsonSerializer.Serialize(technicalFields));
             using var request = new HttpRequestMessage(HttpMethod.Post,
-                $"https://generativelanguage.googleapis.com/v1beta/models/{Model}:generateContent?key={Uri.EscapeDataString(apiKey)}")
+                $"https://generativelanguage.googleapis.com/v1beta/models/{Model}:generateContent")
             {
                 Content = JsonContent.Create(new
                 {
@@ -64,6 +64,7 @@ public sealed class GeminiExpressPublicationService(
                     generationConfig = new { responseMimeType = "application/json", temperature = 0.15 }
                 })
             };
+            request.Headers.Add("x-goog-api-key", apiKey);
             using var response = await httpClientFactory.CreateClient("gemini-express").SendAsync(request, cancellationToken);
             var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
@@ -117,7 +118,7 @@ public sealed class GeminiExpressPublicationService(
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Post,
-                $"https://generativelanguage.googleapis.com/v1beta/models/{TranscriptionModel}:generateContent?key={Uri.EscapeDataString(apiKey)}")
+                $"https://generativelanguage.googleapis.com/v1beta/models/{TranscriptionModel}:generateContent")
             {
                 Content = JsonContent.Create(new
                 {
@@ -136,6 +137,7 @@ public sealed class GeminiExpressPublicationService(
                     generationConfig = new { temperature = 0 }
                 })
             };
+            request.Headers.Add("x-goog-api-key", apiKey);
             using var response = await httpClientFactory.CreateClient("gemini-express").SendAsync(request, cancellationToken);
             var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
@@ -145,7 +147,7 @@ public sealed class GeminiExpressPublicationService(
             }
 
             using var envelope = JsonDocument.Parse(responseText);
-            var transcript = envelope.RootElement.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString()?.Trim();
+            var transcript = FindFirstText(envelope.RootElement)?.Trim();
             if (string.IsNullOrWhiteSpace(transcript))
                 throw new ExpressAiException(422, "No pudimos detectar texto en el audio.");
             return transcript.Length > MaxDescriptionLength ? transcript[..MaxDescriptionLength] : transcript;
@@ -156,6 +158,29 @@ public sealed class GeminiExpressPublicationService(
             logger.LogError(ex, "Gemini Express transcription failed.");
             throw new ExpressAiException(502, "No se pudo transcribir el audio. Intentá nuevamente.");
         }
+    }
+
+    private static string? FindFirstText(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            if (element.TryGetProperty("text", out var text) && text.ValueKind == JsonValueKind.String)
+                return text.GetString();
+            foreach (var property in element.EnumerateObject())
+            {
+                var value = FindFirstText(property.Value);
+                if (!string.IsNullOrWhiteSpace(value)) return value;
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                var value = FindFirstText(item);
+                if (!string.IsNullOrWhiteSpace(value)) return value;
+            }
+        }
+        return null;
     }
 
     private async Task ReserveDailyQuotaAsync(int userId, CancellationToken cancellationToken)
