@@ -2217,6 +2217,12 @@ textarea:focus {
   gap: 1rem;
 }
 
+/* El catálogo público comparte el ancho de su encabezado: cinco anuncios
+   distribuyen la fila completa en vez de dejar un margen vacío a la derecha. */
+.company-catalog-gallery-rail {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .gallery-rail > .classified-toolbar {
   grid-column: 1 / -1;
   border-top: 1px solid #e2e2e2;
