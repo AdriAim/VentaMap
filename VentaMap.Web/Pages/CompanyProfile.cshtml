@@ -1155,7 +1155,10 @@ else
                 const requestedView = new URLSearchParams(window.location.search).get("view")?.trim().toLowerCase();
                 const initialView = ["list", "gallery", "map"].includes(requestedView)
                     ? requestedView
-                    : window.matchMedia("(max-width: 780px)").matches ? "gallery" : "list";
+                    // Un catálogo compartido debe presentar primero las tarjetas
+                    // visuales, tanto en escritorio como en móvil. Los enlaces con
+                    // ?view=list o ?view=map conservan su vista explícita.
+                    : "gallery";
                 setView(initialView);
                 if (shouldOpenSharedFullscreenMap && fullscreenTrigger) {
                     // Reutiliza el flujo normal de pantalla completa para conservar
