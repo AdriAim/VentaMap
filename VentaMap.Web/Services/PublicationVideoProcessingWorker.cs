@@ -13,7 +13,7 @@ public sealed class PublicationVideoProcessingWorker(
     ILogger<PublicationVideoProcessingWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan ScanInterval = TimeSpan.FromSeconds(15);
-    private static readonly TimeSpan StaleClaimAfter = TimeSpan.FromMinutes(20);
+    private static readonly TimeSpan StaleClaimAfter = TimeSpan.FromMinutes(45);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -47,6 +47,7 @@ public sealed class PublicationVideoProcessingWorker(
         var staleBefore = DateTime.UtcNow - StaleClaimAfter;
 
         var media = await db.PublicationMedia
+            .Include(x => x.Publication)
             .Where(x => x.MediaType == PublicationMediaType.Video
                         && (x.VideoProcessingState == "Pending"
                             || (x.VideoProcessingState == "Processing" && x.VideoProcessingStartedAtUtc < staleBefore)))
@@ -65,7 +66,7 @@ public sealed class PublicationVideoProcessingWorker(
         var originalUrl = media.Url;
         try
         {
-            var optimizedUrl = await storage.ProcessPendingPublicationVideoAsync(originalUrl, cancellationToken);
+            var optimizedUrl = await storage.ProcessPendingPublicationVideoAsync(originalUrl, media.Publication?.UserId, cancellationToken);
             media.Url = optimizedUrl;
             media.VideoProcessingState = "Ready";
             media.VideoProcessingStartedAtUtc = null;

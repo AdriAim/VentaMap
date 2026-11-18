@@ -32,6 +32,7 @@ public class CreatePublicationContentViewModel
     public string? PublishingBlockedMessage { get; set; }
     public bool IsPaidSiteEnabled { get; set; }
     public bool IsCompanyAccount { get; set; }
+    public int MaxVideoDurationSeconds { get; set; } = 60;
     public bool IsBillingExempt { get; set; }
     public bool IsBillingForced { get; set; }
     public bool ShowPublicationChargeEstimator { get; set; }

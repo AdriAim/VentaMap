@@ -898,6 +898,7 @@ public partial class ContentController(
                 : null,
             IsPaidSiteEnabled = await parameters.GetBoolAsync(VentaMapParameterService.PaidSiteEnabled, fallback: false),
             IsCompanyAccount = user?.IsCompany == true,
+            MaxVideoDurationSeconds = PublicationVideoPolicy.GetMaxDurationSeconds(user?.Id),
             IsBillingExempt = user?.IsBillingExempt == 1,
             IsBillingForced = user?.IsBillingExempt == 2,
             ShowPublicationChargeEstimator = user is not null,
@@ -992,8 +993,15 @@ public partial class ContentController(
             ShortDescription = publication.ShortDescription,
             LongDescription = publication.LongDescription,
             ImagesCsv = string.Join(",", publication.ImageList),
-            VideoUrl = publication.PrimaryVideoUrl,
-            PrimaryMediaType = publication.IsVideoPrimary ? "video" : "image",
+            // Keep a just-uploaded pending video in the owner's edit form even
+            // though it is intentionally hidden from public views until ready.
+            VideoUrl = publication.MediaItems
+                .Where(x => x.MediaType == PublicationMediaType.Video && !string.IsNullOrWhiteSpace(x.Url))
+                .OrderByDescending(x => x.IsPrimary)
+                .ThenBy(x => x.SortOrder)
+                .Select(x => x.Url)
+                .FirstOrDefault(),
+            PrimaryMediaType = publication.MediaItems.Any(x => x.MediaType == PublicationMediaType.Video && x.IsPrimary) ? "video" : "image",
             ContactName = publication.ContactName,
             ContactPhone = publication.ContactPhone,
             ContactEmail = publication.ContactEmail,
@@ -1040,6 +1048,7 @@ public partial class ContentController(
                 : publication.Longitude ?? user.ArgentineLocality?.Longitude,
             IsPaidSiteEnabled = await parameters.GetBoolAsync(VentaMapParameterService.PaidSiteEnabled, fallback: false),
             IsCompanyAccount = user.IsCompany,
+            MaxVideoDurationSeconds = PublicationVideoPolicy.GetMaxDurationSeconds(user.Id),
             IsBillingExempt = user.IsBillingExempt == 1,
             IsBillingForced = user.IsBillingExempt == 2,
             // A pending ad can be upgraded to the complete format while it is
@@ -1234,6 +1243,7 @@ public partial class ContentController(
         request.ContactEmail = user.Email;
         request.PublisherMode = "Account";
         request.VideoUrl = string.IsNullOrWhiteSpace(request.VideoUrl) ? null : request.VideoUrl.Trim();
+        request.VideoPendingProcessing = request.VideoUrl?.Contains("/pending/", StringComparison.OrdinalIgnoreCase) == true;
         request.PrimaryMediaType = NormalizePrimaryMediaType(request.PrimaryMediaType);
         if (request.VideoUrl is null) request.PrimaryMediaType = "video";
 
@@ -1354,6 +1364,7 @@ public partial class ContentController(
         request.ContactEmail = user.Email;
         request.PublisherMode = "Account";
         request.VideoUrl = string.IsNullOrWhiteSpace(request.VideoUrl) ? null : request.VideoUrl.Trim();
+        request.VideoPendingProcessing = request.VideoUrl?.Contains("/pending/", StringComparison.OrdinalIgnoreCase) == true;
         request.PrimaryMediaType = NormalizePrimaryMediaType(request.PrimaryMediaType);
         if (request.VideoUrl is null) request.PrimaryMediaType = "video";
 
@@ -1486,7 +1497,9 @@ public partial class ContentController(
 
         try
         {
-            var upload = imageStorageService.CreateDirectPublicationVideoUpload(request.FileName, request.ContentType, request.ContentLength, request.ProcessOnServer);
+            // New uploads always enter the server-side queue. Duration is only
+            // authoritative after ffmpeg reads the uploaded object.
+            var upload = imageStorageService.CreateDirectPublicationVideoUpload(request.FileName, request.ContentType, request.ContentLength, processOnServer: true);
             logger.LogInformation("Prepared direct R2 video upload for user {UserId}. File {FileName}, {Length} bytes.", currentUserAccessor.UserId, request.FileName, request.ContentLength);
             videoUploadLogger.LogInformation("Prepared direct upload for user {UserId}. File {FileName}, content type {ContentType}, {Length} bytes.", currentUserAccessor.UserId, request.FileName, request.ContentType, request.ContentLength);
             return Ok(new { uploadUrl = upload.UploadUrl, publicUrl = upload.PublicUrl, contentType = upload.ContentType, contentLength = upload.ContentLength, processOnServer = upload.ProcessOnServer });

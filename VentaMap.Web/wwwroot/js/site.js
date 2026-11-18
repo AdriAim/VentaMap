@@ -8394,6 +8394,7 @@
     const videoPendingProcessingInput = form.querySelector("[data-video-pending-processing]");
     const primaryMediaTypeInput = form.querySelector("[data-primary-media-type]");
     const feedback = document.getElementById("create-feedback");
+    const maxVideoDurationSeconds = Number(dropzone?.dataset.videoMaxDurationSeconds || 60);
 
     let state = null;
     let uploadChain = Promise.resolve();
@@ -8519,8 +8520,9 @@
         throw new Error("No pudimos leer la duracion del video.");
       }
 
-      if (metadata.duration > 60) {
-        throw new Error("El video no puede durar mas de 1 minuto.");
+      if (metadata.duration > maxVideoDurationSeconds) {
+        const maxMinutes = maxVideoDurationSeconds / 60;
+        throw new Error(`El video no puede durar mas de ${maxMinutes} ${maxMinutes === 1 ? "minuto" : "minutos"}.`);
       }
 
       if (file.size > maxVideoUploadBytes) {
@@ -8547,7 +8549,9 @@
       render();
 
       let fileToUpload = file;
-      const processOnServer = !shouldOptimizeVideoForUpload(file);
+      // The server must inspect every new video; browser metadata is only an
+      // early usability check and cannot enforce the duration policy.
+      const processOnServer = true;
       uploadStage = "optimization";
       const currentUpload = uploadChain.then(async () => {
         if (shouldOptimizeVideoForUpload(file)) {

@@ -201,7 +201,7 @@ public sealed class CloudflareR2ImageStorageService
         return BuildPublicUrl(options.PublicBaseUrl, key);
     }
 
-    public async Task<string> UploadPublicationVideoAsync(IFormFile file, CancellationToken cancellationToken = default)
+    public async Task<string> UploadPublicationVideoAsync(IFormFile file, int? userId, CancellationToken cancellationToken = default)
     {
         if (file.Length <= 0)
         {
@@ -246,9 +246,10 @@ public sealed class CloudflareR2ImageStorageService
                 throw new InvalidOperationException("VentaMap solo permite videos Verticales.");
             }
 
-            if (metadata.DurationSeconds is > 60.5d)
+            if (metadata.DurationSeconds.HasValue
+                && metadata.DurationSeconds.Value > PublicationVideoPolicy.GetMaxDurationSeconds(userId) + 0.5d)
             {
-                throw new InvalidOperationException("El video no puede durar mas de 1 minuto.");
+                throw new InvalidOperationException(PublicationVideoPolicy.GetMaximumDurationMessage(userId));
             }
 
             await TranscodeVideoAsync(
@@ -384,7 +385,7 @@ public sealed class CloudflareR2ImageStorageService
         return new DirectVideoUpload(uploadUrl, BuildPublicUrl(options.PublicBaseUrl, key), contentType, contentLength, processOnServer);
     }
 
-    public async Task<string> ProcessPendingPublicationVideoAsync(string pendingPublicUrl, CancellationToken cancellationToken = default)
+    public async Task<string> ProcessPendingPublicationVideoAsync(string pendingPublicUrl, int? userId, CancellationToken cancellationToken = default)
     {
         var options = GetOptions();
         ValidateConfiguration(options);
@@ -407,16 +408,35 @@ public sealed class CloudflareR2ImageStorageService
             }
 
             var metadata = await ReadVideoMetadataAsync(inputPath, cancellationToken);
-            if (metadata.Width <= 0 || metadata.Height <= 0 || metadata.Width >= metadata.Height || metadata.DurationSeconds is > 60.5d)
+            var maxDurationSeconds = PublicationVideoPolicy.GetMaxDurationSeconds(userId);
+            if (metadata.Width <= 0 || metadata.Height <= 0 || metadata.Width >= metadata.Height
+                || (metadata.DurationSeconds.HasValue && metadata.DurationSeconds.Value > maxDurationSeconds + 0.5d))
             {
-                throw new InvalidOperationException("El video pendiente no cumple las condiciones de publicación.");
+                throw new InvalidOperationException(PublicationVideoPolicy.GetMaximumDurationMessage(userId));
             }
 
-            await TranscodeVideoAsync(inputPath, outputPath, 1080, 1920, 23, 8000, 128, cancellationToken);
+            var isExtendedDurationVideo = maxDurationSeconds > PublicationVideoPolicy.DefaultMaxDurationSeconds;
+            await TranscodeVideoAsync(
+                inputPath,
+                outputPath,
+                1080,
+                1920,
+                isExtendedDurationVideo ? 26 : 23,
+                isExtendedDurationVideo ? 1100 : 8000,
+                isExtendedDurationVideo ? 64 : 128,
+                cancellationToken);
             var chosenOutputPath = outputPath;
             if (new FileInfo(chosenOutputPath).Length > options.MaxProcessedVideoBytes)
             {
-                await TranscodeVideoAsync(inputPath, fallbackOutputPath, 720, 1280, 26, 4500, 128, cancellationToken);
+                await TranscodeVideoAsync(
+                    inputPath,
+                    fallbackOutputPath,
+                    720,
+                    1280,
+                    isExtendedDurationVideo ? 29 : 26,
+                    isExtendedDurationVideo ? 700 : 4500,
+                    isExtendedDurationVideo ? 64 : 128,
+                    cancellationToken);
                 chosenOutputPath = fallbackOutputPath;
             }
 
