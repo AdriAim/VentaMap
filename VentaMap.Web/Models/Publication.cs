@@ -95,11 +95,16 @@ public class Publication
 
     public string? PrimaryVideoUrl =>
         MediaItems
-            .Where(x => x.MediaType == PublicationMediaType.Video && !string.IsNullOrWhiteSpace(x.Url))
+            .Where(x => x.MediaType == PublicationMediaType.Video
+                        && x.VideoProcessingState == "Ready"
+                        && !string.IsNullOrWhiteSpace(x.Url))
             .OrderByDescending(x => x.IsPrimary)
             .ThenBy(x => x.SortOrder)
             .Select(x => x.Url)
             .FirstOrDefault();
 
-    public bool IsVideoPrimary => MediaItems.Any(x => x.MediaType == PublicationMediaType.Video && x.IsPrimary && !string.IsNullOrWhiteSpace(x.Url));
+    public bool IsVideoPrimary => MediaItems.Any(x => x.MediaType == PublicationMediaType.Video
+                                                       && x.VideoProcessingState == "Ready"
+                                                       && x.IsPrimary
+                                                       && !string.IsNullOrWhiteSpace(x.Url));
 }

@@ -251,7 +251,7 @@
             <section class="detail-panel create-uploads-panel">
                 <div class="section-heading">
                     <span class="eyebrow create-step-label">Paso 3 - Video (opcional)</span>
-                    <h2>Subi un video de hasta 1 minuto</h2>
+                    <h2>Subi un video de hasta @(Model.MaxVideoDurationSeconds / 60) @(Model.MaxVideoDurationSeconds == 60 ? "minuto" : "minutos")</h2>
                     <p>Elegí qué contenido se muestra primero. Video principal es la opción predeterminada.</p>
                 </div>
 
@@ -266,7 +266,7 @@
                     </label>
                 </div>
 
-                <div class="upload-dropzone" data-video-dropzone data-field-container="videoUrl">
+                <div class="upload-dropzone" data-video-dropzone data-video-max-duration-seconds="@Model.MaxVideoDurationSeconds" data-field-container="videoUrl">
                     <input type="file" accept="video/mp4,video/webm,video/quicktime" data-create-video-input hidden />
                     <div class="upload-photo-tip">
                         <div class="upload-photo-tip-icon" aria-hidden="true">
@@ -284,7 +284,7 @@
                         <span class="field-hint" data-video-status>Sin video</span>
                     </div>
                     <div class="upload-previews" data-video-previews></div>
-                    <p class="field-hint">Formatos admitidos: MP4, WEBM o MOV. Duracion maxima: 60 segundos.</p>
+                    <p class="field-hint">Formatos admitidos: MP4, WEBM o MOV. Duracion maxima: @(Model.MaxVideoDurationSeconds / 60) @(Model.MaxVideoDurationSeconds == 60 ? "minuto" : "minutos").</p>
                     <span class="field-error" data-field-error="videoUrl"></span>
                 </div>
             </section>
